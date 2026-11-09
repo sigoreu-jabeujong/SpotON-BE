@@ -217,4 +217,41 @@ marimo/_lsp/
 __marimo__/
 
 # Streamlit
-.streamlit/secrets.toml
+.streamlit/secrets.toml# ===== 환경변수 / 비밀 정보 (절대 커밋 금지) =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# ===== 데이터 (용량 큰 원본 공공데이터는 저장소 밖에서 관리) =====
+data/raw/
+datasets/
+*.sqlite3
+*.db
+
+# ===== 에디터 / OS =====
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ===== Claude Code 개인 설정 =====
+.claude/settings.local.json
+CLAUDE.local.md
