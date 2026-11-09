@@ -216,9 +216,15 @@ GET /api/health
 
 ```json
 {
-  "status": "ok"
+  "data": {
+    "status": "ok"
+  },
+  "meta": {},
+  "error": null
 }
 ```
+
+Health API도 다른 API와 동일한 공통 응답 형식을 사용한다.
 
 ### 목적
 
