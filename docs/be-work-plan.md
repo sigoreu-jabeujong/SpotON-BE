@@ -10,7 +10,7 @@
 - 이슈 제목은 어떤 기능인지 알 수 있는 한국어로 짓고, 브랜치는 `feat#{작업 순번}-{영문-kebab-case}` 형식을 사용한다. 첫 작업은 `feat#1-initialize-fastapi`다. GitHub 실제 이슈 번호는 PR과 번호를 공유하므로 작업 순번과 다를 수 있으며 PR에서 실제 이슈를 연결한다. 셸에서는 `#`가 포함된 브랜치명을 따옴표로 감싼다.
 - 이슈 생성·작업 브랜치·구현·검증·PR·develop 병합은 개발 작업의 기본 절차다. main 반영·브랜치 삭제·강제 푸시는 별도 사용자 요청 없이 수행하지 않는다.
 - API 명세서 v1.2가 FE↔BE 계약이다. 저장소에는 원본 API·데이터 활용·기능 명세서가 없으므로 보완안을 외부 명세 반영 완료로 간주하지 않는다. 확인 대기는 9절에서 관리한다.
-- 현재 PHASE 0(BE-00~03)은 이슈 #4에서 구현했다. FastAPI·health·환경 설정·CORS·pyproject/uv.lock·CI와 테스트가 있으며 DB 연결·PostGIS 활성화·마이그레이션·ETL은 아직 구현하지 않았다. BE-04의 상세 meta와 데이터 버전 계약, BE-05 오류 처리는 후속 작업이다.
+- PHASE 0(BE-00~03)은 이슈 #4에서 구현했다. BE-04~05는 별도 PR #9에서 검토 중이며 임의 병합하지 않는다. 이 브랜치에서는 BE-06 엔진·세션·Alembic·PostGIS 기반을 이슈 #10으로 구현하고 CI 임시 DB로 검증했다([작업 3 설계서](designs/feat3-postgis-foundation.md)). 실제 개발 DB URL은 별도 설정이 필요하다. 상세 meta·DataVersion·stores·ETL은 미완료이며 다음 큐는 사용자 요청 없이 진행하지 않는다.
 
 핵심 흐름은 `공공데이터 → ETL → DB → BE 계산 → API → FE 표시 → AI 해석`이다. 주소 검색만 명세에 따라 실시간 외부 호출을 허용한다. 앞 단계를 임시 수치로 우회하지 않는다.
 
@@ -125,7 +125,7 @@ uv run --locked --extra dev uvicorn app.main:app --reload
 
 uv run --locked --extra dev ruff check .
 uv run --locked --extra dev ruff format --check .
-uv run --locked --extra dev mypy app
+uv run --locked --extra dev mypy app migrations
 uv run --locked --extra dev pytest
 ```
 
@@ -335,6 +335,8 @@ README에는 서비스 소개·팀(시고르자브종)·역할, 환경·설치·
 공공 GitLab 이관은 FE·BE 별도 저장소 기준으로 진행한다. 대상·권한·브랜치·태그 범위를 확인하고 커밋 이력의 비밀값·대용량 자료를 검사한다. CI와 시크릿을 새 환경에 구성하며 Issue·PR·문서는 Git 미러만으로 옮겨지지 않으므로 별도 계획한다. 기존 대상 이력을 덮어쓰지 않고 이관 후 커밋·태그·브랜치와 실행·검사를 대조한 뒤 제출 주소를 갱신한다.
 
 ## 12. 참고 자료
+
+개발 실행 절차는 최신 사용자 결정을 따른다. 이슈·브랜치 생성 후 Codex가 `docs/designs/`에 기능별 커밋 계획을 담은 설계 MD를 쓰고 Claude Code가 해당 MD만 검토·직접 수정한다. Codex는 수정본을 확인해 구현·기능별 커밋한다. PR 전에 테스트를 실행하고 실패를 수정·재검증하며, 실제 검증이 불가능하면 원인을 보고하고 다음 큐를 중단한다. 로컬에 DB가 없을 때는 PR 전 브랜치 CI 임시 DB로 검증할 수 있지만 mock·skip으로 실제 검증을 대신하지 않는다. PR은 지정 양식으로 develop에 보내고 별도 요청 없이 병합하지 않는다. 공통 협업 절차의 상세 문구는 PR #9 병합 후 충돌 없이 동기화한다.
 
 기존 BE 문서와 사용자 결정을 통합했다. 사용자 제공 `12_개발규칙_Git코드컨벤션_SpotON.pdf`(v1.1, 2026-11-06, 5쪽)는 누락 규칙 보완에만 사용했다. 저장소 구조·브랜치·리뷰 방식은 PDF 제안보다 최신 사용자 결정을 우선한다.
 

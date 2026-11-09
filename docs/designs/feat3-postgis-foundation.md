@@ -4,7 +4,7 @@
 
 - 이슈: [#10 PostgreSQL·PostGIS 연결과 마이그레이션 기반 구성](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/10)
 - 브랜치: `feat#3-postgis-foundation`, 대상: develop. PR #9는 임의 병합하지 않으며 본 작업은 현재 develop의 PHASE 0 코드만 사용한다.
-- 현재: Codex 초안 → Claude Code 검토·직접 수정 완료(2026-11-10). Codex 기능별 구현·커밋 대기.
+- 현재: Codex 초안 → Claude Code 검토·직접 수정 → 기능별 구현·로컬 검사·PR 전 실제 DB CI 검증 완료. 마지막 문서 커밋의 CI 재검증 후 develop 대상 PR을 생성한다.
 - BE-06만 구현한다. stores 등 새 테이블·ETL·분석·FE·운영 DB endpoint는 추가하지 않는다.
 - 로컬 DATABASE_URL·Docker가 없으므로 로컬 단위 검사와 작업 브랜치 CI의 실제 임시 PostGIS 검사를 모두 통과한 후 PR을 만든다.
 - 완료 정의(모두 충족해야 함):
@@ -206,4 +206,23 @@ Codex 재검토: 실제 패키지 버전·레이아웃·gh 실행 지원을 확�
 
 ## 구현·검증 결과
 
-구현 전. 실제 성공·실패·중단 사유를 기록하고 미실행 검사를 통과로 표시하지 않는다.
+### 기능별 커밋
+
+| 커밋 | 내용 |
+|---|---|
+| `c0794a9` | Codex 설계·Claude 직접 검토·Codex 재검토 |
+| `a6e6dd6` | 설정·안전한 URL 정규화·지연 엔진·세션·Base와 단위 검사 |
+| `cfc935e` | Alembic·PostGIS 초기 migration과 offline/오류 비노출 검사 |
+| `9f9b3ea` | PR 전 기능 브랜치 CI·실제 PostGIS·권한·트랜잭션 통합 검사 |
+| 최종 문서 커밋 | 실행 방법·검증 결과·남은 제약 |
+
+### PR 전 검증 근거
+
+- 코드 SHA: `9f9b3eab2c302d7c0405e446d51aec2c6033f5a5`.
+- [PR 전 GitHub Actions 실행](https://github.com/sigoreu-jabeujong/SpotON-BE/actions/runs/42690427799): `lint-and-test` success, `postgis-integration` success.
+- 단위 40개 통과(통합 2개는 별도 job으로 분리), 실제 PostGIS 통합 2개 통과, 통합 skip·xfail 0. junit 검증 단계도 success.
+- ruff check·format·mypy app migrations와 로컬 단위 검사 통과. 중간의 문서 코드블록 포맷과 긴 SQL 문자열 lint는 수정 후 재검증했다.
+- 실제로 미설치 임시 DB에서 PostGIS 생성·공간 함수·commit/rollback/commit 실패·downgrade/재upgrade·권한 부족 SQLSTATE 42501·관리자 사전 설치 후 일반 계정 성공을 검증했다.
+- 테스트가 만든 DB·role만 정리했다. 일반 DATABASE_URL은 테스트에 사용하지 않았고 운영·개발 실제 DB의 접속·구축 완료를 주장하지 않는다.
+- 기존 Starlette/httpx 향후 전환 안내 경고 1개는 남아 있으나 테스트 실패는 아니다. 호환성 전환은 별도 작업이다.
+- PR #9의 공통 응답 구현은 가져오지 않았고 FE·stores·ETL은 변경하지 않았다. 실제 DB 검증 실패 시 후속 큐 중단 규칙은 계속 적용한다.
