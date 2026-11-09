@@ -2,9 +2,9 @@ name: Backend CI
 
 on:
   pull_request:
-    branches: [main, dev]
+    branches: [main, develop]
   push:
-    branches: [main, dev]
+    branches: [main, develop]
 
 permissions:
   contents: read
@@ -22,11 +22,19 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff pytest
+          pip install ruff mypy pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Lint (ruff)
+      - name: Lint (ruff check)
         run: ruff check .
+
+      - name: Format (ruff format --check)
+        run: ruff format --check .
+
+      - name: Type check (mypy)
+        run: |
+          # shortcut: app/ 생성 전(PHASE 0 이전)에는 건너뜀, BE-00 완료 후 조건 제거
+          if [ -d app ]; then mypy app; else echo "app 폴더 없음 - 건너뜀"; fi
 
       - name: Test (pytest)
         run: |
