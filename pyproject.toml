@@ -44,4 +44,5 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra --strict-markers -m 'not integration'"
+markers = ["integration: 실제 PostgreSQL/PostGIS 통합 검증"]
