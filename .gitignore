@@ -244,6 +244,8 @@ dist/
 
 # ===== 데이터 (용량 큰 원본 공공데이터는 저장소 밖에서 관리) =====
 datasets/
+data/*
+!data/sample/
 *.sqlite3
 *.db
 
