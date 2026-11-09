@@ -5,7 +5,7 @@
 - 이슈: [#8 공통 API 응답과 오류 처리 기반 구현](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/8).
 - 브랜치: `feat#2-common-api-errors`, PR 대상: `develop`.
 - 범위: BE-04의 공통 외피 보강, BE-05 공통 예외 처리. 상세 meta·DataVersion은 원본 API 명세 확인 전 보류한다.
-- 현재 상태: Codex 초안 → Claude Code 검토·직접 수정 완료(6절). Codex 구현 대기.
+- 현재 상태: Codex 초안 → Claude Code 검토·직접 수정 → Codex 구현·로컬 테스트 완료. develop 대상 PR 생성 전 최종 검증 중.
 - 기준: [통합 작업계획서](../be-work-plan.md). 이 문서는 이번 기능의 설계·검토·커밋 기록만 관리하며 공통 규칙을 복제하지 않는다.
 
 ## 문제와 목표
@@ -211,4 +211,20 @@ Claude Code가 이 MD를 직접 읽고 검토한 뒤 Edit 도구로 1~6절을 �
 
 ## 7. 구현·검증 결과
 
-구현 전. 완료한 커밋·검사 결과·PR을 작성하고 미실행 검사를 통과로 표시하지 않는다.
+### 기능별 커밋
+
+| 커밋 | 기능 |
+|---|---|
+| `e3e7f42` | 설계서와 Codex·Claude 협업 및 PR 전 검사 절차 |
+| `50511e7` | 공통 응답 불변식·ErrorCode·고정 오류 매핑과 단위 테스트 |
+| `02bb835` | 요청·도메인·HTTP 예외와 OpenAPI 오류 스키마 |
+| `e741404` | 미처리 예외·CORS 및 정보 비노출 테스트 |
+| 최종 문서 커밋 | README·통합 계획서·이 결과 기록 |
+
+### 로컬 검증 결과
+
+- ruff check·ruff format --check·mypy app 통과.
+- pytest 전체 69개 통과. Starlette가 httpx 테스트 클라이언트의 향후 전환을 안내하는 deprecation 경고 1개는 남아 있으며 실패는 아니다. 의존성 전환은 별도 호환성 검토 대상으로 둔다.
+- 중간 검사에서 발견한 테스트 함수 줄 길이와 import 위치의 문법 오류는 수정 후 재검증했다. 실패 상태로 PR을 생성하지 않았다.
+- 실제 Uvicorn 임시 테스트 앱에서 HTTP 500의 공통 응답·허용 CORS, 예외/쿼리 더미 문자열 및 traceback의 로그 비노출을 확인했다. 임시 앱·프로세스는 종료·정리했고 운영 코드에 테스트 경로를 넣지 않았다.
+- 상세 meta·DataVersion은 미구현이며 DB·ETL·FE는 변경하지 않았다. PR 생성 후 GitHub CI를 확인하고 결과를 사용자에게 보고한다.

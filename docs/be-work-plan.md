@@ -10,7 +10,7 @@
 - 이슈 제목은 어떤 기능인지 알 수 있는 한국어로 짓고, 브랜치는 `feat#{작업 순번}-{영문-kebab-case}` 형식을 사용한다. 첫 작업은 `feat#1-initialize-fastapi`다. GitHub 실제 이슈 번호는 PR과 번호를 공유하므로 작업 순번과 다를 수 있으며 PR에서 실제 이슈를 연결한다. 셸에서는 `#`가 포함된 브랜치명을 따옴표로 감싼다.
 - 기본 절차는 이슈 → 작업 브랜치 → Codex 설계 MD → Claude Code 검토·MD 직접 수정 → Codex 구현·기능별 커밋 → 로컬 테스트·실패 수정·재검증 → 푸시·develop 대상 PR → CI 확인이다. develop 병합은 사용자 요청 범위에 따라 수행하고 main 반영·브랜치 삭제·강제 푸시는 별도 요청 없이 하지 않는다.
 - API 명세서 v1.2가 FE↔BE 계약이다. 저장소에는 원본 API·데이터 활용·기능 명세서가 없으므로 보완안을 외부 명세 반영 완료로 간주하지 않는다. 확인 대기는 9절에서 관리한다.
-- 현재 PHASE 0(BE-00~03)은 이슈 #4에서 구현했다. FastAPI·health·환경 설정·CORS·pyproject/uv.lock·CI와 테스트가 있으며 DB 연결·PostGIS 활성화·마이그레이션·ETL은 아직 구현하지 않았다. BE-04의 상세 meta와 데이터 버전 계약, BE-05 오류 처리는 후속 작업이다.
+- PHASE 0(BE-00~03)은 이슈 #4에서 구현했다. 현재 PHASE 1의 이슈 #8에서 BE-04 공통 외피·ApiMeta 별칭·오류 코드를 보강하고 BE-05 공통 예외 처리를 구현했다([설계·검토 기록](designs/feat2-common-api-errors.md)). 상세 meta·DataVersion은 원본 명세 확인 전 보류다. DB 연결·PostGIS·마이그레이션·ETL은 아직 없으며 다음 독립 구현은 BE-06이다.
 
 핵심 흐름은 `공공데이터 → ETL → DB → BE 계산 → API → FE 표시 → AI 해석`이다. 주소 검색만 명세에 따라 실시간 외부 호출을 허용한다. 앞 단계를 임시 수치로 우회하지 않는다.
 
@@ -121,7 +121,7 @@ SpotON-BE/
 ```powershell
 py -3.11 -m pip install uv==0.13.7
 uv sync --locked --extra dev
-uv run --locked --extra dev uvicorn app.main:app --reload
+uv run --locked --extra dev uvicorn app.main:app --reload --no-access-log
 
 uv run --locked --extra dev ruff check .
 uv run --locked --extra dev ruff format --check .
@@ -200,7 +200,7 @@ uv run --locked --extra dev pytest
 
 실패 시 data는 null, error에는 code·message를 담는다. 공통 meta는 계약에 따라 출처·실제 기준일/분기·공간 단위·분모·데이터 버전을 표현한다. 필드 구조를 임의로 만들지 않는다.
 
-오류 코드는 `INVALID_PARAM`, `CATEGORY_REQUIRED`, `ADDRESS_NOT_FOUND`, `OUT_OF_SEOUL`, `AS_OF_OUT_OF_RANGE`, `UPSTREAM_ERROR`, `AI_UNAVAILABLE`, `AI_VERIFY_FAILED`, `INTERNAL_ERROR`를 사용한다. 외부 원시 예외·응답·인증 정보는 사용자에게 노출하지 않는다. 공급자 429는 기존 `AI_UNAVAILABLE`로 매핑한다.
+오류 코드는 `INVALID_PARAM`, `CATEGORY_REQUIRED`, `ADDRESS_NOT_FOUND`, `OUT_OF_SEOUL`, `AS_OF_OUT_OF_RANGE`, `UPSTREAM_ERROR`, `AI_UNAVAILABLE`, `AI_VERIFY_FAILED`, `INTERNAL_ERROR`를 사용한다. 외부 원시 예외·응답·인증 정보는 사용자에게 노출하지 않는다. 공급자 429는 기존 `AI_UNAVAILABLE`로 매핑한다. 일반 요청 검증은 422 INVALID_PARAM, 라우터 404/405는 HTTP 상태를 유지한 INVALID_PARAM, 미처리 예외는 500 INTERNAL_ERROR로 제공한다. CORS 안쪽에서 응답 시작 전 예외를 처리하며 프로토콜 응답을 강제 포장하지 않는다.
 
 | 작업·기능 | API | 입력·반환 및 처리 |
 |---|---|---|
