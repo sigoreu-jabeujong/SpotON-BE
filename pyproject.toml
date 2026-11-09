@@ -1,3 +1,35 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "spoton-be"
+version = "0.1.0"
+description = "Spot:ON backend API"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "alembic==1.20.1",
+    "fastapi==0.162.2",
+    "geoalchemy2==0.21.0",
+    "psycopg[binary]==3.3.8",
+    "pydantic==2.14.3",
+    "pydantic-settings==2.16.2",
+    "sqlalchemy==2.1.8",
+    "uvicorn[standard]==0.54.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx==0.28.1",
+    "mypy==2.4.1",
+    "pytest==9.2.0",
+    "ruff==0.17.4",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app", "etl"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
@@ -7,8 +39,9 @@ select = ["E", "F", "I", "B", "UP"]
 
 [tool.mypy]
 python_version = "3.11"
-strict_optional = true
-warn_unused_ignores = true
+strict = true
+plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-ra"
