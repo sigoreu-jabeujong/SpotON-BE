@@ -3,6 +3,8 @@
 ## 최상위 작업 기준 (이 파일보다 우선)
 - BE 개발 작업계획서: @docs/be-work-plan.md
 - BE 개발 작업 지시: @docs/be-work-instructions.md
+- API 계약 보완·외부 명세 동기화: @docs/be-contract-amendments.md
+- 개발 규칙 보완(PDF 분석): @docs/be-development-rules.md — 사용자 결정과 기존 BE 문서를 우선하며 FE·BE 별도 저장소를 유지한다.
 - API 명세서 v1.2가 FE↔BE 계약이다. 필드명·enum·endpoint를 임의로 바꾸지 않는다.
 - 아래 내용과 위 문서가 충돌하면 **위 문서가 우선**이며, 충돌 내용을 먼저 사용자에게 알린다.
 
@@ -44,7 +46,7 @@ docs/              # 작업계획서·지시서
 ```bash
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt    # BE-01에서 의존성 파일 생성 예정
+pip install -e ".[dev]"            # BE-01에서 pyproject.toml의 의존성·dev extra 구성 예정
 cp .env.example .env               # 이후 실제 키 입력
 uvicorn app.main:app --reload      # http://localhost:8000/docs
 
@@ -63,6 +65,9 @@ pytest
 { "data": null, "meta": { ... }, "error": { "code": "OUT_OF_SEOUL", "message": "..." } }
 ```
 - 모든 엔드포인트는 이 형식을 따른다 (`ApiResponse` / `ApiMeta` / `ApiError` / `DataVersion` 공통 객체 사용)
+- 현재 공식 통계는 데이터셋별 최신 공표·검증 분기, 과거 조회는 해당 분기를 사용한다. 실제 적용 분기를 표시하고 선택 분기의 결측을 이전 분기로 대체하지 않는다.
+- 서울시 원천 `market_change`는 공식 지표다. 미확보 데이터는 `pending`, 조건별 결측은 `no_data`로 구분한다.
+- `official_risk`의 링크 전용 응답 등 새 계약은 보완 문서에서 관리하고 외부 명세·FE 동기화 후 배포한다.
 - 에러 코드: `INVALID_PARAM`, `CATEGORY_REQUIRED`, `ADDRESS_NOT_FOUND`, `OUT_OF_SEOUL`, `AS_OF_OUT_OF_RANGE`, `UPSTREAM_ERROR`, `AI_UNAVAILABLE`, `AI_VERIFY_FAILED`, `INTERNAL_ERROR`
 - API 경로는 `/api/...` 로 시작 (예: `/api/health`, `/api/geocode`)
 - 형식을 바꾸려면 코드부터 고치지 말고 명세 변경 → FE·BE 합의 → 코드 수정 순서. `../SpotON-FE/CLAUDE.md`도 함께 수정
@@ -72,6 +77,11 @@ pytest
 - 외부 API 호출은 `services/`에서 하고, 타임아웃과 예외 처리를 넣는다
 - 기능 구현과 동시에 pytest 테스트 추가 (경계 테스트: 거리 499/500/501m, 시점 개업·폐업일 전후)
 - 설정값은 하드코딩하지 말고 환경변수로 읽는다
+- 의존성은 `pyproject.toml` 하나로 관리한다.
+- 원본 좌표·좌표계와 원천 날짜·업태를 보존하고 좌표 보완·정제 플래그를 남긴다.
+- 원본 보존에도 허용 필드 목록을 적용한다. 대표자명·연락처·상담 원문은 적재하지 않는다. ETL 로그는 배치·단계·처리/제외 건수 중심으로 남긴다.
+- 계산 함수 docstring에는 실제 분석 로직 정의서 절 번호를 적고, 원문 미확보 시 번호를 만들지 않는다.
+- 기본 모델은 `gemini-3.5-flash-lite`이며 환경변수로 변경 가능하게 유지한다. 공급자 429는 `AI_UNAVAILABLE`로 처리하고 한도·백오프를 설정으로 관리한다.
 - 앞 PHASE를 하드코딩 숫자로 우회하지 않는다
 - 주석·에러 메시지는 한국어 사용 가능, 변수·함수명은 영어 snake_case
 
