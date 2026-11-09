@@ -19,27 +19,20 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install uv
+        run: python -m pip install uv==0.13.7
+
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff mypy pytest
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        run: uv sync --locked --extra dev
 
       - name: Lint (ruff check)
-        run: ruff check .
+        run: uv run --locked --extra dev ruff check .
 
       - name: Format (ruff format --check)
-        run: ruff format --check .
+        run: uv run --locked --extra dev ruff format --check .
 
       - name: Type check (mypy)
-        run: |
-          # shortcut: app/ 생성 전(PHASE 0 이전)에는 건너뜀, BE-00 완료 후 조건 제거
-          if [ -d app ]; then mypy app; else echo "app 폴더 없음 - 건너뜀"; fi
+        run: uv run --locked --extra dev mypy app
 
       - name: Test (pytest)
-        run: |
-          if [ -d tests ]; then
-            pytest -q || [ $? -eq 5 ]   # 5 = 테스트 없음 → 통과 처리
-          else
-            echo "tests 폴더 없음 - 건너뜀"
-          fi
+        run: uv run --locked --extra dev pytest
