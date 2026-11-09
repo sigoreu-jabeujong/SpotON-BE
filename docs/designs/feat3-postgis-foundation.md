@@ -58,13 +58,13 @@
   session = factory()
   try:
       yield session
-      session.commit()          # commit 실패도 아래 except로 들어간다
+      session.commit()  # commit 실패도 아래 except로 들어간다
   except BaseException:
       try:
           session.rollback()
       except Exception:
-          pass                  # rollback 실패가 원래 예외를 가리지 않게 한다(로그에 원문 금지)
-      raise                     # 원래 예외를 그대로 전달
+          pass  # rollback 실패가 원래 예외를 가리지 않게 한다(로그에 원문 금지)
+      raise  # 원래 예외를 그대로 전달
   finally:
       session.close()
   ```
