@@ -198,3 +198,16 @@ async generate_verified(
 - 분량 상한은 환경변수로 노출하지 않는다. FE 화면 분량이 정해지지 않았고, 운영 중 바꿀 이유가 아직 없다.
 
 남은 제한: 13절과 같다.
+
+### 구현 후 점검 (2026-11-11)
+
+구현 코드와 이 설계를 다시 대조했다. 달라진 점과 확정한 세부 사항:
+
+- JSON은 두 번 파싱한다. 검증용은 `parse_float=Decimal`로 소수 자릿수를 보존하고(예: `12.50`의 반올림 판단), 반환용은 일반 파싱이다. `NaN`·`Infinity`는 Python `json`이 기본 허용하므로 `parse_constant`로 거절해 `malformed_json`으로 처리한다(설계에 없던 경로).
+- 반올림 비교에서 자릿수가 `Decimal` 기본 정밀도(28자리)를 넘는 표기는 `quantize`가 예외를 내므로 해당 후보를 건너뛴다. 결과는 `unknown_number`이며 예외로 중단되지 않는다. 테스트를 추가했다.
+- 출처 키(`source`/`sources`) 비교는 키의 앞뒤 공백과 대소문자를 무시한다. 입력에 출처가 하나도 없는데 출력이 출처를 쓰면 `unknown_source`다.
+- 실패 종류는 `VerifyFailure` 정의 순서로 정렬해 매번 같은 순서로 돌려준다.
+- `VerifyResult.data`는 통과했을 때만 채운다. 실패한 응답의 내용이 호출자에게 넘어가 쓰이는 일을 막는다.
+- 재생성 흐름의 최대 생성 횟수는 `MAX_GENERATIONS = 2` 상수다.
+
+로컬 검사 결과: `ruff check`, `ruff format --check`, `mypy app etl migrations`, `pytest` 통과(473 passed, integration 12 deselected). 실제 Gemini 응답 검증과 PostGIS 통합 테스트는 로컬에서 실행하지 않았다.
