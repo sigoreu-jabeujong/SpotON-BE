@@ -98,7 +98,7 @@ def test_floor_unit_upsert_updates_and_clears_current_etl_values(
         assert building_key == "마포구-서교동-123-4"
 
 
-def test_floor_unit_upsert_preserves_building_key_and_deleted_at(
+def test_floor_unit_upsert_updates_etl_key_and_preserves_deleted_at(
     temporary_database: TemporaryDatabase,
 ) -> None:
     migrate(temporary_database)
@@ -119,5 +119,5 @@ def test_floor_unit_upsert_preserves_building_key_and_deleted_at(
     floor_unit, location_level, building_key, stored_deleted_at = load_detail(temporary_database)
     assert floor_unit is None
     assert location_level == "unverified"
-    assert building_key == "kept"
+    assert building_key == "마포구-서교동-123-4"
     assert stored_deleted_at == deleted_at
