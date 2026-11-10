@@ -46,3 +46,68 @@ def test_invalid_cors_origin_fails_startup(origin: str) -> None:
 
 def test_empty_origin_list_disables_cross_origin_access() -> None:
     assert Settings(_env_file=None, cors_origins="").allowed_origins == []
+
+
+LLM_LIMIT_ENV_NAMES = [
+    "LLM_REQUEST_TIMEOUT",
+    "LLM_TIME_BUDGET",
+    "LLM_MAX_RETRIES",
+    "LLM_BACKOFF_BASE",
+    "LLM_BACKOFF_MAX",
+    "LLM_MAX_OUTPUT_TOKENS",
+    "LLM_REQUESTS_PER_MINUTE",
+    "LLM_REQUESTS_PER_DAY",
+]
+
+
+def test_llm_limit_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in LLM_LIMIT_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.llm_request_timeout == 10
+    assert settings.llm_time_budget == 20
+    assert settings.llm_max_retries == 2
+    assert settings.llm_backoff_base == 1
+    assert settings.llm_backoff_max == 8
+    assert settings.llm_max_output_tokens == 2048
+    assert settings.llm_requests_per_minute is None
+    assert settings.llm_requests_per_day is None
+
+
+def test_blank_llm_request_limits_mean_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("LLM_REQUESTS_PER_MINUTE", raising=False)
+    monkeypatch.delenv("LLM_REQUESTS_PER_DAY", raising=False)
+    env_file = tmp_path / "settings.env"
+    env_file.write_text("LLM_REQUESTS_PER_MINUTE=\nLLM_REQUESTS_PER_DAY= \n", encoding="utf-8")
+    settings = Settings(_env_file=env_file)
+    assert settings.llm_requests_per_minute is None
+    assert settings.llm_requests_per_day is None
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("llm_request_timeout", 0),
+        ("llm_request_timeout", 61),
+        ("llm_time_budget", 121),
+        ("llm_max_retries", -1),
+        ("llm_max_retries", 6),
+        ("llm_backoff_base", 0),
+        ("llm_backoff_max", 61),
+        ("llm_max_output_tokens", 0),
+        ("llm_max_output_tokens", 65537),
+        ("llm_requests_per_minute", 0),
+        ("llm_requests_per_day", 0),
+    ],
+)
+def test_out_of_range_llm_limits_fail_startup(field: str, value: float) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **{field: value})
+
+
+def test_env_example_lists_llm_limit_settings() -> None:
+    example = (Path(__file__).resolve().parents[1] / ".env.example").read_text(encoding="utf-8")
+    names = {line.split("=", 1)[0] for line in example.splitlines() if "=" in line}
+    assert set(LLM_LIMIT_ENV_NAMES) <= names
