@@ -33,28 +33,35 @@
 ```python
 @dataclass(frozen=True)
 class LlmRequest:
-    system_instruction: str        # repr=False
-    user_content: str              # repr=False, BE-28이 만든 집계 JSON 문자열
-    response_json_schema: Mapping[str, JsonValue] | None = None   # repr=False
-    max_output_tokens: int | None = None   # None이면 설정 기본값
+    system_instruction: str = field(repr=False)
+    user_content: str = field(repr=False)  # BE-28이 만든 집계 JSON 문자열
+    response_json_schema: Mapping[str, JsonValue] | None = field(default=None, repr=False)
+    max_output_tokens: int | None = None  # None이면 설정 기본값, 1~65536
+
 
 @dataclass(frozen=True)
 class LlmUsage:
-    prompt_tokens: int | None
-    output_tokens: int | None
-    total_tokens: int | None
+    prompt_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+
 
 @dataclass(frozen=True)
 class LlmResult:
-    text: str                      # repr=False
+    text: str = field(repr=False)
     provider: str
     model: str
     usage: LlmUsage
     attempts: int
 
+
 class LlmClient(Protocol):
-    provider: str
-    model: str
+    @property
+    def provider(self) -> str: ...
+
+    @property
+    def model(self) -> str: ...
+
     async def generate(self, request: LlmRequest) -> LlmResult: ...
 ```
 
