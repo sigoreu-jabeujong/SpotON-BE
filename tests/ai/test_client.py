@@ -1,3 +1,6 @@
+import asyncio
+
+import httpx
 import pytest
 
 from app.ai.client import (
@@ -8,6 +11,9 @@ from app.ai.client import (
     LlmUsage,
     to_app_error,
 )
+from app.ai.factory import create_llm_client
+from app.ai.gemini import GeminiClient
+from app.core.config import Settings
 from app.core.errors import ERROR_SPECS
 from app.schemas.common import ErrorCode
 
@@ -45,6 +51,31 @@ def test_request_and_result_repr_hide_raw_text() -> None:
     )
     assert "SECRET" not in repr(request)
     assert "SECRET" not in repr(result)
+
+
+def test_factory_selects_gemini_for_google() -> None:
+    settings = Settings(_env_file=None, llm_provider="google", llm_api_key="k")
+    client = create_llm_client(settings)
+    assert isinstance(client, GeminiClient)
+    assert (client.provider, client.model) == ("google", settings.llm_model)
+
+
+@pytest.mark.parametrize("provider", ["openai", "Google", ""])
+def test_factory_unsupported_provider_fails_without_calling(provider: str) -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200)
+
+    settings = Settings(_env_file=None, llm_provider=provider, llm_api_key="k")
+    client = create_llm_client(settings, transport=httpx.MockTransport(handler))
+    request = LlmRequest(system_instruction="s", user_content="u")
+    with pytest.raises(LlmError) as raised:
+        asyncio.run(client.generate(request))
+    assert raised.value.kind is LlmErrorKind.NOT_CONFIGURED
+    assert raised.value.__context__ is None
+    assert calls == []
 
 
 @pytest.mark.parametrize("tokens", [0, 65537])
