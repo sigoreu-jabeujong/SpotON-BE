@@ -29,6 +29,21 @@ class Settings(BaseSettings):
     llm_provider: str = "google"
     llm_model: str = "gemini-3.5-flash-lite"
     llm_api_key: SecretStr | None = None
+    llm_request_timeout: float = Field(default=10, ge=1, le=60)
+    llm_time_budget: float = Field(default=20, ge=1, le=120)
+    llm_max_retries: int = Field(default=2, ge=0, le=5)
+    llm_backoff_base: float = Field(default=1, gt=0, le=10)
+    llm_backoff_max: float = Field(default=8, gt=0, le=60)
+    llm_max_output_tokens: int = Field(default=2048, ge=1, le=65536)
+    llm_requests_per_minute: int | None = Field(default=None, ge=1)
+    llm_requests_per_day: int | None = Field(default=None, ge=1)
+
+    @field_validator("llm_requests_per_minute", "llm_requests_per_day", mode="before")
+    @classmethod
+    def blank_limit_is_unset(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("cors_origins")
     @classmethod

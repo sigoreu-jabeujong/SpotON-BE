@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 FastAPI·health API·공통 응답·오류 처리, PostgreSQL/PostGIS 기반, stores 모델과 지방행정 인허가 데이터 수집·정제·멱등 upsert, 카카오 로컬 API 기반 서울 주소 지오코딩을 제공합니다. 실제 개발 DB 연결과 원천 전체 적재·분석 API는 후속 작업입니다.
+현재는 FastAPI·health API·공통 응답·오류 처리, PostgreSQL/PostGIS 기반, stores 모델과 지방행정 인허가 데이터 수집·정제·멱등 upsert, 카카오 로컬 API 기반 서울 주소 지오코딩, AI 해석용 공급자 분리 LLM client를 제공합니다. 실제 개발 DB 연결과 원천 전체 적재·분석·AI 해석 API는 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -34,6 +34,18 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 
 실행에는 서버 전용 `KAKAO_REST_API_KEY`가 필요합니다. 키·주소·좌표는 로그에 남기지 않으며, 응답은 `Cache-Control: no-store`로 전송합니다. 키 없이 실행하면 이 경로는 `UPSTREAM_ERROR`를 반환합니다.
 
+## AI LLM client
+
+`app/ai/`는 AI 해석 API(BE-32)가 사용할 공급자 분리 LLM client입니다. 아직 API 경로는 없습니다. `create_llm_client(settings)`가 `LLM_PROVIDER=google`이면 Gemini `generateContent` 어댑터를 만들고, 그 밖의 값은 호출 시 실패하는 client를 돌려줘 설정 오류가 지표 API 시작을 막지 않습니다.
+
+- 키 `LLM_API_KEY`는 서버 전용이며 `x-goog-api-key` 헤더로만 보냅니다. 기본 모델은 `LLM_MODEL=gemini-3.5-flash-lite`입니다.
+- `LLM_REQUEST_TIMEOUT`(요청 1회)과 `LLM_TIME_BUDGET`(재시도 대기 포함 전체) 안에서 429·500·503·504·네트워크 오류·timeout만 `LLM_MAX_RETRIES`회까지 지터를 준 지수 백오프로 재시도합니다.
+- `LLM_REQUESTS_PER_MINUTE`·`LLM_REQUESTS_PER_DAY`는 프로세스 내 한도이며 비우면 제한하지 않습니다. 일일 한도는 태평양 시간 자정에 초기화합니다. 프로젝트 계정의 실제 한도를 확인해 설정합니다.
+- 모든 실패는 기존 `AI_UNAVAILABLE`(503)로 매핑합니다. 프롬프트·생성 결과·키·공급자 오류 본문은 로그와 예외에 남기지 않습니다.
+- 한도 카운터가 client 인스턴스에 있으므로 호출하는 쪽은 앱 수명 동안 하나를 재사용해야 합니다.
+
+자동 검증은 mock transport만 사용하며 실제 Gemini 호출은 확인하지 않았습니다. 상세 계약은 [작업 25 설계서](docs/designs/feat25-llm-client.md)에서 확인합니다.
+
 ## 공통 오류 응답
 
 요청 검증 실패는 422, 없는 경로는 404, 허용되지 않은 메서드는 405 상태를 유지하면서 공통 외피로 반환합니다. 404/405에는 새 코드를 추가하지 않고 기존 `INVALID_PARAM`을 사용합니다. 주소 조회 실패용 `ADDRESS_NOT_FOUND`와는 구분합니다. 405의 `Allow` 및 HTTP 예외의 인증·재시도 프로토콜 헤더는 유지하고 임의 디버그 헤더는 제거합니다.
@@ -59,7 +71,7 @@ uv run --locked --extra dev mypy app etl migrations
 uv run --locked --extra dev pytest
 ```
 
-테스트는 DB·외부 API 없이 health, 공통 응답·오류·OpenAPI·CORS·정보 비노출·환경 설정, DB 설정·세션 제어와 인허가 수집·정제를 검증합니다. 실제 SQL·공간 함수·권한·stores upsert는 아래 PostGIS 통합 job에서 수행합니다. 작업별 설계·Claude 검토·검증 결과는 `docs/designs/`에 기록합니다.
+테스트는 DB·외부 API 없이 health, 공통 응답·오류·OpenAPI·CORS·정보 비노출·환경 설정, DB 설정·세션 제어와 인허가 수집·정제, LLM client의 재시도·한도·응답 분류·비노출을 검증합니다. 실제 SQL·공간 함수·권한·stores upsert는 아래 PostGIS 통합 job에서 수행합니다. 작업별 설계·Claude 검토·검증 결과는 `docs/designs/`에 기록합니다.
 
 ## 지방행정 인허가 ETL
 
