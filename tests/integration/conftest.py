@@ -9,7 +9,9 @@ from pydantic import SecretStr
 from sqlalchemy import Engine, text
 
 from app.core.config import Settings
-from app.db.session import create_db_engine, normalize_database_url
+from app.db.session import create_db_engine
+
+from .safety import IntegrationTargetError, check_integration_target
 
 
 @dataclass
@@ -22,20 +24,15 @@ class TemporaryDatabase:
 @pytest.fixture
 def temporary_database() -> Iterator[TemporaryDatabase]:
     raw = os.environ.get("TEST_DATABASE_URL", "")
-    if not raw or os.environ.get("SPOTON_ALLOW_DB_INTEGRATION") != "1":
-        pytest.fail("명시적인 임시 DB 통합 검증 설정이 필요합니다")
-    url = normalize_database_url(raw)
-    if url.host not in {"localhost", "127.0.0.1", "::1"}:
-        pytest.fail("통합 검증은 로컬 임시 DB만 허용합니다")
-    production = Settings(_env_file=None).database_url
-    if production is not None and production.get_secret_value().strip():
-        configured = normalize_database_url(production.get_secret_value())
-        if (configured.host, configured.port or 5432, configured.database) == (
-            url.host,
-            url.port or 5432,
-            url.database,
-        ):
-            pytest.fail("일반 DATABASE_URL과 같은 DB를 테스트할 수 없습니다")
+    production = Settings().database_url
+    try:
+        url = check_integration_target(
+            raw,
+            production.get_secret_value() if production is not None else None,
+            os.environ.get("SPOTON_ALLOW_DB_INTEGRATION"),
+        )
+    except IntegrationTargetError as exc:
+        pytest.fail(str(exc))
 
     admin = create_db_engine(Settings(_env_file=None, database_url=SecretStr(raw)))
     database_name = f"spoton_it_{uuid4().hex[:12]}"

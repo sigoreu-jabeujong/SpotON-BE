@@ -206,6 +206,31 @@ Codex 재검토: 실제 패키지 버전·레이아웃·gh 실행 지원을 확�
 
 ## 구현·검증 결과
 
+### BE-06 재검증 보완 계획
+
+기존 CI 통과 이후 추가 검사에서 다음을 재현했다. 이 보완은 새 기능 큐가 아니라 BE-06의 연결 설정·테스트 보호 검증이다.
+
+- URL query의 host·dbname 등이 실제 드라이버 접속 대상을 덮어쓰므로 URL 경로에서 검증한 값과 달라질 수 있다. host·hostaddr·port·dbname·user·password·service 등 접속 대상/계정 재정의 키는 거부하고 sslmode 같은 일반 전송 옵션은 유지한다.
+- 포트 0과 65536을 허용하므로 명시 포트는 1~65535로 제한한다.
+- 통합 fixture가 일반 DB 비교에 Settings(_env_file=None)을 사용해 실제 로컬 .env의 DATABASE_URL을 무시하므로 기본 Settings()로 비교하고 연결 전 안전장치를 순수 함수로 분리해 단위 검증한다.
+- 수정 후 URL 우회·잘못된 포트·개발 DB 일치·허용 플래그 누락을 회귀 테스트한다. 이번 보완은 사용자 검증 요청 범위에서 로컬에 적용하고 커밋·푸시 전 결과를 보고한다.
+
+#### 세부 규칙(1.2 "query 보존"·3.3을 이 절 기준으로 좁힌다)
+
+- query 키 검증은 거부 목록이 아닌 **허용 목록**으로 한다. 허용: `sslmode`·`sslrootcert`·`sslcert`·`sslkey`·`sslcrl`·`application_name`. 그 외 키는 모두 거부한다. 이유: libpq/psycopg가 인식하는 재정의 키(`host`·`hostaddr`·`port`·`dbname`·`user`·`password`·`passfile`·`service`·`servicefile`·`options` 등)는 버전에 따라 늘 수 있고, 거부 목록은 새 키로 우회된다. `connect_timeout`도 Settings 값과 충돌하므로 거부한다.
+- 키 비교는 소문자 정규화 후 수행한다(대소문자 변형 우회 차단). 같은 키가 2번 이상 나오면(`make_url`이 tuple 값으로 반환) 허용 키라도 거부한다. 빈 값도 거부한다.
+- 포트: `url.port`가 None이면 허용(기본 5432로 간주), 명시 값은 정수 1~65535만 허용. 정수가 아니어서 `make_url`이 실패하는 경우도 같은 고정 예외로 변환한다.
+- 거부 메시지는 고정 문구(예: "DATABASE_URL에 허용되지 않는 접속 옵션이 있습니다", "DATABASE_URL 포트가 올바르지 않습니다")만 쓴다. query 값·호스트·사용자·암호를 넣지 않으며, 1.2의 `from None`·except 밖 raise 규칙을 그대로 따른다.
+- 같은 `normalize_database_url()`을 `TEST_DATABASE_URL`에도 적용한다. 테스트 URL도 `?host=`로 localhost 검사를 우회할 수 있기 때문이다. 임시 DB URL은 정규화된 `URL` 객체의 `set(database=...)`로만 만든다.
+- 안전 함수: `check_integration_target(test_url: str | None, database_url: str | None, allow_flag: str | None) -> URL`처럼 연결·엔진 생성 없이 판정만 하는 순수 함수로 분리한다. fixture는 `os.environ`과 기본 `Settings()`(로컬 `.env` 포함)에서 값을 읽어 이 함수에 넘기고, 반환 전에는 어떤 엔진도 만들지 않는다. 실패는 `pytest.fail`(고정 문구)이며 skip하지 않는다.
+- 동일 대상 비교: 두 URL 모두 정규화 후 host(소문자, `localhost`·`127.0.0.1`·`::1`은 같은 대상으로 취급)·port(None→5432)·database가 같으면 실패. `DATABASE_URL`이 설정돼 있는데 정규화에 실패해도 비교 불가로 보고 실패한다(무시하지 않음).
+- 회귀 단위 테스트(DB 불필요): 허용 목록 밖 키 각각(`host`·`hostaddr`·`port`·`dbname`·`user`·`password`·`service`·`options`)·대문자 키·중복 허용 키·빈 값 거부, `sslmode` 단독 보존, 포트 0·65536·비정수 거부와 1·65535 허용, 동일 대상(loopback 별칭·기본 포트 포함)·`DATABASE_URL` 형식 오류·허용 플래그 누락/`0`·비 localhost 거부, 그리고 각 실패 메시지·`repr`·예외 체인에 고유 암호·호스트·query 값이 없음을 확인한다. fixture가 `Settings()`를 쓰는지는 `.env`를 tmp 디렉터리에 두고(monkeypatch chdir) 동일 대상 실패로 검증한다.
+- 범위: 새 기능·새 의존성·CI job 추가 없음. 기존 완료 정의를 그대로 적용해 로컬 검사 통과 후 재push CI의 두 job success(통합 skip·xfail 0)를 확인해야 이 보완을 완료로 본다.
+
+Claude Code 검토(2026-11-10): 이 절만 검토·직접 보완했다. 거부 목록을 허용 목록으로 바꾸고 대소문자·중복·빈 값·TEST_DATABASE_URL 우회, DATABASE_URL 형식 오류 시 비교 누락, 메시지 비밀 비노출을 추가했다. 코드·Git·명령은 사용하지 않았다.
+
+재검증 결과: Codex가 검토 보완안을 구현했다. SQLAlchemy가 빈 query 값을 제거하는 동작을 회귀 테스트에서 추가 발견해 원본 URL을 keep_blank_values=True로 먼저 검사하고 fragment를 거부하도록 보완했다. 로컬 단위 80개·ruff check/format·mypy app migrations 통과, 통합 2개는 로컬 DB 부재로 별도 실행 대상이다. 기존 커밋 a5f9526의 실제 PostGIS CI 성공 기록을 이번 보완의 통합 성공으로 대체하지 않는다. 사용자 요청에 따라 보완 커밋·최신 develop 통합·전체 재검증 후 기존 PR #11을 갱신한다.
+
 ### 기능별 커밋
 
 | 커밋 | 내용 |

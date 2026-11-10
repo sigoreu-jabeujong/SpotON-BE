@@ -56,6 +56,62 @@ def test_connect_timeout_is_bounded(timeout: int) -> None:
         Settings(_env_file=None, database_connect_timeout=timeout)
 
 
+@pytest.mark.parametrize("port", [0, 65536, -1])
+def test_invalid_port_is_rejected(port: int) -> None:
+    with pytest.raises(DatabaseConfigurationError):
+        normalize_database_url(f"postgresql://dummy:DUMMY-SECRET@localhost:{port}/test")
+
+
+@pytest.mark.parametrize("port", [1, 65535])
+def test_port_boundaries_are_valid(port: int) -> None:
+    assert normalize_database_url(f"postgresql://dummy:dummy@localhost:{port}/test").port == port
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "host=other-host",
+        "hostaddr=192.0.2.1",
+        "port=5433",
+        "dbname=other-db",
+        "user=other-user",
+        "password=DUMMY-SECRET",
+        "service=other-service",
+        "servicefile=DUMMY-SECRET",
+        "passfile=DUMMY-SECRET",
+        "options=DUMMY-SECRET",
+        "connect_timeout=999",
+        "HOST=other-host",
+        "sslmode=require&sslmode=disable",
+        "sslmode=require&SSLMODE=disable",
+        "sslmode=",
+        "sslmode=&sslmode=require",
+        "host=",
+        "%68ost=other-host",
+    ],
+)
+def test_query_cannot_override_validated_connection_target(query: str) -> None:
+    with pytest.raises(DatabaseConfigurationError) as caught:
+        normalize_database_url(f"postgresql://dummy:DUMMY-SECRET@localhost/test?{query}")
+    assert "DUMMY-SECRET" not in str(caught.value)
+    assert caught.value.__context__ is None
+
+
+def test_allowed_query_keys_are_normalized_and_preserved() -> None:
+    url = normalize_database_url(
+        "postgresql://dummy:dummy@localhost/test?SSLMODE=require&application_name=spoton"
+    )
+    assert url.query == {"sslmode": "require", "application_name": "spoton"}
+
+
+def test_url_fragment_is_rejected_and_encoded_password_is_preserved() -> None:
+    with pytest.raises(DatabaseConfigurationError):
+        normalize_database_url("postgresql://dummy:dummy@localhost/test?sslmode=require#fragment")
+    assert normalize_database_url("postgresql://dummy:dummy%23secret@localhost/test").password == (
+        "dummy#secret"
+    )
+
+
 def test_engine_creation_is_lazy_and_parameters_are_hidden() -> None:
     settings = Settings(
         _env_file=None,
