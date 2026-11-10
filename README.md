@@ -46,6 +46,16 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 
 자동 검증은 mock transport만 사용하며 실제 Gemini 호출은 확인하지 않았습니다. 상세 계약은 [작업 25 설계서](docs/designs/feat25-llm-client.md)에서 확인합니다.
 
+### 프롬프트 버전 관리
+
+AI 해석 프롬프트는 `app/ai/prompts/risk_interpret/`의 `system.md`(시스템 지침)와 `user.md`(`$context_json` 하나만 쓰는 입력 템플릿)로 관리합니다. `build_interpret_request(context)`가 서버 집계를 키 정렬 JSON으로 넣어 `LlmRequest`를 만듭니다.
+
+- 프롬프트 파일을 바꾸면 `app/ai/prompts/version.py`의 `PROMPT_VERSION`을 올리고 `PROMPT_HISTORY` 끝에 새 지문을 추가해야 합니다. 테스트가 현재 파일의 SHA-256 지문과 대조해 누락을 막습니다. 새 지문은 실패한 테스트 메시지에 표시됩니다.
+- 주소·좌표·`building_key`·`floor_unit`·상호(`name`)·`license_no` 등 `FORBIDDEN_CONTEXT_KEYS`에 있는 키가 집계에 있으면 조립을 거절합니다. 값 내용은 검사하지 않으므로 허용 필드 추출은 BE-28에서 해야 합니다.
+- 시스템 지침은 작업계획의 규칙(입력 숫자만 사용, 공식/참고 구분, pending·no_data, 금지 표현, 참고용 안내)만 담은 초안입니다. 지표 목록과 응답 스키마가 확정되면 보완합니다.
+
+상세 내용은 [작업 27 설계서](docs/designs/feat27-prompt-version.md)에서 확인합니다.
+
 ## 공통 오류 응답
 
 요청 검증 실패는 422, 없는 경로는 404, 허용되지 않은 메서드는 405 상태를 유지하면서 공통 외피로 반환합니다. 404/405에는 새 코드를 추가하지 않고 기존 `INVALID_PARAM`을 사용합니다. 주소 조회 실패용 `ADDRESS_NOT_FOUND`와는 구분합니다. 405의 `Allow` 및 HTTP 예외의 인증·재시도 프로토콜 헤더는 유지하고 임의 디버그 헤더는 제거합니다.
@@ -71,7 +81,7 @@ uv run --locked --extra dev mypy app etl migrations
 uv run --locked --extra dev pytest
 ```
 
-테스트는 DB·외부 API 없이 health, 공통 응답·오류·OpenAPI·CORS·정보 비노출·환경 설정, DB 설정·세션 제어와 인허가 수집·정제, LLM client의 재시도·한도·응답 분류·비노출을 검증합니다. 실제 SQL·공간 함수·권한·stores upsert는 아래 PostGIS 통합 job에서 수행합니다. 작업별 설계·Claude 검토·검증 결과는 `docs/designs/`에 기록합니다.
+테스트는 DB·외부 API 없이 health, 공통 응답·오류·OpenAPI·CORS·정보 비노출·환경 설정, DB 설정·세션 제어와 인허가 수집·정제, LLM client의 재시도·한도·응답 분류·비노출과 프롬프트 지문·조립을 검증합니다. 실제 SQL·공간 함수·권한·stores upsert는 아래 PostGIS 통합 job에서 수행합니다. 작업별 설계·Claude 검토·검증 결과는 `docs/designs/`에 기록합니다.
 
 ## 지방행정 인허가 ETL
 

@@ -177,3 +177,17 @@ build_interpret_request(
 - 응답 스키마는 정하지 않는다. 팀원이 API·값 확정 전이라고 안내했다.
 
 남은 제한: 9절과 같다.
+
+### 구현 후 점검 (2026-11-11)
+
+구현 코드와 이 설계를 다시 대조했다. 달라진 점과 확정한 세부 사항:
+
+- 버전 상수는 `__init__.py`가 아니라 `app/ai/prompts/version.py`에 두었다. `loader.py`가 버전을 읽고 `__init__.py`가 loader를 다시 내보내므로, 상수를 `__init__.py`에 두면 순환 import가 된다.
+- `PromptBundle.user_template`은 문자열이 아니라 검증을 마친 `string.Template` 객체로 보관한다. 조립 때마다 다시 파싱하지 않기 위해서다.
+- `$$`(문자 `$`)와 `${context_json}` 표기는 허용한다. 표준 `string.Template` 문법이다.
+- UTF-8이 아닌 파일도 `PromptError`로 처리한다(설계에 없던 실패 경로).
+- 식별정보 키 비교는 앞뒤 공백을 지우고 소문자로 바꾼 뒤 한다. 튜플 안의 딕셔너리도 검사한다.
+- 빌드한 wheel에 `system.md`·`user.md`가 포함되는 것을 확인했다(`uv build --wheel`).
+- 두 프롬프트 파일은 git에 LF로 저장된다(`git ls-files --eol`).
+
+로컬 검사 결과: `ruff check`, `ruff format --check`, `mypy app etl migrations`, `pytest` 통과(397 passed, integration 12 deselected). 실제 Gemini 호출과 PostGIS 통합 테스트는 로컬에서 실행하지 않았다.
