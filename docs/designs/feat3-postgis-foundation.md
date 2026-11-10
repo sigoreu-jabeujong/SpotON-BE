@@ -231,6 +231,8 @@ Claude Code 검토(2026-11-10): 이 절만 검토·직접 보완했다. 거부 �
 
 재검증 결과: Codex가 검토 보완안을 구현했다. SQLAlchemy가 빈 query 값을 제거하는 동작을 회귀 테스트에서 추가 발견해 원본 URL을 keep_blank_values=True로 먼저 검사하고 fragment를 거부하도록 보완했다. 로컬 단위 80개·ruff check/format·mypy app migrations 통과, 통합 2개는 로컬 DB 부재로 별도 실행 대상이다. 기존 커밋 a5f9526의 실제 PostGIS CI 성공 기록을 이번 보완의 통합 성공으로 대체하지 않는다. 사용자 요청에 따라 보완 커밋·최신 develop 통합·전체 재검증 후 기존 PR #11을 갱신한다.
 
+사용자 재푸시 요청 이후: `19c01e5`에 연결·안전장치 보완, `8774ee7`에 실제 DB 연동 선행/큐 중단 규칙을 각각 커밋했다. `9bbde2d`로 origin/develop의 PR #9 변경을 통합하고 README·계획서 충돌을 해결했다. 통합 후 로컬 단위 135개·ruff check/format·mypy app migrations 통과, 통합 2개는 별도 CI 대상이다. 기존 PR #11을 유지해 수정·충돌 해결·현재 검사 결과를 갱신하고 새 head의 PostGIS CI 결과를 확인한다. 실제 개발 DB 연동이나 다음 큐를 진행한 것은 아니다.
+
 ### 기능별 커밋
 
 | 커밋 | 내용 |
