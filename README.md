@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 FastAPI·health API·공통 응답·오류 처리와 PostgreSQL/PostGIS 엔진·세션·마이그레이션 기반을 제공합니다. 실제 개발 DB 연결값은 별도 설정하며 stores·데이터 적재·분석 API는 후속 작업입니다.
+현재는 FastAPI·health API·공통 응답·오류 처리, PostgreSQL/PostGIS 기반, stores 모델과 지방행정 인허가 데이터 수집·정제·멱등 upsert 모듈을 제공합니다. 실제 개발 DB 연결과 원천 전체 적재·분석 API는 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -49,11 +49,22 @@ CORS preflight·문서·리다이렉트·204/304는 프로토콜 응답으로 �
 ```powershell
 uv run --locked --extra dev ruff check .
 uv run --locked --extra dev ruff format --check .
-uv run --locked --extra dev mypy app migrations
+uv run --locked --extra dev mypy app etl migrations
 uv run --locked --extra dev pytest
 ```
 
-테스트는 DB·외부 API 없이 health, 공통 응답·오류·OpenAPI·CORS·정보 비노출·환경 설정과 DB 설정·세션 제어를 검증합니다. 기능별 설계·Claude 검토·커밋 결과는 [작업 2 설계서](docs/designs/feat2-common-api-errors.md)와 [작업 3 설계서](docs/designs/feat3-postgis-foundation.md)에 기록합니다. 실제 SQL·공간 함수·권한 검증은 아래 PostGIS 통합 job에서 수행합니다.
+테스트는 DB·외부 API 없이 health, 공통 응답·오류·OpenAPI·CORS·정보 비노출·환경 설정, DB 설정·세션 제어와 인허가 수집·정제를 검증합니다. 실제 SQL·공간 함수·권한·stores upsert는 아래 PostGIS 통합 job에서 수행합니다. 작업별 설계·Claude 검토·검증 결과는 `docs/designs/`에 기록합니다.
+
+## 지방행정 인허가 ETL
+
+일반음식점·휴게음식점 공식 API의 페이지 수집, 서울 25개 관청 코드 검증, 중복 제거, 날짜·상태·업종·면적 정제, EPSG:5174 원 좌표 보존과 EPSG:4326 변환, stores 멱등 upsert를 모듈로 제공합니다.
+
+- `DATA_GO_KR_SERVICE_KEY`는 디코딩된 서비스 키를 로컬 `.env` 또는 서버 시크릿에만 설정합니다.
+- 전화번호·홈페이지·대표자와 원천 JSON 전체는 DTO·DB·로그·리포트에 저장하지 않습니다.
+- 실제 원천 전체 수집·개발 DB 적재 CLI는 아직 제공하지 않습니다. repository는 호출자가 명시적으로 전달한 PostgreSQL 연결만 사용합니다.
+- `building_key`, `floor_unit`, 주소·좌표 보완, 삭제 동기화는 후속 작업입니다.
+
+상세 계약과 검증 근거는 [작업 5 설계서](docs/designs/feat5-license-etl.md)에서 확인합니다.
 
 ## PostgreSQL·PostGIS 설정과 마이그레이션
 
@@ -84,4 +95,4 @@ uv run --locked --extra dev alembic upgrade head --sql
 uv run --locked --extra dev pytest -m integration -rA --junitxml=integration.xml
 ```
 
-통합 검사는 PostGIS 미설치 임시 DB에서 upgrade·공간 함수·세션 commit/rollback·권한 부족·관리자 사전 설치 후 일반 계정 migration·downgrade/재upgrade를 검증합니다. 로컬 DB가 없으면 CI 결과로 실제 검증 여부를 확인하며, CI도 실행할 수 없으면 PR과 다음 작업을 중단합니다. 설계·Claude 검토·커밋별 결과는 [작업 3 설계서](docs/designs/feat3-postgis-foundation.md)에서 확인합니다.
+통합 검사는 PostGIS 미설치 임시 DB에서 upgrade·공간 함수·세션 commit/rollback·권한 부족·관리자 사전 설치 후 일반 계정 migration·downgrade/재upgrade와 인허가 stores upsert의 멱등성·geometry·source 분리·전체 rollback을 검증합니다. 로컬 DB가 없으면 CI 결과로 실제 검증 여부를 확인하며, CI도 실행할 수 없으면 PR과 다음 작업을 중단합니다.

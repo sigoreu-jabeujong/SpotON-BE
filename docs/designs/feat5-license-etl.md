@@ -268,3 +268,18 @@ tests/
 - 확정: 두 `/info` endpoint, `cond[OPN_ATMY_GRP_CD::EQ]`, `numOfRows` 최대 100, `response.header/body`, 성공 코드 `00`, `YYYYMMDD` 날짜, 서울 25개 관청 코드, 영업상태 코드 01~06, `SNTTN_BZSTAT_NM` 업태명, 원 좌표계 EPSG:5174.
 - 작업 4 코드도 재확인했다. `(source, license_no)` 유일 제약이 있고 이번 ETL이 비워 두는 컬럼은 nullable이며 category/source enum 제약은 없다. `gu_code`에는 공식 관청 코드를 그대로 저장한다.
 - 실원천 호출 키가 없으므로 실제 응답 샘플은 커밋하지 않으며, Swagger 계약을 본뜬 합성 fixture로 검증한다. 실제 개발 DB와 실원천 전체 적재는 계속 제외한다.
+
+## 구현·검증 결과
+
+- 구현 커밋:
+  - `7269266`: 고정 HTTPS endpoint, 키 비노출, 제한 재시도, 계약 검증, 안전한 페이지네이션과 공식 서울 25개 코드
+  - `57e9e3e`: 날짜·상태·업종·면적 정제, 결정적 중복 제거, EPSG:5174 원본 보존과 EPSG:4326 변환
+  - `3ecb022`: 연결 주입형 stores upsert, 유일 제약 검증, advisory lock, source 단위 트랜잭션과 실제 PostGIS 테스트
+  - `d289ee2`: psycopg의 신뢰할 수 없는 `ON CONFLICT rowcount` 대신 사전 유일성 검증을 통과한 payload 수로 처리 건수 계산
+- 로컬 DB 없는 검증: ruff check·ruff format --check·mypy 통과, 단위 테스트 165개 통과, 통합 테스트 8개는 CI 전용으로 분리.
+- 최초 실제 PostGIS run `42794393323`에서 정상 upsert의 `rowcount=0` 동작을 발견해 반환 건수 계산을 수정했다. 테스트를 완화하지 않고 수정 커밋 후 전체를 재실행했다.
+- 최신 검증 head: `d289ee21452403d3482cdb6eed1f86332a5318e9`.
+- [GitHub Actions run 42794557263](https://github.com/sigoreu-jabeujong/SpotON-BE/actions/runs/42794557263): `lint-and-test` 성공, `postgis-integration` 성공.
+- 실제 PostGIS 통합 테스트 8개가 실행됐고 skip·xfail·failure·error는 0이다. 그중 `test_localdata_upsert.py` 4개 실행을 JUnit 게이트가 별도로 강제한다.
+- 실제 개발 DB·운영 DB에는 접속하거나 적재하지 않았고, 실원천 API도 호출하지 않았다. CI의 계정과 임시 DB는 run 종료 시 폐기된다.
+- GitHub Actions의 Node.js 20 deprecation 및 Ubuntu runner 전환 안내는 이번 코드·테스트 실패가 아닌 runner 공지이며 필수 job 결과는 모두 success다.
