@@ -3,8 +3,8 @@
 ## 상태와 범위
 
 - 이슈: [#10 PostgreSQL·PostGIS 연결과 마이그레이션 기반 구성](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/10)
-- 브랜치: `feat#3-postgis-foundation`, 대상: develop. PR #9는 임의 병합하지 않으며 본 작업은 현재 develop의 PHASE 0 코드만 사용한다.
-- 현재: Codex 초안 → Claude Code 검토·직접 수정 → 기능별 구현·로컬 검사·PR 전 실제 DB CI 검증 완료. 마지막 문서 커밋의 CI 재검증 후 develop 대상 PR을 생성한다.
+- 브랜치: `feat#3-postgis-foundation`, 대상: develop. 최초 구현은 PHASE 0 기준으로 독립 진행했다. 이후 PR #9가 develop에 병합되어 기존 PR #11 갱신 시 최신 develop을 통합하고 충돌을 해결한다.
+- 현재: Codex 초안 → Claude Code 검토·직접 수정 → 구현·기존 CI 통과 → 추가 경계값 검증 보완. 기존 PR #11에 수정 커밋을 반영하고 전체·실제 PostGIS CI를 다시 확인한다.
 - BE-06만 구현한다. stores 등 새 테이블·ETL·분석·FE·운영 DB endpoint는 추가하지 않는다.
 - 로컬 DATABASE_URL·Docker가 없으므로 로컬 단위 검사와 작업 브랜치 CI의 실제 임시 PostGIS 검사를 모두 통과한 후 PR을 만든다.
 - 완료 정의(모두 충족해야 함):
@@ -250,4 +250,4 @@ Claude Code 검토(2026-11-10): 이 절만 검토·직접 보완했다. 거부 �
 - 실제로 미설치 임시 DB에서 PostGIS 생성·공간 함수·commit/rollback/commit 실패·downgrade/재upgrade·권한 부족 SQLSTATE 42501·관리자 사전 설치 후 일반 계정 성공을 검증했다.
 - 테스트가 만든 DB·role만 정리했다. 일반 DATABASE_URL은 테스트에 사용하지 않았고 운영·개발 실제 DB의 접속·구축 완료를 주장하지 않는다.
 - 기존 Starlette/httpx 향후 전환 안내 경고 1개는 남아 있으나 테스트 실패는 아니다. 호환성 전환은 별도 작업이다.
-- PR #9의 공통 응답 구현은 가져오지 않았고 FE·stores·ETL은 변경하지 않았다. 실제 DB 검증 실패 시 후속 큐 중단 규칙은 계속 적용한다.
+- 위 최초 CI 시점에는 PR #9의 공통 응답 구현을 포함하지 않았다. 현재 재검증은 develop의 병합된 공통 응답 구현을 통합한 상태로 실행한다. FE·stores·ETL은 변경하지 않았으며 실제 DB 검증 실패 시 후속 큐 중단 규칙을 계속 적용한다.

@@ -1,16 +1,16 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
-이 문서 하나에서 BE의 범위·개발 순서·데이터 규칙·API 보완·작업 방식을 관리한다. 기준을 바꿀 때 별도 지시서나 보완 문서를 만들지 않고 해당 절을 수정한다.
+이 문서 하나에서 BE의 범위·개발 순서·데이터 규칙·API 보완·작업 방식을 관리한다. 공통 기준 변경은 해당 절을 수정한다. 기능별 설계·Claude 검토·커밋 계획은 `docs/designs/`에 별도로 기록하되 공통 규칙을 복제하지 않는다.
 
 ## 1. 적용 기준과 현재 상태
 
 - 사용자 결정과 기존 BE 기준을 우선한다. PDF 등 외부 참고 자료와 충돌하면 현재 결정을 유지한다.
 - FE·BE는 별도 저장소로 유지하며 작업 대상은 `SpotON-BE`다. 모노레포로 합치지 않는다.
-- `main`은 기본·최종 반영용이고 `develop`은 개발 통합용이다. **개발 전 이슈를 만들고 해당 작업 브랜치에서 구현한 뒤 PR로 `develop`에 병합한다.**
+- `develop`은 GitHub 기본·개발 통합 브랜치이고 `main`은 최종 반영용이다. **개발 전 이슈를 만들고 해당 작업 브랜치에서 구현한 뒤 PR로 `develop`에 병합한다.**
 - 이슈 제목은 어떤 기능인지 알 수 있는 한국어로 짓고, 브랜치는 `feat#{작업 순번}-{영문-kebab-case}` 형식을 사용한다. 첫 작업은 `feat#1-initialize-fastapi`다. GitHub 실제 이슈 번호는 PR과 번호를 공유하므로 작업 순번과 다를 수 있으며 PR에서 실제 이슈를 연결한다. 셸에서는 `#`가 포함된 브랜치명을 따옴표로 감싼다.
-- 이슈 생성·작업 브랜치·구현·검증·PR·develop 병합은 개발 작업의 기본 절차다. main 반영·브랜치 삭제·강제 푸시는 별도 사용자 요청 없이 수행하지 않는다.
+- 기본 절차는 이슈 → 작업 브랜치 → Codex 설계 MD → Claude Code 검토·MD 직접 수정 → Codex 구현·기능별 커밋 → 로컬 테스트·실패 수정·재검증 → 푸시·develop 대상 PR → CI 확인이다. develop 병합은 사용자 요청 범위에 따라 수행하고 main 반영·브랜치 삭제·강제 푸시는 별도 요청 없이 하지 않는다.
 - API 명세서 v1.2가 FE↔BE 계약이다. 저장소에는 원본 API·데이터 활용·기능 명세서가 없으므로 보완안을 외부 명세 반영 완료로 간주하지 않는다. 확인 대기는 9절에서 관리한다.
-- PHASE 0(BE-00~03)은 이슈 #4에서 구현했다. BE-04~05는 별도 PR #9에서 검토 중이며 임의 병합하지 않는다. 이 브랜치에서는 BE-06 엔진·세션·Alembic·PostGIS 기반을 이슈 #10으로 구현하고 CI 임시 DB로 검증했다([작업 3 설계서](designs/feat3-postgis-foundation.md)). 실제 개발 DB URL은 별도 설정이 필요하다. 상세 meta·DataVersion·stores·ETL은 미완료이며 다음 큐는 사용자 요청 없이 진행하지 않는다.
+- PHASE 0(BE-00~03)은 이슈 #4에서 구현했다. PR #9로 BE-04 공통 외피·오류 코드와 BE-05 예외 처리가 develop에 반영됐다([작업 2 설계서](designs/feat2-common-api-errors.md)). BE-06 엔진·세션·Alembic·PostGIS 기반은 이슈 #10·PR #11에서 검증·보완 중이다([작업 3 설계서](designs/feat3-postgis-foundation.md)). 상세 meta·DataVersion·stores·ETL은 미완료다. 실제 개발 DB 연동은 3절의 선행 작업·큐 중단 규칙에 따라 지연한다.
 
 핵심 흐름은 `공공데이터 → ETL → DB → BE 계산 → API → FE 표시 → AI 해석`이다. 주소 검색만 명세에 따라 실시간 외부 호출을 허용한다. 앞 단계를 임시 수치로 우회하지 않는다.
 
@@ -142,7 +142,7 @@ SpotON-BE/
 ```powershell
 py -3.11 -m pip install uv==0.13.7
 uv sync --locked --extra dev
-uv run --locked --extra dev uvicorn app.main:app --reload
+uv run --locked --extra dev uvicorn app.main:app --reload --no-access-log
 
 uv run --locked --extra dev ruff check .
 uv run --locked --extra dev ruff format --check .
@@ -221,7 +221,7 @@ uv run --locked --extra dev pytest
 
 실패 시 data는 null, error에는 code·message를 담는다. 공통 meta는 계약에 따라 출처·실제 기준일/분기·공간 단위·분모·데이터 버전을 표현한다. 필드 구조를 임의로 만들지 않는다.
 
-오류 코드는 `INVALID_PARAM`, `CATEGORY_REQUIRED`, `ADDRESS_NOT_FOUND`, `OUT_OF_SEOUL`, `AS_OF_OUT_OF_RANGE`, `UPSTREAM_ERROR`, `AI_UNAVAILABLE`, `AI_VERIFY_FAILED`, `INTERNAL_ERROR`를 사용한다. 외부 원시 예외·응답·인증 정보는 사용자에게 노출하지 않는다. 공급자 429는 기존 `AI_UNAVAILABLE`로 매핑한다.
+오류 코드는 `INVALID_PARAM`, `CATEGORY_REQUIRED`, `ADDRESS_NOT_FOUND`, `OUT_OF_SEOUL`, `AS_OF_OUT_OF_RANGE`, `UPSTREAM_ERROR`, `AI_UNAVAILABLE`, `AI_VERIFY_FAILED`, `INTERNAL_ERROR`를 사용한다. 외부 원시 예외·응답·인증 정보는 사용자에게 노출하지 않는다. 공급자 429는 기존 `AI_UNAVAILABLE`로 매핑한다. 일반 요청 검증은 422 INVALID_PARAM, 라우터 404/405는 HTTP 상태를 유지한 INVALID_PARAM, 미처리 예외는 500 INTERNAL_ERROR로 제공한다. CORS 안쪽에서 응답 시작 전 예외를 처리하며 프로토콜 응답을 강제 포장하지 않는다.
 
 | 작업·기능 | API | 입력·반환 및 처리 |
 |---|---|---|
@@ -325,11 +325,20 @@ UTF-8·LF·Python 4칸 들여쓰기를 사용한다. 모듈·함수·변수·JSO
 
 ### 작업·보고·Git
 
-시작 전 이 문서, 현재 구현, 브랜치·미커밋 변경, CI·의존성을 확인한다. 완료된 것·없는 것·현재 PHASE·작업 번호·변경 파일·검증 방법과 한국어 이슈명을 먼저 보고한다. 이슈 생성 → 최신 develop에서 작업 순번을 넣은 브랜치 생성 → 구현·검증 → 커밋·푸시 → PR → CI 확인 후 develop 병합 순서로 진행한다. 완료 시 작업 순번·실제 이슈·브랜치·PR, 변경 목적·검증·남은 작업을 보고한다.
+시작 전 이 문서, 현재 구현, 브랜치·미커밋 변경, CI·의존성을 확인한다. 완료된 것·없는 것·현재 PHASE·작업 번호·변경 파일·검증 방법과 한국어 이슈명을 먼저 보고한다. 다음 순서로 진행하고 완료 시 실제 이슈·브랜치·PR, 검증·남은 작업을 보고한다.
+
+1. 이슈 생성 후 최신 develop에서 작업 순번을 넣은 브랜치를 만든다.
+2. Codex가 `docs/designs/feat번호-기능명.md`에 범위·설계·테스트와 기능별 커밋 계획을 작성한다.
+3. Claude Code가 해당 설계 MD를 검토하고 직접 수정한다. 검토 이유와 보류 사항을 같은 파일에 기록한다. 코드·다른 문서·Git은 수정하지 않는다.
+4. Codex가 실제 수정본과 diff를 읽고 원본 계약·사용자 범위와 맞는지 확인한 뒤 구현한다. 기능과 해당 테스트를 한 커밋에 담고 독립 기능은 커밋을 나눈다.
+5. PR 전에 로컬 테스트·ruff·mypy 등 해당 검사를 실행한다. 실패하면 수정·재검증하고 통과 전에는 PR을 만들지 않는다. 필요한 검사를 실행할 수 없으면 사유를 보고한다.
+6. 검증 완료 후 커밋을 푸시하고 지정 양식으로 develop 대상 PR을 생성한다. CI 실패 시 수정 커밋과 재검증으로 처리한다.
+
+Claude Code는 검토 대상 MD의 Read·Edit만 사용하도록 제한하고 UTF-8로 내용을 전달한다. 실제 파일 수정 여부를 확인하며 응답만 받고 검토 완료로 표시하지 않는다.
 
 커밋은 `타입(영역): 한국어 요약`(50자 이내·끝 마침표 없음) 형식이다. 타입은 feat·fix·refactor·style·docs·test·chore·data를 사용하고 한 커밋에는 관련된 한 작업만 담는다. 실제 Issue는 #번호로 연결하고 상태는 To Do → Doing → Review → Done으로 관리한다.
 
-PR은 develop을 대상으로 생성하고 제목·본문에 한국어 작업명과 실제 이슈를 연결한다. 본문은 사용자 지정 양식([PR 템플릿](../.github/pull_request_template.md))을 따르며 실행한 검사만 체크한다. 사람의 코드 이해 여부를 대신 체크하지 않는다. CI 통과와 실제 저장소 병합 조건을 확인한 뒤 Squash로 develop에 통합하고 이슈 상태를 확인한다. 승인 규칙이 있으면 우회하지 않는다. PDF의 24시간 리뷰 응답은 참고 제안이며 main 반영·소스 브랜치 삭제는 별도 요청 시 진행한다.
+PR은 develop을 대상으로 생성하고 제목·본문에 한국어 작업명과 실제 이슈를 연결한다. 본문은 사용자 지정 양식([PR 템플릿](../.github/pull_request_template.md))을 따르며 실행한 검사만 체크한다. 사람의 코드 이해 여부를 대신 체크하지 않는다. 병합 요청이 있는 경우에만 CI 통과와 실제 저장소 병합 조건을 확인한 뒤 Squash로 통합하고 이슈 상태를 확인한다. 승인 규칙은 우회하지 않는다. PDF의 24시간 리뷰 응답은 참고 제안이며 main 반영·소스 브랜치 삭제는 별도 요청 시 진행한다.
 
 ### 기능별 검증
 
@@ -357,7 +366,7 @@ README에는 서비스 소개·팀(시고르자브종)·역할, 환경·설치·
 
 ## 12. 참고 자료
 
-개발 실행 절차는 최신 사용자 결정을 따른다. 이슈·브랜치 생성 후 Codex가 `docs/designs/`에 기능별 커밋 계획을 담은 설계 MD를 쓰고 Claude Code가 해당 MD만 검토·직접 수정한다. Codex는 수정본을 확인해 구현·기능별 커밋한다. PR 전에 테스트를 실행하고 실패를 수정·재검증하며, 실제 검증이 불가능하면 원인을 보고하고 다음 큐를 중단한다. 로컬에 DB가 없을 때는 PR 전 브랜치 CI 임시 DB로 검증할 수 있지만 mock·skip으로 실제 검증을 대신하지 않는다. PR은 지정 양식으로 develop에 보내고 별도 요청 없이 병합하지 않는다. 공통 협업 절차의 상세 문구는 PR #9 병합 후 충돌 없이 동기화한다.
+개발 실행 절차는 10절을 따른다. 실제 개발 DB 연동을 지연하는 경우에는 3절의 선행 작업·큐 전체 중단 조건을 적용한다. CI 임시 DB의 통과를 실제 개발 DB 연결 완료로 간주하지 않는다.
 
 기존 BE 문서와 사용자 결정을 통합했다. 사용자 제공 `12_개발규칙_Git코드컨벤션_SpotON.pdf`(v1.1, 2026-11-06, 5쪽)는 누락 규칙 보완에만 사용했다. 저장소 구조·브랜치·리뷰 방식은 PDF 제안보다 최신 사용자 결정을 우선한다.
 
