@@ -6,6 +6,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from etl.address.building_key import parse_jibun_address
+from etl.address.floor_unit import LocationLevel, parse_floor_unit, reconcile_floor_units
 from etl.localdata.constants import SEOUL_AUTHORITY_CODES, Source
 from etl.localdata.dto import LocalDataRow
 from etl.localdata.normalize import (
@@ -27,6 +28,8 @@ class StoreRecord:
     address_road: str | None
     address_jibun: str | None
     building_key: str | None
+    floor_unit: str | None
+    location_level: str
     open_date: date | None
     close_date: date | None
     status: str
@@ -131,6 +134,10 @@ def transform_rows(
             row.jibun_address,
             authority_code=row.authority_code,
         )
+        floor_unit_result = reconcile_floor_units(
+            parse_floor_unit(row.road_address),
+            parse_floor_unit(row.jibun_address),
+        )
         quality_flags = combine_flags(dates.flags, status.flags, area_flags)
         flag_counts.update(quality_flags)
         if coord.flag is not None:
@@ -142,6 +149,20 @@ def transform_rows(
             flag_counts[f"building_key_{building_key_result.failure.value}"] += 1
         else:
             flag_counts["building_key_ok"] += 1
+        if floor_unit_result.value is None:
+            assert floor_unit_result.failure is not None
+            flag_counts[f"floor_unit_{floor_unit_result.failure.value}"] += 1
+            floor_unit = None
+            location_level = LocationLevel.UNVERIFIED.value
+        elif building_key_result.lot is None:
+            flag_counts["floor_unit_ok"] += 1
+            flag_counts["location_level_unverified_no_building_key"] += 1
+            floor_unit = floor_unit_result.value.value
+            location_level = LocationLevel.UNVERIFIED.value
+        else:
+            flag_counts["floor_unit_ok"] += 1
+            floor_unit = floor_unit_result.value.value
+            location_level = floor_unit_result.value.location_level.value
         records.append(
             StoreRecord(
                 source=source.value,
@@ -153,6 +174,8 @@ def transform_rows(
                 building_key=(
                     building_key_result.lot.key if building_key_result.lot is not None else None
                 ),
+                floor_unit=floor_unit,
+                location_level=location_level,
                 open_date=dates.open_date,
                 close_date=dates.close_date,
                 status=status.value,

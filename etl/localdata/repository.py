@@ -16,6 +16,8 @@ UPDATE_COLUMNS = (
     "address_road",
     "address_jibun",
     "building_key",
+    "floor_unit",
+    "location_level",
     "open_date",
     "close_date",
     "status",

@@ -34,6 +34,8 @@ def record(building_key: str | None) -> StoreRecord:
         address_road="서울특별시 마포구 양화로 1",
         address_jibun="서울특별시 마포구 서교동 123",
         building_key=building_key,
+        floor_unit=None,
+        location_level="unverified",
         open_date=date(2020, 1, 1),
         close_date=None,
         status="open",
