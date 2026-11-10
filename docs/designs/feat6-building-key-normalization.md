@@ -55,6 +55,7 @@ class BuildingLot:
     @property
     def key(self) -> str: ...
 
+
 class BuildingKeyFailure(StrEnum):
     EMPTY = "empty"
     NON_SEOUL = "non_seoul"
@@ -65,6 +66,7 @@ class BuildingKeyFailure(StrEnum):
     LOT_MISSING = "lot_missing"
     AMBIGUOUS = "ambiguous"
     INVALID = "invalid"
+
 
 @dataclass(frozen=True, slots=True)
 class BuildingKeyResult:
@@ -301,3 +303,19 @@ class BuildingKeyResult:
 - R4. 나열 구분자 전역 거절, 부번 없는 지번 뒤 `N호` 거절 등 범위 축소로 실제 원천에서 실패율이 얼마나 될지는 실제 데이터 없이 알 수 없다. 실제 DB 적재 전에 dry-run으로 enum별 비율을 측정하고, 규칙을 완화할지는 별도로 검토한다.
 - R5. NULL 갱신 정책은 BE-09 ETL이 유일한 writer일 때만 유효하다. BE-11 설계 시 `building_key` 소유권을 다시 결정해야 한다.
 - R6. 원천 `address_jibun`이 법정동 기준이라는 전제는 실제 데이터로 검증되지 않았다(R4의 dry-run에서 함께 확인).
+
+## 구현 및 검증 결과
+
+### 구현
+
+- `etl.address.building_key`에 순수 파서와 구조화 입력 생성 함수를 구현했다. 입력 원문·성공 key를 로그나 결과에 포함하지 않는다.
+- `StoreRecord`와 LocalData ETL pipeline에 `building_key`를 연결했다. 실패 행은 적재 대상에서 제외하지 않고 `building_key_<failure>`로 집계하며, 성공은 `building_key_ok`로 집계한다.
+- repository upsert는 새 결과를 `EXCLUDED.building_key` 그대로 반영한다. 따라서 `A→B`, `NULL→A`, `A→NULL` 갱신을 지원하며, `floor_unit`·`location_level`·`deleted_at`은 갱신하지 않는다.
+- 기존 `stores.building_key` nullable 컬럼과 B-tree 인덱스를 그대로 사용해 migration은 추가하지 않았다.
+- CI는 별도 `test_building_key_upsert` 테스트 파일에서 실제 PostGIS assertion 두 개 이상이 skip 없이 실행됐는지 JUnit 결과로 확인한다.
+
+### 검증
+
+- 로컬: building_key 파서 단위 테스트 42개, 파서·pipeline 관련 테스트 46개, 전체 DB 비의존 테스트 208개 통과.
+- 로컬 실제 PostGIS: `TEST_DATABASE_URL`과 `SPOTON_ALLOW_DB_INTEGRATION=1`이 없어 안전 게이트가 의도적으로 차단했다. 실제 DB나 원천 데이터를 생성·변경하지 않았다.
+- 병합 전 게이트: branch 및 PR CI의 폐기형 PostGIS에서 integration 테스트가 skip·error 없이 통과하고, CodeQL까지 성공해야 한다. 실패하면 병합하지 않고 이 작업에서 멈춘다.
