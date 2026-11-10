@@ -31,6 +31,7 @@ def record(
     license_no: str,
     *,
     name: str = "처음 점포",
+    building_key: str | None = "종로구-청운동-1-0",
     batch: str = "00000000-0000-0000-0000-000000000001",
     lat: Decimal | None = Decimal("37.5522680"),
     lng: Decimal | None = Decimal("127.0007880"),
@@ -42,6 +43,7 @@ def record(
         name=name,
         address_road="서울특별시 테스트로 1",
         address_jibun="서울특별시 테스트동 1",
+        building_key=building_key,
         open_date=date(2020, 1, 1),
         close_date=None,
         status="open",
@@ -106,7 +108,7 @@ def test_localdata_upsert_is_idempotent_and_preserves_later_fields(
         ).one()
         assert loaded.name == "갱신 점포"
         assert loaded.batch_id == second.batch_id
-        assert loaded.building_key == "kept"
+        assert loaded.building_key == second.building_key
         assert loaded.floor_unit == "2층"
         assert loaded.deleted_at == deleted_at
         assert loaded.geom is None
