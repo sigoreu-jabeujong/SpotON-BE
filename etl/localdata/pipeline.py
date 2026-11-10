@@ -5,6 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
+from etl.address.building_key import parse_jibun_address
 from etl.localdata.constants import SEOUL_AUTHORITY_CODES, Source
 from etl.localdata.dto import LocalDataRow
 from etl.localdata.normalize import (
@@ -25,6 +26,7 @@ class StoreRecord:
     name: str | None
     address_road: str | None
     address_jibun: str | None
+    building_key: str | None
     open_date: date | None
     close_date: date | None
     status: str
@@ -125,12 +127,21 @@ def transform_rows(
         category = normalize_category(source, row.business_type_name)
         area, area_flags = normalize_area(row)
         coord = coordinate_normalizer.normalize(row.raw_x, row.raw_y)
+        building_key_result = parse_jibun_address(
+            row.jibun_address,
+            authority_code=row.authority_code,
+        )
         quality_flags = combine_flags(dates.flags, status.flags, area_flags)
         flag_counts.update(quality_flags)
         if coord.flag is not None:
             flag_counts[coord.flag] += 1
         if category.review:
             flag_counts["category_review"] += 1
+        if building_key_result.lot is None:
+            assert building_key_result.failure is not None
+            flag_counts[f"building_key_{building_key_result.failure.value}"] += 1
+        else:
+            flag_counts["building_key_ok"] += 1
         records.append(
             StoreRecord(
                 source=source.value,
@@ -139,6 +150,9 @@ def transform_rows(
                 name=row.business_name,
                 address_road=row.road_address,
                 address_jibun=row.jibun_address,
+                building_key=(
+                    building_key_result.lot.key if building_key_result.lot is not None else None
+                ),
                 open_date=dates.open_date,
                 close_date=dates.close_date,
                 status=status.value,
