@@ -231,4 +231,30 @@
 
 ## 7. 구현·검증 결과
 
-구현 전.
+### 7.1 구현 커밋
+
+| 커밋 | 내용 |
+|---|---|
+| `62527b3` | Codex 설계와 Claude Code의 MD 직접 검토·수정 기록 |
+| `9902bed` | Store 모델·metadata 등록·공통 스키마 명세·단위 검사 |
+| `604931f` | `0002` migration·offline 검사·실제 PostGIS 통합 검사 |
+| `ee5b8ec` | 기존 BE-06 PostGIS 검사를 `0001` revision 범위로 고정 |
+
+### 7.2 로컬 검증
+
+- `ruff check .`: 통과
+- `ruff format --check .`: 52 files 통과
+- `mypy app migrations`: 24 source files 통과
+- `pytest`: 141 passed, 4 integration deselected, 1 Starlette/httpx 전환 안내 warning
+- 실제 PostgreSQL/PostGIS 통합 4건은 로컬 DB가 없어 로컬 결과에 포함하지 않고 CI에서 검증했다.
+
+### 7.3 PR 전 실제 PostGIS CI
+
+- 최초 실행 [42790364268](https://github.com/sigoreu-jabeujong/SpotON-BE/actions/runs/42790364268): 신규 stores 통합 검사 2건은 통과했으나, 기존 BE-06 검사 2건이 `head` revision을 `0001`로 고정해 가정하여 실패했다. 모델·migration 실패가 아니라 새 `0002` 추가로 드러난 기존 테스트의 revision 범위 오류였다.
+- 수정: BE-06의 확장 설치·권한·세션 검사는 책임 범위인 `0001`을 명시하고, stores 전체 `head=0002` 검사는 신규 파일에서 담당하도록 분리했다.
+- 재실행 [42790551291](https://github.com/sigoreu-jabeujong/SpotON-BE/actions/runs/42790551291):
+  - `lint-and-test`: 141 passed, 4 integration deselected, success
+  - `postgis-integration`: 4 passed, no skips, success
+  - stores 실제 검증: schema·identity·geometry typmod·GIST/btree 인덱스·UNIQUE/CHECK/NOT NULL·원본/NULL/이상 날짜 보존·POINT 축·downgrade/re-upgrade
+
+실제 개발 DB에는 연결하거나 migration하지 않았다. API 응답·FE·ETL·원천 데이터도 변경하지 않았다. GitHub Actions의 Node.js 20 강제 전환 안내와 Ubuntu runner 전환 안내는 검사 실패가 아니며 이번 코드 범위 밖이다.
