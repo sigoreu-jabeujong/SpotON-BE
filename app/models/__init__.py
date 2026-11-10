@@ -1,1 +1,5 @@
-"""데이터 모델 구현 예정(BE-07)."""
+"""Spot:ON 데이터 모델."""
+
+from app.models.store import Store
+
+__all__ = ["Store"]

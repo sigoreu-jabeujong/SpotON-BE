@@ -32,7 +32,7 @@ def test_real_postgis_migration_and_session_lifecycle(
         assert not connection.scalar(
             text("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname='postgis')")
         )
-    migrate(database, "head")
+    migrate(database, "0001")
     with database.engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0001"
         assert int(str(connection.scalar(text("SELECT postgis_lib_version()"))).split(".")[0]) >= 3
@@ -65,7 +65,7 @@ def test_real_postgis_migration_and_session_lifecycle(
         assert connection.scalar(
             text("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname='postgis')")
         )
-    migrate(database, "head")
+    migrate(database, "0001")
     with database.engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0001"
 
@@ -92,7 +92,7 @@ def test_postgis_installation_requires_privilege(temporary_database: TemporaryDa
         config = Config(str(ROOT / "alembic.ini"))
         with pytest.raises(CommandError, match="42501") as caught, restricted.begin() as connection:
             config.attributes["connection"] = connection
-            command.upgrade(config, "head")
+            command.upgrade(config, "0001")
         assert "ci_role_only" not in str(caught.value)
         with database.engine.connect() as connection:
             assert connection.scalar(text("SELECT to_regclass('alembic_version')")) is None
@@ -100,7 +100,7 @@ def test_postgis_installation_requires_privilege(temporary_database: TemporaryDa
             connection.execute(text("CREATE EXTENSION postgis"))
         with restricted.begin() as connection:
             config.attributes["connection"] = connection
-            command.upgrade(config, "head")
+            command.upgrade(config, "0001")
         with database.engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0001"
     finally:
