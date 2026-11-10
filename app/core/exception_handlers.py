@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 async def handle_app_error(_request: Request, exc: Exception) -> Response:
     assert isinstance(exc, AppError)
-    return error_response(exc.code)
+    return error_response(exc.code, headers=exc.headers)
 
 
 async def handle_validation_error(_request: Request, _exc: Exception) -> Response:
