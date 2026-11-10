@@ -56,6 +56,18 @@ AI 해석 프롬프트는 `app/ai/prompts/risk_interpret/`의 `system.md`(시스
 
 상세 내용은 [작업 27 설계서](docs/designs/feat27-prompt-version.md)에서 확인합니다.
 
+### AI 결과 검증
+
+`app/ai/verifier.py`의 `verify_output()`은 LLM 응답이 JSON 객체인지 확인한 뒤 다음을 검사합니다. 결과에는 실패 종류만 담고 응답 원문은 담지 않습니다.
+
+- 입력 집계(값·문자열·키)에 없는 숫자. 쉼표·`%`·소수 반올림은 허용하고 정수 반올림과 비율↔백분율 환산은 허용하지 않습니다.
+- 금지 표현(성공률·성공 확률, 추천/비추천, 위험점수·위험등급, LQ, 단정적 예측). 서울시 `창업위험도` 안내 이름은 허용합니다.
+- pending·no_data 지표에 값을 붙인 경우, 입력에 없는 출처(지표 객체의 `id`·`value`·`status`, `source`/`sources` 관례를 따른 응답에 적용)
+- 전화번호·이메일·도로명/지번 번호·층호·좌표·building_key 패턴과 식별정보 키
+- 분량 상한(기본 2000자)과 같은 문장 반복
+
+`app/ai/verified.py`의 `generate_verified()`는 검증에 실패하면 같은 요청으로 1회 다시 생성하고, 또 실패하면 `AiVerifyFailedError`(→ `AI_VERIFY_FAILED` 503)를 냅니다. 공급자 오류 `LlmError`는 그대로 전달되어 `AI_UNAVAILABLE`과 섞이지 않습니다. 응답 스키마는 아직 확정되지 않아 호출자가 Pydantic 모델을 넘기는 구조만 있습니다. 상세 내용은 [작업 29 설계서](docs/designs/feat29-ai-verifier.md)에서 확인합니다.
+
 ## 공통 오류 응답
 
 요청 검증 실패는 422, 없는 경로는 404, 허용되지 않은 메서드는 405 상태를 유지하면서 공통 외피로 반환합니다. 404/405에는 새 코드를 추가하지 않고 기존 `INVALID_PARAM`을 사용합니다. 주소 조회 실패용 `ADDRESS_NOT_FOUND`와는 구분합니다. 405의 `Allow` 및 HTTP 예외의 인증·재시도 프로토콜 헤더는 유지하고 임의 디버그 헤더는 제거합니다.
@@ -81,7 +93,7 @@ uv run --locked --extra dev mypy app etl migrations
 uv run --locked --extra dev pytest
 ```
 
-테스트는 DB·외부 API 없이 health, 공통 응답·오류·OpenAPI·CORS·정보 비노출·환경 설정, DB 설정·세션 제어와 인허가 수집·정제, LLM client의 재시도·한도·응답 분류·비노출과 프롬프트 지문·조립을 검증합니다. 실제 SQL·공간 함수·권한·stores upsert는 아래 PostGIS 통합 job에서 수행합니다. 작업별 설계·Claude 검토·검증 결과는 `docs/designs/`에 기록합니다.
+테스트는 DB·외부 API 없이 health, 공통 응답·오류·OpenAPI·CORS·정보 비노출·환경 설정, DB 설정·세션 제어와 인허가 수집·정제, LLM client의 재시도·한도·응답 분류·비노출, 프롬프트 지문·조립과 AI 결과 검증·재생성을 검증합니다. 실제 SQL·공간 함수·권한·stores upsert는 아래 PostGIS 통합 job에서 수행합니다. 작업별 설계·Claude 검토·검증 결과는 `docs/designs/`에 기록합니다.
 
 ## 지방행정 인허가 ETL
 
