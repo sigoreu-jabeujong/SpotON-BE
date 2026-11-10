@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     database_connect_timeout: int = Field(default=5, ge=1, le=60)
     data_go_kr_service_key: SecretStr | None = None
     kakao_rest_api_key: SecretStr | None = None
+    kakao_request_timeout: float = Field(default=5, ge=1, le=10)
     juso_search_key: SecretStr | None = None
     juso_coord_key: SecretStr | None = None
     llm_provider: str = "google"

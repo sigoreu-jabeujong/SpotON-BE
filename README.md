@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 FastAPI·health API·공통 응답·오류 처리, PostgreSQL/PostGIS 기반, stores 모델과 지방행정 인허가 데이터 수집·정제·멱등 upsert 모듈을 제공합니다. 실제 개발 DB 연결과 원천 전체 적재·분석 API는 후속 작업입니다.
+현재는 FastAPI·health API·공통 응답·오류 처리, PostgreSQL/PostGIS 기반, stores 모델과 지방행정 인허가 데이터 수집·정제·멱등 upsert, 카카오 로컬 API 기반 서울 주소 지오코딩을 제공합니다. 실제 개발 DB 연결과 원천 전체 적재·분석 API는 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -27,6 +27,12 @@ uv run --locked --extra dev uvicorn app.main:app --reload --no-access-log
 ```
 
 health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태를 보장하지 않습니다. FE의 기본 서버 주소는 `http://localhost:8000`이고 `/api`는 클라이언트가 붙입니다. `Content-Type: application/json` 요청의 CORS preflight도 허용된 origin에 한해 처리합니다.
+
+## 서울 주소 지오코딩
+
+`GET /api/geocode?query={주소}&category={cafe|restaurant}`는 카카오 로컬 API에서 검증한 서울 주소 후보를 반환합니다. 결과는 도로명·지번 주소, WGS84 좌표, `building_key`, 입력에서 명시적으로 읽은 `floor_unit`을 포함합니다. 복수 후보는 최대 5개를 `candidates`에 반환하며, 서울 외는 `OUT_OF_SEOUL`, 검색 실패는 `ADDRESS_NOT_FOUND`로 응답합니다.
+
+실행에는 서버 전용 `KAKAO_REST_API_KEY`가 필요합니다. 키·주소·좌표는 로그에 남기지 않으며, 응답은 `Cache-Control: no-store`로 전송합니다. 키 없이 실행하면 이 경로는 `UPSTREAM_ERROR`를 반환합니다.
 
 ## 공통 오류 응답
 

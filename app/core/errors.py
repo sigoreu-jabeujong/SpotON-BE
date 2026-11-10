@@ -21,10 +21,11 @@ ERROR_SPECS: Mapping[ErrorCode, tuple[int, str]] = MappingProxyType(
 
 
 class AppError(Exception):
-    def __init__(self, code: ErrorCode) -> None:
+    def __init__(self, code: ErrorCode, *, headers: Mapping[str, str] | None = None) -> None:
         if not isinstance(code, ErrorCode):
             raise TypeError("AppError에는 ErrorCode를 지정해야 합니다")
         self.code = code
+        self.headers = headers
         super().__init__(code.value)
 
 
