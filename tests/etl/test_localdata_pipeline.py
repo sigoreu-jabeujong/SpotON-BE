@@ -11,9 +11,10 @@ BATCH_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 def raw(number: str | None, **values: object) -> LocalDataRow:
     payload: dict[str, object] = {
-        "OPN_ATMY_GRP_CD": "3000000",
+        "OPN_ATMY_GRP_CD": "3130000",
         "MNG_NO": number,
         "BPLC_NM": "테스트 점포",
+        "LOTNO_ADDR": "마포구 서교동 123-4",
         "SALS_STTS_CD": "01",
         "SALS_STTS_NM": "영업/정상",
         "SNTTN_BZSTAT_NM": "한식",
@@ -43,6 +44,7 @@ def test_filters_deduplicates_and_reports_without_personal_data() -> None:
     assert len(result.records) == 1
     assert result.records[0].name == "new"
     assert result.records[0].raw_crs == "EPSG:5174"
+    assert result.records[0].building_key == "마포구-서교동-123-4"
     assert result.report.fetched == 4
     assert result.report.accepted == 2
     assert result.report.duplicates == 1
@@ -51,6 +53,7 @@ def test_filters_deduplicates_and_reports_without_personal_data() -> None:
     assert result.report.rejected_non_seoul == 1
     assert "new" not in repr(result.report)
     assert "M-1" not in repr(result.report)
+    assert result.report.flags["building_key_ok"] == result.report.transformed
 
 
 def test_duplicate_tie_breaker_is_order_independent() -> None:
@@ -72,7 +75,7 @@ def test_duplicate_tie_breaker_is_order_independent() -> None:
     assert forward.records[0].name == "B"
 
 
-def test_store_record_keeps_later_task_fields_out() -> None:
+def test_store_record_has_building_key_but_keeps_later_task_fields_out() -> None:
     record = transform_rows(
         Source.REST_CAFE,
         [raw("M-1", SNTTN_BZSTAT_NM="커피숍")],
@@ -81,5 +84,24 @@ def test_store_record_keeps_later_task_fields_out() -> None:
     ).records[0]
     assert record.category == "cafe"
     assert record.sub_category == "cafe"
-    assert not hasattr(record, "building_key")
+    assert record.building_key == "마포구-서교동-123-4"
     assert not hasattr(record, "deleted_at")
+
+
+def test_building_key_failure_is_retained_as_a_report_count_without_rejecting_row() -> None:
+    result = transform_rows(
+        Source.GENERAL_RESTAURANT,
+        [raw("M-1", LOTNO_ADDR="마포구 양화로 123")],
+        batch_id=BATCH_ID,
+        today=date(2026, 11, 10),
+    )
+
+    assert result.report.transformed == 1
+    assert result.records[0].building_key is None
+    building_key_counts = {
+        name: count
+        for name, count in result.report.flags.items()
+        if name.startswith("building_key_")
+    }
+    assert building_key_counts == {"building_key_legal_dong_unsupported": 1}
+    assert result.report.transformed == sum(building_key_counts.values())
