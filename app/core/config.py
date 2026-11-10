@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     app_env: Literal["local", "test", "staging", "production"] = "local"
     cors_origins: str = "http://localhost:5173"
     database_url: SecretStr | None = None
+    database_connect_timeout: int = Field(default=5, ge=1, le=60)
     data_go_kr_service_key: SecretStr | None = None
     kakao_rest_api_key: SecretStr | None = None
     juso_search_key: SecretStr | None = None
