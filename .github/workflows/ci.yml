@@ -91,7 +91,14 @@ jobs:
               or 'test_building_key_upsert' in case.attrib.get('file', '')
           ]
           assert len(building_key) >= 2, 'building_key PostGIS integration tests were not executed'
+          floor_unit = [
+              case for case in cases
+              if 'test_floor_unit_upsert' in case.attrib.get('classname', '')
+              or 'test_floor_unit_upsert' in case.attrib.get('file', '')
+          ]
+          assert len(floor_unit) >= 2, 'floor_unit PostGIS integration tests were not executed'
           print(f'PostGIS integration: {len(cases)} passed, no skips')
           print(f'LocalData upsert integration: {len(localdata)} passed, no skips')
           print(f'building_key upsert integration: {len(building_key)} passed, no skips')
+          print(f'floor_unit upsert integration: {len(floor_unit)} passed, no skips')
           PY

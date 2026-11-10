@@ -32,6 +32,8 @@ def record(
     *,
     name: str = "처음 점포",
     building_key: str | None = "종로구-청운동-1-0",
+    floor_unit: str | None = None,
+    location_level: str = "unverified",
     batch: str = "00000000-0000-0000-0000-000000000001",
     lat: Decimal | None = Decimal("37.5522680"),
     lng: Decimal | None = Decimal("127.0007880"),
@@ -44,6 +46,8 @@ def record(
         address_road="서울특별시 테스트로 1",
         address_jibun="서울특별시 테스트동 1",
         building_key=building_key,
+        floor_unit=floor_unit,
+        location_level=location_level,
         open_date=date(2020, 1, 1),
         close_date=None,
         status="open",
@@ -67,7 +71,7 @@ def record(
     )
 
 
-def test_localdata_upsert_is_idempotent_and_preserves_later_fields(
+def test_localdata_upsert_is_idempotent_and_preserves_non_etl_fields(
     temporary_database: TemporaryDatabase,
 ) -> None:
     migrate(temporary_database)
@@ -102,6 +106,7 @@ def test_localdata_upsert_is_idempotent_and_preserves_later_fields(
                 Store.batch_id,
                 Store.building_key,
                 Store.floor_unit,
+                Store.location_level,
                 Store.deleted_at,
                 Store.geom,
             ).where(Store.source == Source.GENERAL_RESTAURANT.value, Store.license_no == "same")
@@ -109,7 +114,8 @@ def test_localdata_upsert_is_idempotent_and_preserves_later_fields(
         assert loaded.name == "갱신 점포"
         assert loaded.batch_id == second.batch_id
         assert loaded.building_key == second.building_key
-        assert loaded.floor_unit == "2층"
+        assert loaded.floor_unit == second.floor_unit
+        assert loaded.location_level == second.location_level
         assert loaded.deleted_at == deleted_at
         assert loaded.geom is None
         assert connection.scalar(select(func.count()).select_from(Store)) == 1

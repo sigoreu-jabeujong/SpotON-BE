@@ -34,6 +34,8 @@ def record(building_key: str | None) -> StoreRecord:
         address_road="서울특별시 마포구 양화로 1",
         address_jibun="서울특별시 마포구 서교동 123",
         building_key=building_key,
+        floor_unit=None,
+        location_level="unverified",
         open_date=date(2020, 1, 1),
         close_date=None,
         status="open",
@@ -82,7 +84,7 @@ def test_building_key_upsert_updates_and_clears_current_etl_value(
         assert load_key(temporary_database) == expected
 
 
-def test_building_key_upsert_preserves_later_owner_columns(
+def test_building_key_upsert_preserves_non_etl_columns(
     temporary_database: TemporaryDatabase,
 ) -> None:
     migrate(temporary_database)
@@ -111,8 +113,8 @@ def test_building_key_upsert_preserves_later_owner_columns(
             )
         ).one()
         assert loaded.building_key == "마포구-서교동-124-0"
-        assert loaded.floor_unit == "2층"
-        assert loaded.location_level == "same_spot"
+        assert loaded.floor_unit is None
+        assert loaded.location_level == "unverified"
         assert loaded.deleted_at == deleted_at
         index_exists = connection.scalar(
             text("SELECT to_regclass('ix_stores_building_key') IS NOT NULL")
