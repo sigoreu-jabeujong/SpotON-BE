@@ -265,6 +265,24 @@ transformed = floor_unit_ok + Σ floor_unit_<failure>
   - `same_spot`/`same_building`/`unverified` 값 집합이 원본 API 명세 v1.2와 일치하는지는 외부 원본 미보유로 확인하지 못했다(be-work-plan 9절).
   - CI 임시 PostGIS 통과는 실제 개발 DB 연동 완료가 아니다(be-work-plan 3절). 실원천 dry-run 실패율·충돌률 측정은 실제 개발 DB 연동 이후로 남는다.
 
+## 구현 및 검증 결과
+
+### 구현
+
+- `etl.address.floor_unit`에 외부 I/O·로그 없는 층호수 파서와 도로명·지번 reconcile 함수를 구현했다.
+- 명시적 `층`·`F`·`B`·`호` 표기만 canonical 값으로 만들며, 건물번호·지번·단지 동·범위·충돌은 추정하지 않고 failure로 처리한다.
+- LocalData ETL은 `floor_unit_ok` 또는 `floor_unit_<failure>`를 집계한다. building_key가 없으면 층호수 파싱에 성공해도 `location_level=unverified`로 저장한다.
+- `floor_unit`, `location_level`은 BE-10부터 LocalData ETL의 갱신 컬럼이다. `building_key`, `deleted_at`, 브랜드 컬럼은 갱신하지 않는다.
+- 별도 migration은 추가하지 않았다. 기존 nullable `floor_unit`(100자)·`location_level`(32자) 컬럼이 canonical 값과 세 enum을 수용한다.
+- CI JUnit 게이트는 `test_floor_unit_upsert` 실제 PostGIS 통합 테스트 두 개 이상이 skip·failure·error 없이 실행됐는지 확인한다.
+
+### 로컬 검증
+
+- `ruff check .`, `ruff format --check .`, `mypy app migrations`를 통과했다.
+- DB 비의존 전체 pytest는 251개 통과, 실제 DB 통합 테스트 12개는 기본 설정에서 제외됐다.
+- 로컬의 `TEST_DATABASE_URL`과 `SPOTON_ALLOW_DB_INTEGRATION=1`은 설정하지 않았다. 개발 DB·실원천 데이터는 읽거나 변경하지 않았다.
+- 병합 전에는 branch와 PR CI의 폐기형 PostGIS에서 통합 테스트·JUnit 게이트, 그리고 CodeQL이 모두 성공해야 한다. 하나라도 실패하거나 미실행이면 병합하지 않고 이 작업에서 멈춘다.
+
 ### 3차 검토 (2026-11-11, Claude Code)
 
 - 범위: 이 파일만 Read·Edit로 처음부터 끝까지 검토했다. 코드·다른 문서·Git·셸·웹은 사용하지 않았다. 이번 검토 중에도 파일이 외부에서 바뀌어 일부 수정이 실패했고, 최신본을 다시 읽은 뒤 남은 수정만 적용했다. 다른 쪽 변경은 되돌리지 않았다.
