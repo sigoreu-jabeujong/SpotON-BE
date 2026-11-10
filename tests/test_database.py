@@ -5,7 +5,6 @@ from pydantic import SecretStr, ValidationError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings
-from app.db.base import Base
 from app.db.session import (
     DatabaseConfigurationError,
     create_db_engine,
@@ -130,7 +129,6 @@ def test_engine_creation_is_lazy_and_parameters_are_hidden() -> None:
                 assert session.bind is engine
                 assert session.autoflush is False
                 assert session.expire_on_commit is False
-            assert not Base.metadata.tables
         finally:
             engine.dispose()
 

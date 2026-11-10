@@ -6,15 +6,17 @@ from alembic.util import CommandError
 from sqlalchemy import Connection
 from sqlalchemy.exc import SQLAlchemyError
 
+import app.models  # noqa: F401
 from app.db.base import Base
 from app.db.session import DatabaseConfigurationError, create_db_engine
 
 config = context.config
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+target_metadata = Base.metadata
 
 
 def run_with_connection(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=Base.metadata, compare_type=True)
+    context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
     with context.begin_transaction():
         context.run_migrations()
 
@@ -35,7 +37,7 @@ def run_online() -> None:
 def run_migrations() -> None:
     if context.is_offline_mode():
         context.configure(
-            dialect_name="postgresql", target_metadata=Base.metadata, literal_binds=True
+            dialect_name="postgresql", target_metadata=target_metadata, literal_binds=True
         )
         with context.begin_transaction():
             context.run_migrations()
