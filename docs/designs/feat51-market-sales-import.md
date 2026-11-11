@@ -97,3 +97,43 @@
 Claude의 실제 수정 diff 전체를 읽고 기존 BE-17 모델/실행기와 대조했다. 결측3상태·ASCII 정수·BIGINT·재조회 hash·기준 연도/경계 참조 일치·일관된 dry-run snapshot·downgrade lock을 채택한다. market_store_versions에는 실제 code_check_boundary_version_id가 있으므로 두 대조 기준의 경계 UUID 일치를 검사한다. 쓰기 기준 보호는 제안의 테이블 SHARE 대신 **버전/기존 행 FOR SHARE**를 사용한다. 기존 지원 writer는 이미 적재된 버전을 수정하지 않고 같은 버전의 PK/unique/FK가 보호하므로 다른 버전 적재까지 막을 필요가 없다. 수동 DB 변조를 통한 새 행 삽입까지 금지하는 DB 권한 정책은 별도 범위다. 잠금 순서는 경계→점포 통계로 고정한다.
 
 공통화는 BE-17과 이번 매출의 동일한 ZIP/provenance/경계 대조만 대상으로 하며 BE-16 ZIP 구조는 다르므로 변경하지 않는다. BE-17 wrapper/import 경로·상수·hash·오류·lock key·출력은 유지하고 head 갱신만 별도 DB 커밋에서 수행한다. 사전 합성 BE-17 content digest는 `1edd356d6da9572639263e8e058a4c32cb43a6be8a96e09b0db16acd693514bf`, 첫 행 hash는 `f65c6b6d3d4638cec889c2d6548f95c02e9621c534b9d4367817491ea005ec08`로 확보했다. hash 저장 타입은 기존과 같은 VARCHAR(64)+형식 CHECK로 통일한다. est_sales 이름은 기준 문서를 따르되 원천값임을 명시하고 period_status를 미확인으로 고정한다. 추후 의미가 확인돼도 기존 버전을 UPDATE하지 않고 근거·새 규칙의 별도 버전으로 처리한다. 원천 FAQ/금액 단위는 공식 OA-15572 화면에서 확인했으며 집계 기간은 계속 미확인이다.
+
+## 6. 구현·검증 결과 (2026-11-12)
+
+market_sale_versions/market_sales·migration **0007**, `python -m etl.market_sales`를 구현했다. 새 의존성·환경변수·공개 API·FE 변경은 없다. 저장 원천값은 est_sales BIGINT nullable·source_sales_count BIGINT nullable이고, 추가 필드는 코드/명칭과 허용 55필드 원문 hash다. 인구/연령/성별 등 세부값을 별도 보관하거나 환산하지 않는다.
+
+### 공통화와 자동 검사
+
+- ZIP/provenance는 `etl/market_csv.py`, 경계 대조는 `etl/market_csv_repository.py`로 추출했다. BE-17의 기존 wrapper·상수·오류·rule_version·내용 hash/출력·lock key는 유지했다. 추출 전 확보한 합성 hash가 그대로임을 고정 테스트로 확인했다.
+- `ruff check .`, `ruff format --check .` **195 files**, `mypy app etl migrations` **97 files** 통과.
+- 일반 전체 **798 passed**(격리 통합 72 deselected), 격리 PostgreSQL/PostGIS 전체 **72 passed**(일반 798 deselected). 기존 Starlette/httpx 경고 1건, skip·xfail·실패는 없다.
+- 신규 매출 일반 21개: 55개 헤더/특이 표기·순서·인코딩·48개 수치·미사용/미지원 행 오류·ASCII 정수·BIGINT 범위·null/실제0/중복/누락·연도/분기·라벨·hash/한도·경로·안전한 오류를 확인했다. 공유 ZIP의 CRC/링크 등은 BE-17 회귀 검사에서도 실행했다.
+- 신규 격리 통합 10개: schema/제약/모델·FK·max BIGINT·downgrade 보존, 두 writer 단일 버전, manifest/저장 행/두 기준의 훼손 거절, 다른 연도/다른 대조 경계 거절, 조합 차이 집계·없는 행 미생성, 저장 후 digest 실패 전체 rollback, REPEATABLE READ READ ONLY dry-run·재실행 계획·출력 비노출, advisory timeout과 기준 행 SHARE가 BE-17 writer를 보호하는 동작을 검증했다. 기존 인허가·경계·점포 통계·API 회귀도 통과했다.
+- Claude 제안 모든 개별 테스트를 구현했다고 간주하지 않는다. 새 매출 전용 content digest의 독립 고정 벡터는 추가하지 않았으며 순서/규칙 변화·원문 hash·DB 재조회/훼손/실원본을 대조했다. canonical JSON 고정 벡터와 BE-17 원문/전체 hash 고정 검사는 기존/추가 회귀에서 실행했다.
+
+### 실제 개발 DB
+
+spoton_app의 DB identity·superuser/DB 생성/role 생성 권한 false와 기존 점포 689,440건·경계 1,650건·공식 점포 통계 24,810행을 확인하고 **0006→0007**을 적용했다. 먼저 기존 OA-15577 원본을 BE-17 CLI로 replay하여 같은 UUID·loaded_at·content hash·전체 manifest 불변과 inserted=0을 확인했다.
+
+실제 매출 ZIP의 dry-run은 신규 테이블을 0행으로 유지했다. write는 **버전 1개/14,391행**을 저장했고 replay는 같은 UUID·loaded_at·전체 manifest/hash를 유지하며 **inserted=0**이었다. amount_basis=source_reported·currency=KRW·amount_period_status/boundary_compatibility=unverified, 기존 boundary_as_of=null을 확인했다.
+
+| 항목 | 20251 | 20252 | 20253 | 20254 |
+|---|---:|---:|---:|---:|
+| 원본 행 | 21,427 | 21,452 | 21,520 | 21,333 |
+| 지원 적재 행 | 3,617 | 3,596 | 3,597 | 3,581 |
+| 원본 고유 상권 | 1,572 | 1,570 | 1,569 | 1,565 |
+| 경계에만 있는 상권 | 78 | 80 | 81 | 85 |
+| 점포 통계에만 있는 지원 조합 | 2,602 | 2,619 | 2,594 | 2,604 |
+| 매출에만 있는 지원 조합 | 0 | 0 | 0 | 0 |
+
+전체 원본 **85,732행** 검증·지원 **14,391행** 적재·미지원 **71,341행** 제외다. 지원 금액의 음수/실제0/null은 각 0건, 32bit 초과 금액은 **2,133행**이다. null/0/누락 행은 합성 및 격리 실제 DB에서 별도 확인했다. 경계와 코드/유형 차이는 0개·이름 차이는 분기별 1개이며 점포 통계와 겹치는 지원 조합의 유형/이름/업종 라벨 차이는 0개다. 이 결과는 시간적 경계·모집단 동일성 확정이 아니다.
+
+원자료 **20행**(각 분기 고액 5행)의 명칭·유형·업종·원천 금액/건수와 55필드 원문 hash를 독립 CSV 읽기와 대조했다. DB 재조회 content digest 일치·앱 관리 모델 차이 0건·기존 health/history/nearby/data-range/snapshot API 모두 **200**이다. 개발 DB에는 파괴적 suite·downgrade를 실행하지 않았다.
+
+최종 적재 전후 stores **689,440건의 전체 행/geometry**, store_import_batches, market_area_versions/market_areas **1,650건**, market_store_versions/market_stores **24,810행**의 전체 hash와 건수가 동일했다. 기존 점포 통계와 새 매출 원본 ZIP의 SHA256도 유지됐다. 신규 자료의 저장 외에 기존 데이터/geometry/출처 버전을 수정하지 않았다.
+
+### 남은 의미 확인과 범위
+
+금액 단위 원·원천 필드/기준 분기·라이선스는 공식 OA-15572 페이지에서 확인했다. 다만 `당월_매출_금액`의 분기 합계/월평균 해석은 미확인으로 남기고 환산·반경 합산·점포당 계산·API/FE 활성화를 하지 않았다. 2025년 공개 연간 원천을 확보한 것이며 현재 최신 분기를 보장하지 않는다. 경계 적용일과 모집단도 추가 검증 대상이다. 추후 의미가 확인되면 별도 설계/규칙/버전으로 처리한다.
+
+BE README·CLAUDE.md·작업계획을 갱신하고 지정 PR·CI 후 develop에 일반 Squash 병합한다. 실제 상태는 #51 연결 기록을 따른다. 다음은 BE-19 생활인구 250m 격자·시간별 원천의 제공 범위·권한·용량/기간·좌표계 확인이다. 필요한 자료/키가 없으면 사용자에게 요청하고 후속 큐를 우회하지 않는다.

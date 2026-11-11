@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해 API와 인허가 ETL, 상권 경계·공식 점포 통계 버전 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 인허가 점포 689,440건·상권 경계 1,650건·2025년 4개 분기의 공식 지원 업종 통계 24,810행을 적재했습니다. migration `0006`이 현재 head입니다. 경계의 실제 적용 시점/통계 분기 호환은 미확인이며 분석 API와 FE 반영은 후속 작업입니다.
+현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해 API와 인허가 ETL, 상권 경계·공식 점포 통계·추정매출 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 인허가 점포 689,440건·경계 1,650건·2025년 4개 분기의 지원 업종 점포 통계 24,810행·추정매출 원천 14,391행을 적재했습니다. migration `0007`이 현재 head입니다. 매출 집계 기간·경계 적용 시점/통계 분기 호환은 미확인이며 분석/매출 API와 FE 반영은 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -179,7 +179,7 @@ uv run --locked --extra dev --no-editable python -m etl.localdata --source gener
 - `--from-csv --write`는 허용하지 않습니다. CSV dry-run으로 만든 snapshot을 확인한 뒤
   같은 파일을 `--from-snapshot --write`로 적재합니다. 원본 CSV·보고서는 수정하지 않습니다.
 - `--write`는 localhost의 `spoton_dev`·`spoton_app`만 허용합니다. 연결 후 계정·권한·revision
-  `0006`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
+  `0007`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
 - 같은 snapshot으로 다시 실행하면 기존 `(source, license_no)`를 갱신합니다. `affected`는
   성공적으로 처리한 입력 수이고, 값이 실제로 변경된 행 수를 뜻하지 않습니다.
 - 실제 원천은 성공 코드 `0`, 날짜 `YYYY-MM-DD`, 갱신시각 `YYYY-MM-DD hh:mm:ss`를 사용합니다.
@@ -247,6 +247,29 @@ uv run --locked --extra dev python -m etl.market_stores `
 - 공식 통계와 인허가 점포의 모집단 동일성·분기별 유효 경계는 미확인입니다. 공식 비율을 반경 지표로 합산/평균하거나 참고 폐업률로 바꾸지 않습니다. 공개 API·FE 변경은 없습니다. 적재된 공식 통계가 있으면 migration downgrade는 실패하며 기존 버전 수정·삭제나 최신 자동 선택을 하지 않습니다.
 
 설계·Claude 검토·실제 검증은 [이슈 49 기록](docs/designs/feat49-market-stores-import.md)을 확인합니다.
+
+## 상권별 추정매출 원천 적재 (BE-18)
+
+출처는 서울특별시·서울신용보증재단 [상권분석서비스(추정매출-상권), OA-15572](https://data.seoul.go.kr/dataList/OA-15572/S/1/datasetView.do), 공공누리 1유형 출처표시입니다. 금액 단위는 원입니다. 원천 `당월_매출_금액`을 분기 합계나 월평균으로 확정하지 않고 그대로 저장합니다. 월·분기 환산, 반경 매출·점포당 매출 계산과 공개 매출 API 활성화는 하지 않습니다.
+
+```powershell
+uv run --locked --extra dev python -m etl.market_sales `
+  --zip "<저장소 밖 공식 연간 ZIP 경로>" `
+  --expected-sha256 "<ZIP SHA256>" `
+  --source-year 2025 --source-file-date 2026-05-18 `
+  --code-check-boundary-version "<대조 경계 버전 UUID>" `
+  --code-check-store-version "<대조 점포 통계 버전 UUID>"
+# 기본 REPEATABLE READ READ ONLY dry-run. 확인 후 같은 명령에 --write 추가.
+```
+
+- 검증한 2025년 ZIP은 14,035,292 bytes, SHA256 `c907f3d386d62b89f45781e6e6172328ee91b1b8dd2c621e4171e437bee1c6b2`, CP949 CSV 39,698,674 bytes입니다. 첨부 수정일은 2026-05-18이며 통계 분기·포털 갱신일·loaded_at과 구분합니다. 현재 최신 API 분기를 보장하지 않습니다.
+- 55개 원천 헤더와 전체 85,732행의 48개 수치 필드를 검증하고 지원 5종 **14,391행**(분기별 3,617/3,596/3,597/3,581)을 적재 대상으로 선택합니다. 미지원 71,341행은 제외합니다. 원천 시간대 건수 헤더의 특이 표기도 허용 목록 그대로 검사합니다.
+- `est_sales`는 원천 금액, `source_sales_count`는 원천 건수이며 BIGINT nullable입니다. 32bit 초과·최대 BIGINT를 float 변환 없이 다룹니다. 빈 셀은 null, 실제 0은 0, 없는 조합은 행 없음으로 보존합니다. 55개 허용 필드의 원문 hash를 남기되 나머지 세부 수치를 재합산하지 않습니다.
+- 두 대조 버전을 명시하며 점포 통계와 같은 연도·같은 대조 경계인지 검사합니다. 두 기준의 실제 DB hash·행 수를 확인하고 코드/유형/명칭 및 지원 조합 차이를 기록합니다. 차이는 건수로 보고하고 없는 매출 행을 0으로 생성하지 않습니다.
+- `market_sale_versions`·`market_sales`는 원본/규칙/두 기준 버전별 불변 버전입니다. dry-run은 같은 키의 기존 버전 재사용 여부도 검사하며, --write는 한 연도의 버전·행을 한 트랜잭션으로 저장합니다. advisory lock·저장 내용 재조회 hash 검사·실패 전체 rollback을 적용하고 replay는 UUID/loaded_at/hash를 유지합니다. 적재된 매출이 있으면 downgrade는 실패합니다.
+- `currency=KRW`, `amount_basis=source_reported`, **`amount_period_status=unverified`**, **`boundary_compatibility=unverified`**를 유지합니다. 집계 기간·경계 적용일·통계/인허가 모집단 동일성은 추가 확인 대상입니다. BE-17 공통화 전후 hash·실행 결과 회귀와 실제 원본 replay를 검증하며 FE·API·Docker·환경설정은 변경하지 않습니다.
+
+상세 설계·검증·미확인 사항은 [이슈 51 기록](docs/designs/feat51-market-sales-import.md)을 확인합니다.
 
 ## PostgreSQL·PostGIS 설정과 마이그레이션
 
