@@ -11,12 +11,12 @@
 - 이슈 제목은 어떤 기능인지 알 수 있는 한국어로 짓고, 브랜치는 `feat#{작업 순번}-{영문-kebab-case}` 형식을 사용한다. 첫 작업은 `feat#1-initialize-fastapi`다. GitHub 실제 이슈 번호는 PR과 번호를 공유하므로 작업 순번과 다를 수 있으며 PR에서 실제 이슈를 연결한다. 셸에서는 `#`가 포함된 브랜치명을 따옴표로 감싼다.
 - 기본 절차는 이슈 → 작업 브랜치 → Codex 설계 MD → Claude Code 검토·MD 직접 수정 → Codex 구현·기능별 커밋 → 로컬 테스트·실패 수정·재검증 → 푸시·develop 대상 PR → CI 확인 → Squash 병합이다. 2026-11-12 사용자가 이후 BE PR의 자동 승인·머지를 요청했다. CI·저장소 조건을 만족하면 develop에 자동 병합하며, 본인 승인 제한·보호 규칙을 우회하지 않는다. main 반영·수동 브랜치 삭제·강제 푸시는 별도 요청 없이 하지 않는다.
 - API 명세서 v1.2가 FE↔BE 계약이다. 원본은 저장소에 커밋하지 않는다. 이슈 #36에서 로컬의 API·데이터 활용 v1.2 및 분석 정의 원본을 확보·대조했다. 현행 사용자 결정과 다른 부분은 별도 기록하며 보완안을 외부 문서 수정 완료로 간주하지 않는다. 확인 대기는 9절에서 관리한다.
-- BE-00~16 기반·조회·경계가 develop에 반영됐고 BE-17 공식 점포 통계는 #49에서 구현했다. 전체 API 공통 meta·DataVersion 정리와 BE-18 이후 조건부 데이터·분석 API는 미완료다. 실제 적재와 최신 전체 관측/경계 적용 분기 확인은 구분한다. 필요한 자료가 없거나 실제 원천 수집이 실패하면 그 지점에서 중단하고 사용자에게 요청한다.
+- BE-00~17 기반·조회·경계·공식 점포 통계가 develop에 반영됐고 BE-18 추정매출 원천 적재는 #51에서 구현했다. 전체 API 공통 meta·DataVersion 정리와 BE-19 이후 조건부 데이터·분석 API는 미완료다. 매출 집계 기간·최신 전체 관측/경계 적용 분기는 실제 원천 적재와 구분한다. 필요한 자료가 없거나 실제 원천 수집이 실패하면 그 지점에서 중단하고 사용자에게 요청한다.
 - 이슈 #34 작업 브랜치에서는 실제 응답 코드·ISO 날짜/시각과 적재 실행기를 보완했다. 사용자 제공 검증 CSV(2026-11-09 검증, 원천 기준일 미확인)로 개발 DB에 일반음식점 541,169건·휴게음식점 148,271건, 합계 689,440건을 적재하고 재적재·20건 원자료 자동 대조를 통과했다. 현재 API의 최신 전체 수집 완료나 BE-12 구현 완료를 뜻하지 않는다. develop 반영은 이슈 #34의 PR 상태를 따른다.
 
 핵심 흐름은 `공공데이터 → ETL → DB → BE 계산 → API → FE 표시 → AI 해석`이다. 주소 검색만 명세에 따라 실시간 외부 호출을 허용한다. 앞 단계를 임시 수치로 우회하지 않는다.
 
-이슈 #34/PR #35 적재, #36/PR #37 이력, #38/PR #39·#40 설계, #41/PR #42 주변, #43/PR #44 월 범위, #45/PR #46 snapshot, #47/PR #48 경계는 develop에 병합됐다. 현재 [#49 BE-17 공식 점포 통계](designs/feat49-market-stores-import.md)는 `feat#49-market-stores-import`에서 구현·검증 후 PR·CI와 자동 Squash 병합을 진행한다. FE 저장소는 수정하지 않으며 기존 네 조회 기능은 FE 담당자 반영 대기다. 이번 통계 적재는 API/FE 변경이 없다.
+이슈 #34/PR #35 적재, #36/PR #37 이력, #38/PR #39·#40 설계, #41/PR #42 주변, #43/PR #44 월 범위, #45/PR #46 snapshot, #47/PR #48 경계, #49/PR #50 공식 점포 통계는 develop에 병합됐다. 현재 [#51 BE-18 추정매출 원천](designs/feat51-market-sales-import.md)은 `feat#51-market-sales-import`에서 구현·검증 후 PR·CI와 자동 Squash 병합을 진행한다. FE 저장소는 수정하지 않으며 기존 네 조회 기능은 FE 담당자 반영 대기다. 이번 적재는 API/FE 변경이 없다.
 
 ## 2. 서비스 범위
 
@@ -206,7 +206,7 @@ uv run --locked --extra dev pytest
 |---|---|
 | market_areas | `market_code`, `market_name`, `market_type`, `gu_code`, `area_m2`, `geom`; 좌표계 변환·Polygon 보정·GIST |
 | market_stores | `market_code`, `quarter`, `induty_cd`, `total_stores`, `open_stores`, `closed_stores`, `closure_rate` |
-| market_sales | `market_code`, `quarter`, `category`, `est_sales`; 상권별 반환, 반경 매출 계산·합산 금지 |
+| market_sales | `version_id`, `market_code`, `quarter`, `induty_cd`, `est_sales`, `source_sales_count`; KRW 원천값·집계 기간 미확인, 환산·반경 매출·합산 금지 |
 | living_pop | `grid_id`, `date`, `hour`, `local_pop`, `long_foreign`, `short_foreign`, `geom`; 250m 격자 |
 | 상권변화지표 | 상권코드·분기·서울시 원천 변화 유형 그대로 사용, 임의 점수화 금지 |
 | brands | `brand_id`, `brand_name`, `normalized_name`; 공정위 원천과 점포 상호 정규화 비교 |
@@ -449,3 +449,11 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - 일반 **775개**, 격리 PostGIS **62개**, ruff/format·mypy **88 files**를 통과했다. 실제 DB 0006 dry-run→write→replay, 원자료 20행·저장 hash/모델 일치·기존 조회 API200을 검증했다. 기존 점포 689,440건·경계 1,650건·배치/버전의 전체 hash/건수와 원본은 보존됐다.
 - 분기별 코드·유형 차이는 0개, 경계와 명칭 차이는 1개다. 이것을 적용 시점 일치로 간주하지 않으며 boundary_compatibility=unverified·boundary_as_of=null을 유지한다. 원천 폐업률 100 초과 24행도 그대로 보존했다. 공식/참고 비율 계산·지표 API·FE·Docker/환경설정 변경은 없다.
 - 지정 PR·CI 후 develop에 일반 Squash 병합하며 실제 상태는 #49 연결 기록을 따른다. 다음은 **BE-18 상권별 추정매출 적재**로, 원천·사용 조건·기준 분기·업종/경계 호환부터 확인한다. 자료/권한이 없으면 사용자에게 요청하고 후속 큐를 우회하지 않는다.
+
+## 19. BE-18 상권별 추정매출 원천 적재 (#51)
+
+- #49/PR #50 공식 점포 통계는 develop에 병합됐다. [#51 설계·Claude 직접 수정·Codex 최종 검토·검증](designs/feat51-market-sales-import.md)을 거쳐 market_sale_versions/market_sales·migration 0007·원천 적재 CLI를 구현했다. ZIP/provenance/경계 대조 공통화의 BE-17 hash·출력 회귀와 실제 원본 replay를 확인했다.
+- 공식 OA-15572 2025년 ZIP(첨부 수정일 2026-05-18·55개 한글 헤더·CP949)의 **85,732행**을 검증하고 지원 5종 **14,391행**(3,617/3,596/3,597/3,581)을 적재했다. 미지원 **71,341행** 제외다. 금액/건수 BIGINT를 환산하지 않고 null/실제0/누락 행을 구분한다.
+- 일반 **798개**, 격리 PostGIS **72개**, ruff/format·mypy **97 files** 통과. 실제 DB 0007 dry-run→write→replay(동일 UUID/시각/hash·삽입0), 원자료 20행·모델 차이0·기존 API200을 확인했다. 기존 점포 689,440건·경계 1,650건·점포 통계 24,810행 및 전체 배치/버전 hash·원본은 보존됐다.
+- 매출 금액 단위는 원이지만 `당월_매출_금액`의 분기 합계/월평균 의미는 미확인이다. amount_period_status/boundary_compatibility=unverified·boundary_as_of=null을 유지하며 매출 API 활성화·월/분기 환산·반경 합산·점포당 계산은 하지 않았다. 점포 통계에만 있는 지원 조합은 분기별 2,602/2,619/2,594/2,604개이며 0으로 채우지 않았다.
+- 지정 PR·CI 후 develop에 일반 Squash 병합하며 실제 상태는 #51 연결 기록을 따른다. 다음은 **BE-19 생활인구 250m 격자·시간별 적재**로, 공식 제공 범위·권한·용량/기간·좌표계부터 확인한다. 키/자료가 없으면 사용자에게 요청하고 후속 큐를 우회하지 않는다. FE·Docker·환경설정 변경은 없다.
