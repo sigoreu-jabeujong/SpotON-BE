@@ -7,6 +7,7 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.cache import CacheResources
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.session import DatabaseConfigurationError, create_db_engine
@@ -20,6 +21,7 @@ class DatabaseResources:
         self.settings = settings
         self.engine: Engine | None = None
         self.lock = Lock()
+        self.cache = CacheResources(settings)
 
     def get_engine(self) -> Engine:
         with self.lock:
@@ -28,6 +30,7 @@ class DatabaseResources:
             return self.engine
 
     def close(self) -> None:
+        self.cache.close()
         with self.lock:
             if self.engine is not None:
                 self.engine.dispose()

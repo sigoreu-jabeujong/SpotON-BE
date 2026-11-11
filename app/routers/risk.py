@@ -48,4 +48,6 @@ def risk(
     response: Response,
 ) -> ApiResponse[Risk]:
     response.headers.update(NO_STORE)
-    return get_risk(session, query, request.app.state.settings)
+    return get_risk(
+        session, query, request.app.state.settings, cache=request.app.state.database.cache
+    )

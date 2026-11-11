@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.core.cache import CacheResources
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.dependencies import NO_STORE
@@ -31,6 +32,7 @@ from app.schemas.risk import (
 )
 from app.services.market_activity import year_cutoff
 from app.services.market_judgement import judge_market
+from app.services.risk_cache import load_risk, risk_key, save_risk, snapshot_token
 from app.services.spatial_stores import (
     NO_COORD_SCOPE,
     PREFILTER_MARGIN_M,
@@ -195,9 +197,20 @@ def pending_indicator(identifier: IndicatorId, reason: str) -> RiskIndicator:
     )
 
 
-def get_risk(session: Session, query: RiskQuery, settings: Settings) -> ApiResponse[Risk]:
+def get_risk(
+    session: Session, query: RiskQuery, settings: Settings, *, cache: CacheResources | None = None
+) -> ApiResponse[Risk]:
     try:
-        return _get_risk(session, query, settings)
+        key = None
+        if cache is not None and cache.enabled:
+            key = risk_key(cache, snapshot_token(session, cache), query, settings, RULE_VERSION)
+            cached = load_risk(cache, key, query)
+            if cached is not None:
+                return cached
+        result = _get_risk(session, query, settings)
+        if cache is not None:
+            save_risk(cache, key, result)
+        return result
     except (SQLAlchemyError, ValueError, TypeError):
         pass
     raise AppError(ErrorCode.INTERNAL_ERROR, headers=NO_STORE)

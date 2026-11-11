@@ -246,11 +246,11 @@ def test_empty_source_errors_and_actual_session_configuration(db, client, monkey
 
     real = route.get_risk
 
-    def inspect(s, q, settings):
+    def inspect(s, q, settings, **kwargs):
         assert s.scalar(text("SHOW transaction_read_only")) == "on"
         assert s.scalar(text("SHOW transaction_isolation")) == "repeatable read"
         assert s.scalar(text("SHOW statement_timeout")) == "3s"
-        return real(s, q, settings)
+        return real(s, q, settings, **kwargs)
 
     monkeypatch.setattr(route, "get_risk", inspect)
     result = payload(client, category="cafe")
