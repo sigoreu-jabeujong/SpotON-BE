@@ -30,7 +30,7 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 
 ## 상권 경계 적재 기준 (BE #47)
 
-현재 migration head는 0007이다. `python -m etl.market_areas`는 공식 OA-15560 ZIP의 hash·첨부 수정일을 받아 기본 읽기 전용 dry-run, --write일 때 일반 로컬 앱 계정에서 원자적으로 적재한다. EPSG:5181 원본의 무효 도형만 linework 보정 후 유효 MULTIPOLYGON 4326·GIST로 저장한다. 원본 면적·hole/multipart·타입/5자리 구 코드를 보존하고 버전/데이터 digest를 검증한다. 같은 원본/규칙 재실행은 불변 버전을 재사용하며 기존 버전 수정/삭제·최신 자동 선택은 하지 않는다. source_file_date는 첨부 수정일이고 boundary_as_of는 미확인 null이다. 후속 통계 분기와의 코드/경계 호환 전에는 지표에 자동 적용하지 않는다. 현재 1,650행·6개 보정, 기존 stores 689,440건이다. 상세는 docs/designs/feat47-market-areas-import.md를 따른다. API 응답/FE 변경은 없다.
+현재 migration head는 0008이다. `python -m etl.market_areas`는 공식 OA-15560 ZIP의 hash·첨부 수정일을 받아 기본 읽기 전용 dry-run, --write일 때 일반 로컬 앱 계정에서 원자적으로 적재한다. EPSG:5181 원본의 무효 도형만 linework 보정 후 유효 MULTIPOLYGON 4326·GIST로 저장한다. 원본 면적·hole/multipart·타입/5자리 구 코드를 보존하고 버전/데이터 digest를 검증한다. 같은 원본/규칙 재실행은 불변 버전을 재사용하며 기존 버전 수정/삭제·최신 자동 선택은 하지 않는다. source_file_date는 첨부 수정일이고 boundary_as_of는 미확인 null이다. 후속 통계 분기와의 코드/경계 호환 전에는 지표에 자동 적용하지 않는다. 현재 1,650행·6개 보정, 기존 stores 689,440건이다. 상세는 docs/designs/feat47-market-areas-import.md를 따른다. API 응답/FE 변경은 없다.
 
 ## 공식 점포 통계 적재 기준 (BE #49)
 
@@ -39,3 +39,9 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 ## 추정매출 원천 적재 기준 (BE #51)
 
 `python -m etl.market_sales`는 OA-15572 공식 연간 ZIP의 55개 헤더·48개 수치를 검증하고 지원 업종만 적재한다. est_sales=당월_매출_금액(원), source_sales_count=당월_매출_건수의 BIGINT 원천값이며 환산·합산·점포당 매출 계산을 하지 않는다. 빈 셀 null·실제0·누락 행을 구분한다. 지정 점포 통계와 같은 연도·대조 경계인지 확인하고 두 기준의 DB 내용 hash와 조합 차이를 대조한다. amount_period_status/boundary_compatibility는 unverified, currency=KRW, amount_basis=source_reported다. 원본/규칙/두 기준 버전별 불변 적재·재조회 hash·동시 writer 직렬화·전체 rollback·replay를 제공한다. 기본 REPEATABLE READ READ ONLY dry-run이며 --write에만 저장한다. ZIP/provenance/경계 대조 공통화는 BE-17의 hash/오류/출력/lock key를 유지한다. 최신 분기·매출 집계 기간·경계 적용일·모집단 동일성은 미확인이고 공개 API/FE 변경은 없다. 상세는 docs/designs/feat51-market-sales-import.md를 따른다.
+
+## 생활인구 적재 기준 (BE #53)
+
+`python -m etl.living_pop --manifest PATH [--write]`는 공식 EPSG5179 SHP와 같은 날짜의 local/long/short ZIP을 검사한다. 격자는 living_grid_versions/living_grids, 관측은 living_population_versions/living_population_observations에 불변 버전으로 저장한다. 행정동·시각·원천 차원을 보존하고 총계 Decimal Numeric(20,5)의 observed/suppressed/missing, 실제0·행 없음·unlocated를 구분한다. `*`를 복원·0 변환하지 않는다. 숫자의 후행 소수점은 Claude와 검토한 명시적 v1 문법으로 처리하며 원문 hash를 보존한다. 사용자 결정대로 미매칭24행은 grid_id 유지·located_grid_id=null·공간 inner join 제외다. located 참조와 버전/날짜는 복합 FK로 보장한다. 전역 source/date 미확인 수와 반경 내 missing_grid_count를 섞지 않는다. 기본 READ ONLY, --write는 격자/세 원천을 한 트랜잭션으로 처리하며 hash/건수 검증 후 commit한다. grid_as_of=null·spatial_compatibility=unverified, 자동 백필/최신 선택·API/FE 변경은 없다. 상세는 docs/designs/feat53-living-population-import.md를 따른다.
+
+2026-11-12 사용자 지시에 따라 유사한 데이터/설계 선택은 Claude Code의 실제 MD 검토와 Codex 최종 점검 후 적절한 안을 선택하고 근거를 남긴다. 동일한 통상 선택을 사용자에게 반복 확인하지 않는다. 필수 자료·키·권한이 없으면 기존대로 요청한다.

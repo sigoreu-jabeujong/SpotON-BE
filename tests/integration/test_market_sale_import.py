@@ -205,7 +205,7 @@ def test_real_cli_read_only_snapshot_replay_plan_and_safe_output(sales_source, m
     config = cli_config(e, monkeypatch)
 
     def check(c):
-        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0007"
+        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0008"
         states.append(
             (
                 c.scalar(text("SHOW transaction_read_only")),
