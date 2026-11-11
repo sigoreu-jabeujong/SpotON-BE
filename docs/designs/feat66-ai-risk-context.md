@@ -1,7 +1,7 @@
 # BE-28 AI 해석용 Risk 집계 추출 (#66)
 
 - 기준 develop `27e7c8a`, `feat#66-ai-risk-context`, 2026-11-12
-- 상태: Codex 설계 → Claude 이 MD만 실제 Read/Edit → Codex 최종 점검·구현
+- 상태: Codex 설계 → Claude 실제 MD 수정 → Codex 최종 점검·구현·로컬 검증 완료. CI 후 develop 일반 Squash 병합하며 실제 상태는 #66 연결 기록을 따른다.
 - 이번 범위: 서버 재계산→명시적 허용 집계→불변 context/직렬화/해시→기존 프롬프트 준비. 실제 LLM 호출·공개 POST /api/risk/interpret는 후속이다.
 
 ## 1. 근거와 선행 조건
@@ -110,3 +110,16 @@ Claude 실제 MD 수정 diff 전체와 JSON(is_error=false,3 turns,permission_de
 소표본은 현재 Risk대로 value/numerator=null·실제 denominator 유지로 확정한다. 원본 개별 점포/추정 가맹명·이슈번호/URL은 전달하지 않고 가맹 미확인 상태만 보존한다. T는 서버 Risk의 effective date이며 오늘 날짜/clock을 새로 쓰지 않는다. 직렬화는 기존 ensure_ascii=False/sort_keys=True/separators=(',',':')/allow_nan=False와 모델의 tuple→JSON list·date→ISO를 사용한다. raw query를 재검증할 때 변환 완료된 legacy include_unknown을 제외해 개별 플래그와의 충돌을 피한다.
 
 dataclass의 context/request는 repr=False,compare=False,hash=False로 두고 내부 값 객체는 frozen/tuple로 고정한다. context_hash와 데이터/프롬프트 hash는 별개이며 실제 캐시를 구현하지 않는다. 기존 검증기는 알려진 숫자 집합/structured pending 검사 수준으로 지표 간 숫자 바꿔치기·자유문장 의미 전체를 보증하지 않는다. 이번 결과를 공개 AI API/실제 모델 안전성 검증 완료로 표시하지 않는다.
+
+## 9. 구현·검증 결과 (2026-11-12)
+
+- `app/ai/context.py`의 공개 `prepare_risk_interpretation(session,query,settings)`는 query를 재검증하고 서버 get_risk를 호출한다. 위치·상권 후보·raw meta/버전·URL을 제외한 `app/schemas/ai_context.py`의 명시 필드/값만 새로 구성한다. 원본 Risk/query를 다시 검증하고 사유/출처 enum·기간/공간·로컬/서울 비율·방법론/기준일을 대조한다. 검증 우회 객체의 직렬화 경고도 원문을 출력하지 않고 오류로 처리한다.
+- nested frozen 모델/tuple, context/request repr·비교·hash 제외, 새 JSON 복사본·정렬 직렬화의 SHA256, 내부 data_version_hash/prompt_version/sha256를 구현했다. context_hash만으로 실제 캐시를 구현하거나 요청 조건/버전을 대체하지 않는다. 기존 AppError는 고정 코드를 전파하고 추출/프롬프트 실패는 원문/context 없는 안전한500이다.
+- `risk-interpret-v2`와 실제 파일 지문을 이력에 추가했다. link_only/unverified·고정 개업 주년·현재 잔존과의 차이·서울/좌표 선택·가맹 미확인을 시스템 규칙에 반영하고 verifier의 미산정 값 차단에도 두 상태를 추가했다. 기존 v1 지문 이력은 보존했다.
+- 새 일반 **26개**(입력 준비24·기존 검증기 보강2), 격리 통합 **4개**를 포함해 전체 일반 **1,018개**, 격리 PostGIS **115개** 통과. ruff check/format·mypy app/etl/migrations **123 files** 통과. 기존 Starlette/httpx deprecation 경고1건은 그대로다.
+- 가상 식별 문자열을 raw meta/URL/버전/상권 후보에 넣어도 전송 본문에 없음을 확인했다. 허용 사유/기간/출처/정밀 숫자·NaN/Infinity/bool/음수0·잘못된 metadata/산식/반경·조회조건 불일치는 거절했다. 동일 집계의 다른 좌표·dict 삽입 순서에 같은 context_hash, 데이터 버전 변경 시 별도 hash 변경·deep 불변성·repr/str/hash 비노출을 확인했다. 처음 실패한 legacy query 동등성 테스트는 include_unknown 변환 후 개별 플래그의 의미를 비교하도록 바로잡았으며 구현 변경은 없었다.
+- 격리 PostGIS는 실제 get_risk 재계산과 값/분모/상태/출처 일치, 과거 T·빈 업종·원천 미준비 구분, 이름이 있는 경계 후보/UUID 제외, READ ONLY·REPEATABLE READ를 확인했다. 공급자 어댑터는 httpx MockTransport와 합성 키/응답으로 실제 요청 JSON의 본문을 점검했으며 실제 키/외부 LLM은 사용하지 않았다.
+- 실제 개발 DB **6조합**(두 업종/선택항목·과거월·다중 세부업종/반경·면적·가맹 미확인 제외의 빈 결과)에서 서버 재계산값·허용 입력·SHA256·최종 모의 공급자 본문·첫 생성 검증을 모두 대조했다. 명시 UUID 공간 후보가 있는 경우도 별도로 제외를 확인했다. 본문은 UTF-8 약2,821~3,543bytes였으며 본문/개별 원자료는 파일에 저장하지 않았다.
+- 준비 시간 관측은 첫 요청 **5.995초**, 이후 **0.565~0.760초**였다. 최초 지연의 원인은 확정하지 않았으며 동시 통합 테스트가 실행 중이었다는 조건만 기록한다. 별도로 실제 history_session의 READ ONLY·REPEATABLE READ·문장3초 설정에서도 준비 **0.608초**와 정상 결과를 확인했다. 이는 콜드 캐시/동시부하·전체 AI API SLA 보장이 아니다.
+- head0009·모델차이0·기존14테이블 전체 행/geometry hash·건수 동일을 확인했다. 개발 DB는 조회만 했고 파괴적 suite는 별도 임시 DB에서 실행했다. 기존 health/activity/risk 실제 앱/개발 DB 조회3개200·공개 /api/risk/interpret 미추가도 확인했다. 기존 API/모델/migration·의존성·원본·Docker/.env·FE 변경은 없다.
+- 아직 실제 LLM/공개 AI API·전체 응답 스키마·자유문장 의미 검증·이력/활동 추가 문맥·캐시는 구현하지 않았다. 미확인 공식/조건부 지표와 브랜드57·FE 통합도 후속이다. 공개 계약 변경이 없어 이번 단계의 FE 요청서는 만들지 않았다.

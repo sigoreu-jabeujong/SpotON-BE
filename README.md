@@ -136,6 +136,12 @@ AI 해석 프롬프트는 `app/ai/prompts/risk_interpret/`의 `system.md`(시스
 
 상세 내용은 [작업 27 설계서](docs/designs/feat27-prompt-version.md)에서 확인합니다.
 
+### AI 입력 집계 준비
+
+내부 `prepare_risk_interpretation(session,query,settings)`가 서버 Risk를 재계산하고 업종·필터·반경·기준일·지표/분모/출처/상태만 추출합니다. 주소·좌표·점포 식별값·상권 후보·URL·원본 메타/UUID는 프롬프트에 넣지 않습니다. 사유 코드와 숫자/기간도 검증하며, 입력은 중첩 구조까지 불변으로 만들고 context hash와 내부 데이터/프롬프트 버전을 구분합니다.
+
+현재 프롬프트 `risk-interpret-v2`는 안내 전용/미확인 상태·고정 주년 관측·서울 비교 한계를 유지합니다. 공급자 모의 전송까지 검증했으며 실제 LLM 호출·공개 `/api/risk/interpret`·AI 응답 스키마·캐시는 후속입니다. 호출자는 기존 읽기 전용 세션을 제공해야 합니다. [설계·검토·검증](docs/designs/feat66-ai-risk-context.md)을 확인합니다.
+
 ### AI 결과 검증
 
 `app/ai/verifier.py`의 `verify_output()`은 LLM 응답이 JSON 객체인지 확인한 뒤 다음을 검사합니다. 결과에는 실패 종류만 담고 응답 원문은 담지 않습니다.
