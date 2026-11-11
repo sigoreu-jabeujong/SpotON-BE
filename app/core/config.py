@@ -2,6 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -22,6 +23,7 @@ class Settings(BaseSettings):
     database_url: SecretStr | None = None
     database_connect_timeout: int = Field(default=5, ge=1, le=60)
     database_statement_timeout_ms: int = Field(default=3000, ge=1, le=60000)
+    risk_boundary_version_id: UUID | None = None
     data_go_kr_service_key: SecretStr | None = None
     kakao_rest_api_key: SecretStr | None = None
     kakao_request_timeout: float = Field(default=5, ge=1, le=10)
