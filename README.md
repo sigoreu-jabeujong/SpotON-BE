@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 health·서울 주소 검색·건물별 점포 이력·주변 점포 조회·업종별 조회 가능 월 범위·과거 시점 점포 상태 분해 API, 공통 응답·오류 처리, PostgreSQL/PostGIS·stores, 인허가 수집·정제·멱등 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 사용자 제공 검증 CSV 689,440건을 적재했으며 migration `0003`부터 배치 출처를 저장하고 `0004`에서 거리 조회용 geography 인덱스를 추가합니다. 현재 원천의 최신 전체 수집, 상권 데이터·분석·AI 해석 API와 FE 반영은 후속 작업입니다.
+현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해 API와 인허가 ETL, 상권 경계 버전 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 검증 CSV의 점포 689,440건과 공식 ZIP의 상권 경계 1,650건을 적재했습니다. migration `0005`가 현재 head입니다. 경계 적용 시점/통계 분기 호환은 미확인이며 공식 통계·분석 API와 FE 반영은 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -179,7 +179,7 @@ uv run --locked --extra dev --no-editable python -m etl.localdata --source gener
 - `--from-csv --write`는 허용하지 않습니다. CSV dry-run으로 만든 snapshot을 확인한 뒤
   같은 파일을 `--from-snapshot --write`로 적재합니다. 원본 CSV·보고서는 수정하지 않습니다.
 - `--write`는 localhost의 `spoton_dev`·`spoton_app`만 허용합니다. 연결 후 계정·권한·revision
-  `0004`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
+  `0005`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
 - 같은 snapshot으로 다시 실행하면 기존 `(source, license_no)`를 갱신합니다. `affected`는
   성공적으로 처리한 입력 수이고, 값이 실제로 변경된 행 수를 뜻하지 않습니다.
 - 실제 원천은 성공 코드 `0`, 날짜 `YYYY-MM-DD`, 갱신시각 `YYYY-MM-DD hh:mm:ss`를 사용합니다.
@@ -198,6 +198,33 @@ uv run --locked --extra dev --no-editable python -m etl.localdata --source gener
   후속 작업입니다.
 
 상세 계약과 검증 근거는 [작업 5 설계서](docs/designs/feat5-license-etl.md)에서 확인합니다.
+
+## 상권 경계 적재 (BE-16)
+
+출처는 서울특별시·서울신용보증재단의 [서울시 상권분석서비스(영역-상권), OA-15560](https://data.seoul.go.kr/dataList/OA-15560/S/1/datasetView.do)입니다. 공공누리 1유형(출처표시, 상업적 이용·변경 가능)이며 갱신은 비정기입니다. SHP/SHX/DBF/PRJ/CPG가 포함된 공식 ZIP과 기대 SHA256·첨부파일 수정일을 사용합니다. 원본은 저장소 밖에 보관합니다.
+
+```powershell
+# 기존 DATABASE_URL로 로컬 개발 DB identity를 확인한 후 현재 head 적용
+uv run --locked --extra dev alembic upgrade head
+
+# 기본 dry-run: 읽기 전용 DB 공간 검사, insert 없음
+uv run --locked --extra dev python -m etl.market_areas `
+  --zip "<공식 ZIP 경로>" `
+  --expected-sha256 "<ZIP SHA256>" `
+  --source-file-date 2023-10-23
+# 검증 결과를 확인한 뒤 같은 명령에 --write를 추가해 적재
+```
+
+- 현재 검증 ZIP은 2,123,078 bytes, SHA256 `38bb8fab4e45a1171af4989cd7fa1275f68e5d644aa770f5431ce7ccc38384dd`입니다. UTF-8·EPSG:5181의 1,650개 고유 상권·25개 구·4유형을 확인했습니다. 이 해시/날짜는 해당 파일에만 사용하며 새 파일의 값을 임의로 같게 두지 않습니다.
+- `source_file_date=2023-10-23`은 공식 첨부 수정일입니다. 내부 파일 날짜 2023-10-20·포털 갱신일 2026-09-11·DB loaded_at과 구분합니다. 실제 경계 적용일은 확인되지 않아 `boundary_as_of=null`입니다. 최신/과거 분기에 자동 적용하지 않으며 BE-17/23에서 코드·경계 호환을 검증합니다.
+- market_area_versions는 원본 해시/규칙별 불변 버전, market_areas는 `(version_id, market_code)`별 MULTIPOLYGON 4326·GIST를 저장합니다. 기존 상권 간 겹침·빈 공간·hole·분리 영역은 보존하고 대표 상권을 선택하거나 합치지 않습니다.
+- 원본의 RELM_AR을 area_m2로 보존합니다. 기하 면적은 덮어쓰지 않습니다. 무효 도형만 linework로 보정하며 차원 붕괴/빈 면/변환 후 무효/서울권 bbox 밖/원본 면적 대비 1% 초과 차이는 전체 실패입니다. 현재 파일은 6개 보정 후 모두 유효합니다.
+- ZIP hash/CRC·해제 크기·경로·sidecar·CRS·필드·중복·25개 구 완전성을 검사합니다. 32MiB ZIP·64MiB 해제·20,000행·500,000점 상한이 있으며 모호한 winding/고아 hole을 거절합니다. 원문 geometry·경계명·코드·접속 정보는 출력하지 않습니다.
+- 기본 dry-run은 READ ONLY입니다. 쓰기는 localhost의 spoton_dev·spoton_app·일반 권한·PostGIS·head 0005에서만 허용하며 advisory transaction lock 후 버전과 전체 행을 한 트랜잭션으로 적재합니다. 중간 실패는 모두 rollback하고 부분 성공하지 않습니다.
+- 같은 원본/규칙은 DB 속성·NDR EWKB 기반 digest를 다시 읽어 확인한 뒤 `reused=true, inserted=0`입니다. 원래 loaded_at/행을 바꾸지 않으며 훼손 버전은 자동 수리하지 않습니다. 새 원본/규칙은 새 버전으로 공존하고 자동 active/최신 승격·삭제 경로는 없습니다.
+- source gu_code는 5자리 SIGNGU_CD입니다. 점포의 7자리 관청 코드와 바로 조인하지 않습니다. 공개 API·FE 응답은 변경하지 않았습니다.
+
+실제 적재·재실행·원자료 표본·데이터 보존 검증은 [이슈 47 기록](docs/designs/feat47-market-areas-import.md)을 확인합니다. 소진공 상가정보(R7)는 현재 필수 ETL에서 사용하지 않습니다.
 
 ## PostgreSQL·PostGIS 설정과 마이그레이션
 

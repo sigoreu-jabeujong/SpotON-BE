@@ -115,3 +115,41 @@ Codex: 실제 공개 ZIP·원본 사전 구조/품질, 기존 모델/migration/�
 ### Codex 최종 점검
 
 Claude의 실제 diff를 기존 코드·공식 문서·사전 DB 검사와 대조했다. 시점 구분·FK RESTRICT·DB 재조회 해시·읽기 전용 dry-run·advisory lock·실제 크기 검사·공간/버전 불변성 테스트는 채택한다. 해시는 길이 접두 대신 canonical JSON으로 모호성 없이 고정하고 DB Numeric(18,2)/NDR EWKB를 같은 함수로 검증한다. 지원 쓰기 경로가 advisory lock으로 직렬화되므로 락 밖 경쟁을 위한 숨은 자동 재시도는 채택하지 않는다. PostGIS 3.7은 linework를 지원하며 source CRS 보정→4326 변환 후 1,650개 모두 유효함을 추가 확인했다. pyshp의 ring 정리 함수(return_errors)를 사용해 경고를 출력하지 않고 모호한 winding/고아 hole을 거절한다. 유효 도형의 원본 CRS 점 배열은 보정하지 않지만 타입 통일/CRS 변환으로 최종 바이트는 바뀌므로 '유효 도형 바이트 불변' 검사는 같은 변환 결과에 추가 수정이 없다는 뜻이다. 라이브러리/엔진 변경으로 결과가 달라지면 실패·진단하며 이번 범위의 필요한 규칙 변경은 근거를 기록해 처리한다. 적용일·후속 분기 호환은 계속 미확인이다.
+
+## 7. 구현·검증 결과 (2026-11-12)
+
+- market_area_versions/market_areas와 migration **0005**, GIST·버전/구·유형 인덱스·PK/FK RESTRICT·유형/코드/면적/geometry CHECK를 추가했다. 인허가 ETL head guard와 관련 테스트를 0005로 맞췄다. 0004 거절과 0005 통과, downgrade/재upgrade의 기존 stores 보존은 격리 DB에서 확인했다.
+- `etl/market_areas`에 ZIP 해시/sidecar/CRC/크기/경로/구조·DBF/CRS/전체 구 검증, 원본 CRS의 조건부 linework 보정→MultiPolygon4326 변환, 품질 검사, 불변 버전 적재·DB 재조회 digest 검증·안전한 CLI를 구현했다. pyshp 3.1.8과 lock을 추가했다.
+- 실제 PRJ는 ESRI의 datum 명칭 때문에 pyproj EPSG 식별 신뢰도 90으로 5181을 반환하고 엄격 equals는 false였다. 5181 식별 신뢰도 90 이상에 더해 투영 방법(9807)·모든 파라미터 코드/값/단위 변환·타원체가 EPSG:5181과 같은지 검사하도록 구현했다. 다른 가산값의 5186·알 수 없는 PRJ는 거절 테스트를 통과했다. 잘못된 CRS를 5181로 추정해 통과시키지 않는다.
+- 명명된 입력 한도는 ZIP 32MiB·실제 해제 합계 64MiB·20,000행·500,000점이다. 입력 크기/완전성 검증에서 일부 자료를 잘라 적재하지 않는다.
+
+### 로컬 자동 검사
+
+잠긴 의존성의 ruff check·format check, mypy app etl migrations **82 files**, 일반 pytest **742 passed**(integration 54 deselected), 별도 임시 PostgreSQL/PostGIS integration **54 passed**(일반 742 deselected)를 통과했다. 기존 Starlette/httpx 경고 1건이며 실패·skip·xfail은 없다.
+
+검증에는 SHA/CRC·잘못된 sidecar/CRS·경로/링크/중복 suffix·삭제 DBF·중복/누락/잘못된 구/유형/라벨/면적·비유한 좌표·NULL shape·입력값 비노출, 유효 Polygon/hole/multipart·bowtie 보정·차원 붕괴/면적 초과/bbox 밖 거절, PK/unique/FK/CHECK·모델/DB 일치·0005 downgrade 보존·경계 포함·GIST, 같은 원본 replay·새 규칙 공존·동시 두 writer의 단일 버전·DB 훼손 거절·쓰기 후 digest 실패의 전체 rollback·실제 READ ONLY dry-run·CLI의 안전한 출력이 포함된다. 기존 인허가 적재·health/history/nearby/data-range/snapshot 회귀도 통과했다.
+
+### 실제 개발 DB 적재
+
+일반 앱 계정 identity·권한·0004/689,440건·상권 테이블 미존재를 확인한 뒤 migration 0005를 적용했다. 실제 원본 CLI dry-run은 상권/버전 테이블 0건을 유지했고 보정 6건·검증 1,650건을 반환했다. `--write`는 버전 **1개·경계 1,650건**을 적재했고 같은 명령 재실행은 같은 version_id, loaded_at, content_sha256을 유지하며 `reused=true, inserted=0`이었다.
+
+| 실제 확인 | 결과 |
+|---|---|
+| 상권 고유 행 / 구 | 1,650 / 25 |
+| 유형 A / D / R / U | 1,090 / 249 / 305 / 6 |
+| geometry_repaired | 6 |
+| 무효·빈·다른 SRID/타입 | 0 |
+| 앱 관리 모델 차이 | 0 |
+| source_file_date / boundary_as_of | 2023-10-23 / null |
+
+보정된 6개·multipart/hole·일반 경계를 포함한 **원자료 표본 20건**의 이름·타입·5자리 구 코드·면적을 대조했다. 원본 vertex를 별도 pyproj로 변환해 최종 경계까지의 거리를 1cm 이하로 확인했고, 유효 원본의 외곽/내곽 ring 수와 DB multipart/hole 수를 대조했다. 원본 행/경계명/코드/좌표·접속 정보는 출력하거나 커밋하지 않았다.
+
+실제 DB에서 모든 geometry의 외곽 vertex는 ST_Covers=true·ST_Contains=false를 확인했다. 알려진 경계 내부점의 500m 반경과 ST_Intersects 결과를 확인했으며 planner 옵션 강제 없이 실제 ST_Covers 쿼리의 geography 아닌 **geometry GIST**와 Index Cond 사용을 확인했다. EXPLAIN 실행 관측값은 약 0.459ms로 SLA를 의미하지 않는다. 상권 선택 우선순위나 반경 지표 계산 API를 구현한 것은 아니다.
+
+실제 health/history/nearby/data-range/snapshot 응답은 모두 200이었다. 기존 stores **689,440건의 전체 행·geometry 해시**, store_import_batches의 전체 출처 hash·건수는 이전 검증과 동일했다. ZIP SHA도 바뀌지 않았다. 실제 개발 DB에 파괴적 suite·downgrade는 실행하지 않았다.
+
+### 문서·PR·남은 범위
+
+BE README·CLAUDE.md·작업계획을 갱신했다. 공개 API·FE 변경이 없어 새 FE 요청 보고서는 만들지 않았고 기존 FE 반영 대기는 유지한다. 실제 비밀값/인코딩 변형과 원본 비추적·diff 검사를 거쳐 지정 양식 PR·CI 후 develop에 일반 Squash 병합한다. 실제 상태는 이슈 #47 연결 기록을 따른다.
+
+이 버전은 공식 첨부파일의 관측된 버전일 뿐, 2026년 최신 경계나 과거 특정 분기의 적용 경계로 확정되지 않았다. boundary_as_of를 임의로 채우거나 최신/active로 선택하지 않는다. BE-17/23에서 공식 통계 원천·공표/적용 분기·상권 코드/경계 호환을 확인해야 하며 필요한 자료/권한이 없으면 사용자에게 요청한다.
