@@ -7,6 +7,7 @@ from typing import Any, NoReturn
 from uuid import UUID
 
 from app.core.config import Settings
+from app.core.operations import etl_phase, logged_import
 from app.db.session import create_db_engine
 from etl.localdata.runner import check_local_database, validate_local_target
 from etl.market_sales.archive import SalesImportError, load_archive
@@ -18,6 +19,7 @@ class SafeParser(argparse.ArgumentParser):
         raise SalesImportError("market_sales:arguments")
 
 
+@logged_import("market_sales")
 def run_import(
     path: Path,
     expected_sha256: str,
@@ -29,12 +31,13 @@ def run_import(
     write: bool = False,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
-    archive = load_archive(path, expected_sha256, source_year, source_file_date)
+    with etl_phase("read_source"):
+        archive = load_archive(path, expected_sha256, source_year, source_file_date)
     config = settings if settings is not None else Settings()
     validate_local_target(config)
     engine = create_db_engine(config)
     try:
-        with engine.connect() as connection:
+        with etl_phase("prepare"), engine.connect() as connection:
             connection.exec_driver_sql("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             set_limits(connection)
             check_local_database(connection)
@@ -44,7 +47,7 @@ def run_import(
         version = None
         reused = False
         if write:
-            with engine.connect() as connection, connection.begin():
+            with etl_phase("persist"), engine.connect() as connection, connection.begin():
                 check_local_database(connection)
                 version, reused, report = save(connection, archive, boundary_id, store_id)
         return dict(

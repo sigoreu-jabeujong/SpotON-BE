@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 from app.core.config import Settings
+from app.core.operations import etl_phase, logged_import
 from app.db.session import create_db_engine
 from etl.localdata.runner import check_local_database, validate_local_target
 from etl.market_areas.archive import MarketImportError, load_archive
@@ -18,6 +19,7 @@ class SafeParser(argparse.ArgumentParser):
         raise MarketImportError("market:arguments")
 
 
+@logged_import("market_areas")
 def run_import(
     path: Path,
     expected_sha256: str,
@@ -26,12 +28,13 @@ def run_import(
     write: bool = False,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
-    archive = load_archive(path, expected_sha256, source_file_date)
+    with etl_phase("read_source"):
+        archive = load_archive(path, expected_sha256, source_file_date)
     config = settings if settings is not None else Settings()
     validate_local_target(config)
     engine = create_db_engine(config)
     try:
-        with engine.connect() as connection:
+        with etl_phase("prepare"), engine.connect() as connection:
             connection.exec_driver_sql("SET TRANSACTION READ ONLY")
             check_local_database(connection)
             prepared = prepare(connection, archive)
@@ -39,7 +42,7 @@ def run_import(
         version = None
         reused = False
         if write:
-            with engine.connect() as connection, connection.begin():
+            with etl_phase("persist"), engine.connect() as connection, connection.begin():
                 check_local_database(connection)
                 version, reused = save(connection, prepared)
         return {

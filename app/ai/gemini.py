@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.ai.client import LlmError, LlmErrorKind, LlmRequest, LlmResult, LlmUsage
 from app.ai.limits import RequestLimiter, RetryPolicy
+from app.core.operations import llm_attempt
 
 GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 GEMINI_PROVIDER = "google"
@@ -170,6 +171,7 @@ class GeminiClient:
     ) -> tuple[httpx.Response | None, LlmErrorKind | None]:
         # 원인 예외가 LlmError의 __context__에 남지 않도록 except 안에서는 종류만 돌려준다.
         attempt = asyncio.timeout(timeout)
+        response = None
         try:
             async with attempt:
                 response = await client.post(url, json=body, headers=headers, timeout=timeout)
@@ -179,6 +181,8 @@ class GeminiClient:
             return None, LlmErrorKind.TIMEOUT
         except httpx.HTTPError:
             return None, LlmErrorKind.UPSTREAM
+        finally:
+            llm_attempt(success=response is not None and response.status_code == 200)
         return response, None
 
     def _parse(self, content: bytes, attempts: int) -> LlmResult:

@@ -7,6 +7,7 @@ from typing import Any, NoReturn
 from uuid import UUID
 
 from app.core.config import Settings
+from app.core.operations import etl_phase, logged_import
 from app.db.session import create_db_engine
 from etl.localdata.runner import check_local_database, validate_local_target
 from etl.market_changes.repository import inspect_import, same_content_versions, save, set_limits
@@ -18,6 +19,7 @@ class SafeParser(argparse.ArgumentParser):
         raise ChangeImportError("market_changes:arguments")
 
 
+@logged_import("market_changes")
 def run_import(
     path: Path,
     expected_sha256: str,
@@ -28,12 +30,13 @@ def run_import(
     write: bool = False,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
-    source = load_source(path, expected_sha256, source_year, retrieved_at)
+    with etl_phase("read_source"):
+        source = load_source(path, expected_sha256, source_year, retrieved_at)
     config = settings if settings is not None else Settings()
     validate_local_target(config)
     engine = create_db_engine(config)
     try:
-        with engine.connect() as connection:
+        with etl_phase("prepare"), engine.connect() as connection:
             connection.exec_driver_sql("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             set_limits(connection)
             check_local_database(connection)
@@ -44,7 +47,7 @@ def run_import(
         version = None
         reused = False
         if write:
-            with engine.connect() as connection, connection.begin():
+            with etl_phase("persist"), engine.connect() as connection, connection.begin():
                 check_local_database(connection)
                 version, reused, report = save(connection, source, boundary_id)
         return dict(

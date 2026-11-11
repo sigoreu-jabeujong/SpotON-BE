@@ -92,6 +92,16 @@ LLM 전체 await(재시도 대기 포함)와 개별 요청은 asyncio timeout으
 
 설계·Claude 실제 검토·수정/실검증은 docs/designs/feat68-risk-interpret-api.md를 따른다. FE 코드·이슈·PR·CLAUDE.md는 직접 수정하지 않고 docs/fe-risk-interpret-api-request.md로 담당자에게 요청한다. FE 반영·원본 합의·이력/활동 추가문맥·전체 BE-32 통합은 후속이다.
 
+## 개인정보 없는 운영 로그 기반 (BE #72)
+
+추가 운영 기록은 core/operations.py의 고정 필드 JSON stderr다. API는 고정 경로/unknown=unmatched·실제 send 상태/null·monotonic 시간·서버 uuid4·response_complete만 기록하며 query/body/header/IP를 읽거나 복사하지 않는다. ID 응답 헤더는 추가하지 않는다. 바깥 취소/예외를 보존하고 스트림200 뒤 실패를 완전 전송으로 표시하지 않는다. uvicorn.access는 기본 앱에서 비활성화하고 --no-access-log 안내도 유지한다.
+
+ETL6개 run_import는 독립 run_id와 순차 coordinator 단계로 기록하며 ContextVar를 finally 복원한다. persist 완료는 commit context 종료 후다. commit 이후 dispose 실패는 persist 완료+run 실패가 될 수 있으므로 rollback 완료를 추정하지 않는다. 허용 비음수int·고정 품질사유·유효 batch/version UUID·mode만 선택하고 원문/파일/임의키/예외 문자열을 기록하지 않는다. quality_flags 중복을 합산해 최종 제외 수로 만들지 않는다. 기존 stdout·반환/exitcode·DB트랜잭션은 유지하고 인허가 argparse 오류만 고정 안전 메시지다.
+
+LLM 이벤트는 실제 client.post 시도1·HTTP200 관측 여부다. 앱 재시도는 별개 시도지만 transport 내부 재시도·파싱/최종 AI검증 성공률로 해석하지 않는다. 키/한도에서 post 전 중단이면0건이다. stderr/직렬화/ID 실패는 작업을 실패시키지 않고 오류를 재출력하지 않는다. 최대4096bytes 단일줄·프로세스내 lock이며 느린sink/프로세스간 원자성은 보장하지 않는다.
+
+설계·Claude 실제 MD 검토·Codex 최종 점검은 docs/designs/feat72-private-operation-logs.md를 따른다. 앱 파일/DB 로그 저장·외부수집기를 추가하지 않아 **원본30일 보관/삭제는 미구현**이며 배포 시 수집기 설정/삭제 검증이 필요하다. 제3자/프록시/커스텀 로그 전체 정화도 완료로 주장하지 않는다. 공개 API/응답·DB모델/migration·의존성·.env/Docker·FE 변경은 없다. 이번 작업에는 FE 보고서/CLAUDE.md 동기화가 필요하지 않다.
+
 ## 공식 상담·지원기관 공통 링크 (BE #70)
 
 `GET /api/support-links`는 원본 API v1.2 §4-9/D-08의 공식4기관을 서버 설정 불변 tuple에서 반환한다. 선택 sigungu는 기존 서울25개 정확한 구명, category는 cafe/restaurant이며 생략만 기본값이다. 잘못된/빈/중복/미지원 입력은422 INVALID_PARAM이다. 현재 일반 안내만 있어 지역/업종별 우선 정렬은 미적용이며 네 곳 전체·고정 순서를 유지하고 meta.prioritization={status:not_applied,reason:general_links_only}로 표시한다. 원본의 맞춤 정렬까지 완료로 주장하지 않는다.

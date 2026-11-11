@@ -12,12 +12,12 @@
 - 기본 절차는 이슈 → 작업 브랜치 → Codex 설계 MD → Claude Code 검토·MD 직접 수정 → Codex 구현·기능별 커밋 → 로컬 테스트·실패 수정·재검증 → 푸시·develop 대상 PR → CI 확인 → Squash 병합이다. 2026-11-12 사용자가 이후 BE PR의 자동 승인·머지를 요청했다. CI·저장소 조건을 만족하면 develop에 자동 병합하며, 본인 승인 제한·보호 규칙을 우회하지 않는다. main 반영·수동 브랜치 삭제·강제 푸시는 별도 요청 없이 하지 않는다.
 - 2026-11-12 추가 지시: 데이터 처리 등 유사한 선택은 Claude Code와 실제 설계 검토 후 가장 적절한 안을 선택하고 근거를 남긴다. 통상 선택마다 사용자에게 재확인하지 않는다. 필수 자료·키·권한이 없어 진행할 수 없는 경우의 요청/중단 원칙은 유지한다. BE-19 미매칭 격자 1개/24개 비식별 행은 사용자가 좌표 미확인 보존·공간 집계 제외로 확정했다.
 - API 명세서 v1.2가 FE↔BE 계약이다. 원본은 저장소에 커밋하지 않는다. 이슈 #36에서 로컬의 API·데이터 활용 v1.2 및 분석 정의 원본을 확보·대조했다. 현행 사용자 결정과 다른 부분은 별도 기록하며 보완안을 외부 문서 수정 완료로 간주하지 않는다. 확인 대기는 9절에서 관리한다.
-- BE-00~20 기반·조회·원천 적재, #58/PR59 시스템 점검·#60/PR61 기본 활동·#62/PR63 상권 판정·#64/PR65 Risk 참고지표·#66/PR67 AI 허용 집계 입력이 develop에 반영됐다. BE-21은 #57에서 공정위 브랜드 인증 승인 대기다. #70/PR71 상담 공통 링크 API도 develop에 병합됐다. 현재 #68은 BE-32 핵심 query-only AI 해석 API를 구현·검증했다. 전체 공통 meta·DataVersion 정리, 브랜드·공식 분기/업종 연결·조건부 수치·이력/활동 AI 추가 문맥·캐시·FE 통합은 미완료다. 자료의 집계 의미/적용 시점은 적재 사실과 구분하며 필수 자료·키·권한이 없으면 해당 기능을 중단하고 요청한다.
+- BE-00~20 기반·조회·원천 적재, #58/PR59 시스템 점검·#60/PR61 기본 활동·#62/PR63 상권 판정·#64/PR65 Risk 참고지표·#66/PR67 AI 허용 집계·#70/PR71 상담 공통 링크·#68/PR69 핵심 AI API가 develop에 반영됐다. BE-21은 #57에서 공정위 브랜드 인증 승인 대기다. 현재 #72는 개인정보 없는 API/ETL/LLM 운영 로그 기반을 구현한다. BE-34 캐시·공식/조건부 수치·AI 추가문맥·FE 통합·지원 링크 맞춤 정렬·로그30일 보관/삭제는 후속이다. 필수 자료·키·권한이 없으면 해당 기능을 중단하고 요청한다.
 - 이슈 #34 작업 브랜치에서는 실제 응답 코드·ISO 날짜/시각과 적재 실행기를 보완했다. 사용자 제공 검증 CSV(2026-11-09 검증, 원천 기준일 미확인)로 개발 DB에 일반음식점 541,169건·휴게음식점 148,271건, 합계 689,440건을 적재하고 재적재·20건 원자료 자동 대조를 통과했다. 현재 API의 최신 전체 수집 완료나 BE-12 구현 완료를 뜻하지 않는다. develop 반영은 이슈 #34의 PR 상태를 따른다.
 
 핵심 흐름은 `공공데이터 → ETL → DB → BE 계산 → API → FE 표시 → AI 해석`이다. 원천 통계는 적재 후 조회하며 주소 검색은 명세에 따라 실시간 외부 조회를 허용한다. AI 해석은 명시적 요청 시 서버의 허용 집계·후보만 모델에 전송한다. 앞 단계를 임시 수치로 우회하지 않는다.
 
-이슈 #34/PR #35 적재, #36/PR #37 이력, #38/PR #39·#40 설계, #41/PR #42 주변, #43/PR #44 월 범위, #45/PR #46 snapshot, #47/PR #48 경계, #49/PR #50 공식 점포 통계, #51/PR #52 추정매출, #53/PR #54 생활인구, #55/PR #56 공식 상권변화 유형, #58/PR #59 시스템 점검·#60/PR #61 기본 활동·#62/PR #63 상권 판정·[#64/PR #65 Risk 참고지표](designs/feat64-risk-reference-api.md)·[#66/PR #67 AI 집계 입력](designs/feat66-ai-risk-context.md)·[#70/PR71 상담 링크](designs/feat70-support-links-api.md)는 develop에 병합됐다. 현재 [#68 AI 해석 API](designs/feat68-risk-interpret-api.md)는 `feat#68-risk-interpret-api`에서 Claude 실제 검토·Codex 최종 점검·구현·로컬 검증을 마쳤다. CI·저장소 조건 통과 후 일반 Squash 병합하며 실제 상태는 GitHub 기록을 따른다. FE 저장소는 수정하지 않으며 조회/활동/Risk/AI 반영과 계약 보완안 합의는 담당자 대기다.
+이슈 #34/PR #35 적재, #36/PR #37 이력, #38/PR #39·#40 설계, #41/PR #42 주변, #43/PR #44 월 범위, #45/PR #46 snapshot, #47/PR #48 경계, #49/PR #50 공식 점포 통계, #51/PR #52 추정매출, #53/PR #54 생활인구, #55/PR #56 공식 상권변화 유형, #58/PR #59 시스템 점검·#60/PR #61 기본 활동·#62/PR #63 상권 판정·[#64/PR #65 Risk 참고지표](designs/feat64-risk-reference-api.md)·[#66/PR #67 AI 집계 입력](designs/feat66-ai-risk-context.md)·[#70/PR71 상담 링크](designs/feat70-support-links-api.md)·[#68/PR69 AI API](designs/feat68-risk-interpret-api.md)는 develop에 병합됐다. 보류됐던 두 PR은 CI/CodeQL 성공 후 일반 Squash 병합했고 현재 [#72 운영 로그](designs/feat72-private-operation-logs.md)를 `feat#72-private-operation-logs`에서 진행한다. FE 저장소는 수정하지 않으며 기존 요청 보고서의 반영/계약 합의는 담당자 대기다.
 
 ## 2. 서비스 범위
 
@@ -90,7 +90,7 @@
 | BE-32 | F-08 서버 재계산 기반 AI 해석 API |
 | BE-33 | F-10 상담·지원 링크 API. #70 공통4기관·수동 확인일/출처·입력 검증, 구/업종별 우선 정렬은 후속 |
 | BE-34 | Risk·AI 캐시와 데이터/모델/프롬프트 버전 무효화 |
-| BE-35 | 개인정보 없는 API·ETL 운영 로그 |
+| BE-35 | 개인정보 없는 API·ETL 운영 로그. #72 JSON stderr 기록 기반·실패/취소 보존, 외부수집기/30일 보관·삭제는 후속 |
 
 ### 실제 개발 DB 연동의 지연과 큐 중단
 
@@ -304,7 +304,7 @@ AI는 계산 엔진이 아니다. 서버에서 재계산한 Risk 결과 중 업�
 - 한도는 모델·프로젝트별 요청 수·토큰 수·일일 한도를 설정으로 관리하며 분당 15회를 공통 고정값으로 가정하지 않는다. 429에는 제한된 지수 백오프·지터를 적용하고 시간 예산 초과·일일 한도 소진 시 AI_UNAVAILABLE로 종료한다. 지표 API는 계속 동작해야 한다.
 - 프롬프트는 `app/ai/prompts/`에서 PROMPT_VERSION으로 관리한다. Verifier는 JSON Schema, 숫자·지표 의미·출처·상태, 공식/참고 혼동, 금지 표현, 개인정보, 분량·중복을 검사한다. 실패 시 1회 재생성하고 재실패는 503 AI_VERIFY_FAILED다.
 - Risk·AI 캐시는 분석 조건·data_version으로 구분하고 AI에는 prompt_version·model·context_hash를 추가한다. 데이터·모델·프롬프트가 바뀌면 이전 결과를 재사용하지 않는다.
-- API 로그는 시간·경로·HTTP 상태·소요 시간·AI 성공/실패를 기록한다. ETL은 batch_id·단계·입력/정상/제외/보완/실패 건수·사유·소요 시간을 남긴다. 겹치는 검토 플래그 건수와 최종 제외 건수를 구분한다.
+- API 로그는 UTC 시각·고정 경로/unknown 표식·실제 HTTP 상태/null·소요 시간·서버 request_id·ASGI 전송 완료 여부를 JSON stderr에 기록한다. AI endpoint의 최종 상태와 LLM client.post 시도/HTTP200 여부를 구분한다. ETL은 독립 run_id·실제 batch/version UUID·순차 단계·허용 건수/품질사유·시간만 선택하고 겹치는 플래그를 최종 제외 수로 합산하지 않는다. 앱 파일/DB 저장·외부 수집기를 추가하지 않았으므로 원본30일 보관/삭제는 배포 수집기에서 후속 검증한다.
 - 로그에는 사용자 주소·좌표·건물/층호 식별정보·원본 행·AI 입력/출력 원문·API 키를 남기지 않는다.
 
 ## 9. 외부 명세 동기화·확인 대기
@@ -530,3 +530,12 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - 요청 중 DB/LLM/외부 HTTP를 호출하지 않고 인증키 없이 동작한다. 원본8필드/id/type/region은 FE mock과 대조했다. 422 입력·500 서비스/serialization 오류·no-store·안전 로그·공통 외피를 유지하며 DB 모델/migration·의존성·Docker/.env·FE 변경은 없다.
 - 새 일반34개를 포함한 전체 **1,052 passed**, 기존 통합115개 deselected, ruff/format **252 files**·mypy **127 files** 통과. 25구×두업종/생략의78조합에서 목록 보존, 불량/중복 입력·URL·불변성·고정 확인일·외부/DB 차단·실패/출처/OpenAPI/CORS를 확인했다. 실제 로컬 uvicorn HTTP **10개** 검사도 통과했다. SQL 변경이 없어 이번 작업의 PostGIS 통합 suite 재실행/개발 DB 적재는 하지 않았다.
 - 공식4곳을 Codex Windows 환경에서 실제 HTTP GET하여200·기관 제목을 확인했고 아카데미는 같은 호스트 `/main`으로 이동했다. 외부 검색 도구의 센터 timeout과 직접 HTTP 성공을 구분하며 이후 가용성/지원 자격을 보장하지 않는다. BE README/CLAUDE.md와 [FE 요청 보고서](fe-support-links-api-request.md)를 반영했고 FE 코드/CLAUDE.md·실제 화면 연결은 담당자 대기다. CI/CodeQL 성공 전에는 병합·이슈 종료로 표시하지 않는다.
+
+## 29. BE-35 개인정보 없는 운영 로그 기반 (#72)
+
+- 이 작업 시작 시 미병합이던 상담 PR71·AI PR69를 모두 최신 CI/CodeQL 성공 후 일반 Squash 병합했고 이슈70/68 종료를 확인했다. AI 브랜치에는 먼저 병합된 상담 기능의 앱/문서 충돌4곳을 두 기능 보존으로 정리해 일반1,071개와 원격 통합117개를 재확인했다. 새 로그 구현은 develop `e3ebddc` 기반이다.
+- [원본 확인·Codex 설계·Claude 실제 MD 수정·Codex 최종 점검](designs/feat72-private-operation-logs.md) 후 API 순수 ASGI 관측·ETL6개 실행기/단계·Gemini HTTP 시도 메타데이터를 고정 필드 JSON stderr로 기록했다. 본문/주소/좌표/헤더/IP/원자료·프롬프트/출력/키는 기록하지 않고 알려지지 않은 경로는unmatched다. API 실제 상태/null·ASGI 완료·서버UUID와 ETLrun_id/실제batch/version UUID·허용 건수/품질사유를 구분한다.
+- 기록 실패/ID 생성 실패는 작업을 바꾸지 않으며 취소/예외·ETL transaction/commit·stdout 결과·응답/exit code를 보존했다. 인허가 argparse 오류는 고정 메시지다. 기본 uvicorn access log를 억제했고 기존 --no-access-log 안내도 유지했다. HTTP200 관측은 파싱/AI 최종 검증 성공이 아니며 transport 내부 재시도는 미구분이다.
+- 새 일반43개 포함 전체 **1,114개**, 별도 포트55472 일회용 PostGIS 전체 **117개**, ruff/format **267 files**, mypy **133 files** 통과. API 입력/경로·취소/스트림·stderr/ID 장애·동시성·ETL6개/commit 이후 기록·합성 snapshot/CLI·정제숫자·Gemini0/재시도/취소를 확인했다. 기존 Starlette 경고1건은 유지한다.
+- 실제 기본 uvicorn HTTP **10건/JSON API 이벤트10개**, 합성 snapshot subprocess dry-run **6개 ETL 이벤트**와 transformed2/affected0·원래 stdout·비노출을 확인했다. 기본INFO access stdout도 비어 있었고 실모델 호출0·실제 개발 DB 쓰기0이다. 개발 DB의 파괴적 테스트 대신 일회용 컨테이너를 사용했다.
+- BE README/CLAUDE.md를 반영했으며 공개 API/응답·DB 모델/migration·의존성·.env/Docker·FE 변경은 없다. 응답 계약 변경이 없어 새 FE 요청서는 만들지 않았다. **원본30일 보관/삭제·외부수집기/프록시/제3자 전체로그 정책은 미구현/미검증**이고 느린stderr/프로세스간 원자성은 보장하지 않는다. CI/CodeQL 후 일반 Squash 병합하며 실제 상태는 #72 연결 PR을 따른다. 다음 독립 개발은 **BE-34 Risk·AI 캐시와 버전 무효화**다.

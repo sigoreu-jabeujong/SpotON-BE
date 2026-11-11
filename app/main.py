@@ -9,6 +9,7 @@ from app.ai.factory import create_llm_client
 from app.core.config import Settings, get_settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.middleware import UnhandledErrorMiddleware
+from app.core.request_logging import OperationLogMiddleware
 from app.db.dependencies import DatabaseResources
 from app.routers.geocode import router as geocode_router
 from app.routers.health import router as health_router
@@ -27,6 +28,7 @@ def configure_sensitive_request_logging() -> None:
     """Keep third-party request URLs, including address query strings, out of logs."""
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").disabled = True
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -55,6 +57,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type"],
     )
+    application.add_middleware(OperationLogMiddleware)
     application.include_router(health_router, prefix="/api")
     application.include_router(geocode_router, prefix="/api")
     application.include_router(stores_router, prefix="/api")
