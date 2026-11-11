@@ -17,6 +17,7 @@ from app.core.config import Settings
 from app.db.session import create_db_engine, normalize_database_url
 from etl.localdata.client import LocalDataClient, LocalDataError
 from etl.localdata.constants import Source
+from etl.localdata.csv_source import CSVSourceError, load_validated_csv
 from etl.localdata.pipeline import transform_rows
 from etl.localdata.repository import upsert_records
 from etl.localdata.snapshot import SnapshotError, load_snapshot, save_snapshot
@@ -71,6 +72,8 @@ def run_import(
     write: bool = False,
     workers: int = 1,
     from_snapshot: Path | None = None,
+    from_csv: Path | None = None,
+    validation: Path | None = None,
     save: bool = False,
     max_requests: int = DEFAULT_REQUEST_BUDGET,
     progress: Callable[[Source, str, int, int], None] | None = None,
@@ -79,6 +82,13 @@ def run_import(
         raise ImportConfigurationError("import:workers")
     if from_snapshot is not None and save:
         raise ImportConfigurationError("import:snapshot_options")
+    if (
+        from_csv is not None
+        and (write or from_snapshot is not None or validation is None)
+        or validation is not None
+        and from_csv is None
+    ):
+        raise ImportConfigurationError("import:csv_options")
     config = settings if settings is not None else Settings()
     engine: Engine | None = None
     try:
@@ -90,6 +100,8 @@ def run_import(
                 check_local_database(connection)
         if from_snapshot is not None:
             collection = load_snapshot(from_snapshot, source)
+        elif from_csv is not None and validation is not None:
+            collection = load_validated_csv(from_csv, validation, source)
         else:
             if (
                 config.data_go_kr_service_key is None
@@ -133,7 +145,16 @@ def run_import(
             "reference_date": collection.collected_at.date().isoformat(),
             "authorities": len(collection.authorities),
             "request_count": collection.request_count,
-            "expected_pages": sum(stat.page_count for stat in collection.authorities),
+            "expected_pages": (
+                sum(stat.page_count or 0 for stat in collection.authorities)
+                if collection.input_kind == "api"
+                else None
+            ),
+            "input_kind": collection.input_kind,
+            "input_sha256_prefix": collection.input_sha256[:12]
+            if collection.input_sha256
+            else None,
+            "as_of_basis": collection.as_of_basis,
             "affected": affected,
             "snapshot": snapshot_path.name if snapshot_path else None,
             **report,
@@ -171,17 +192,29 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--write", action="store_true", help="Write only to local spoton_dev")
     mode.add_argument("--dry-run", action="store_true", help="Default; never create a DB engine")
     parser.add_argument("--workers", type=int, choices=range(1, 5), default=1)
-    parser.add_argument("--from-snapshot", type=Path)
+    inputs = parser.add_mutually_exclusive_group()
+    inputs.add_argument("--from-snapshot", type=Path)
+    inputs.add_argument("--from-csv", type=Path)
+    parser.add_argument("--validation", type=Path)
     parser.add_argument("--save-snapshot", action="store_true")
     args = parser.parse_args(argv)
     if args.from_snapshot is not None and args.save_snapshot:
         parser.error("--from-snapshot and --save-snapshot cannot be combined")
+    if (
+        args.from_csv is not None
+        and (args.write or args.validation is None)
+        or args.validation is not None
+        and args.from_csv is None
+    ):
+        parser.error("--from-csv requires --validation and permits dry-run only")
     try:
         result = run_import(
             Source(args.source),
             write=args.write,
             workers=args.workers,
             from_snapshot=args.from_snapshot,
+            from_csv=args.from_csv,
+            validation=args.validation,
             save=args.save_snapshot,
             progress=_progress,
         )
@@ -189,7 +222,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except Exception as error:
         result = {"event": "error", "kind": type(error).__name__}
-        if isinstance(error, LocalDataError | SnapshotError | ImportConfigurationError):
+        if isinstance(
+            error, LocalDataError | SnapshotError | ImportConfigurationError | CSVSourceError
+        ):
             code = str(error).split(" ")[0]
             if re.fullmatch(r"[a-z_]+:[a-z_0-9]+", code):
                 result["code"] = code

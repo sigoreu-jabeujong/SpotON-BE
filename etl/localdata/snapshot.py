@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import tempfile
 from collections import Counter
 from collections.abc import Iterator
@@ -16,7 +17,7 @@ from etl.localdata.constants import PAGE_SIZE, SEOUL_AUTHORITY_CODES, Source
 from etl.localdata.dates import parse_source_timestamp
 from etl.localdata.dto import LocalDataRow
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 DTO_FIELDS = (
     "authority_code",
     "management_no",
@@ -47,6 +48,10 @@ TOP_FIELDS = {
     "row_count",
     "rows_sha256",
     "rows",
+    "input_kind",
+    "input_sha256",
+    "validation_sha256",
+    "as_of_basis",
 }
 STAT_FIELDS = {"gu_code", "total_count", "page_count", "row_count"}
 
@@ -97,6 +102,10 @@ def save_snapshot(collection: CollectedSource, directory: Path) -> Path:
         ],
         "row_count": len(collection.rows),
         "rows_sha256": rows_digest(collection.rows),
+        "input_kind": collection.input_kind,
+        "input_sha256": collection.input_sha256,
+        "validation_sha256": collection.validation_sha256,
+        "as_of_basis": collection.as_of_basis,
     }
     descriptor, temporary = tempfile.mkstemp(prefix=".import-", suffix=".part", dir=directory)
     try:
@@ -132,6 +141,21 @@ def _unique_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _validate_collection(collection: CollectedSource) -> None:
+    if collection.input_kind == "api":
+        if (
+            collection.input_sha256 is not None
+            or collection.validation_sha256 is not None
+            or collection.as_of_basis != "api_fetch_start"
+        ):
+            raise SnapshotError("snapshot:provenance")
+    elif collection.input_kind == "validated_csv":
+        for digest in (collection.input_sha256, collection.validation_sha256):
+            if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+                raise SnapshotError("snapshot:provenance")
+        if collection.as_of_basis != "validation_checked_at":
+            raise SnapshotError("snapshot:provenance")
+    else:
+        raise SnapshotError("snapshot:provenance")
     codes = [stat.gu_code for stat in collection.authorities]
     if len(codes) != len(SEOUL_AUTHORITY_CODES) or set(codes) != set(SEOUL_AUTHORITY_CODES):
         raise SnapshotError("snapshot:authorities")
@@ -139,14 +163,17 @@ def _validate_collection(collection: CollectedSource) -> None:
     if any(code not in SEOUL_AUTHORITY_CODES for code in counts):
         raise SnapshotError("snapshot:row_authority")
     for stat in collection.authorities:
-        numbers = (stat.total_count, stat.page_count, stat.row_count)
+        numbers = (stat.total_count, stat.row_count)
         if any(type(number) is not int or number < 0 for number in numbers):
             raise SnapshotError("snapshot:counts")
-        if (
-            stat.row_count != stat.total_count
-            or counts[stat.gu_code] != stat.row_count
-            or stat.page_count != max(math.ceil(stat.total_count / PAGE_SIZE), 1)
-        ):
+        if stat.row_count != stat.total_count or counts[stat.gu_code] != stat.row_count:
+            raise SnapshotError("snapshot:counts")
+        if collection.input_kind == "api":
+            if type(stat.page_count) is not int or stat.page_count != max(
+                math.ceil(stat.total_count / PAGE_SIZE), 1
+            ):
+                raise SnapshotError("snapshot:counts")
+        elif stat.page_count is not None:
             raise SnapshotError("snapshot:counts")
 
 
@@ -188,6 +215,10 @@ def load_snapshot(path: Path, source: Source) -> CollectedSource:
             collected_at,
             tuple(AuthorityStats(**stat) for stat in raw_stats),
             tuple(LocalDataRow(**row) for row in raw_rows),
+            input_kind=payload["input_kind"],
+            input_sha256=payload["input_sha256"],
+            validation_sha256=payload["validation_sha256"],
+            as_of_basis=payload["as_of_basis"],
         )
         _validate_collection(collection)
         if (
