@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
     database_url: SecretStr | None = None
     database_connect_timeout: int = Field(default=5, ge=1, le=60)
+    database_statement_timeout_ms: int = Field(default=3000, ge=1, le=60000)
     data_go_kr_service_key: SecretStr | None = None
     kakao_rest_api_key: SecretStr | None = None
     kakao_request_timeout: float = Field(default=5, ge=1, le=10)
