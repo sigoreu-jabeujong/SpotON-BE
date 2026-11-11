@@ -158,3 +158,5 @@ BE README/CLAUDE.md/작업계획과 [FE 요청 보고서](../fe-risk-interpret-a
 [PR69](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/69)를 develop 대상으로 생성했다. 초기 커밋 f35f25f의 [CodeQL 실행](https://github.com/sigoreu-jabeujong/SpotON-BE/actions/runs/43096721342)은 job 생성 전 startup_failure로 종료됐다. 실행 화면에는 GitHub의 unexpected internal error·일시적 오류 시 재시도 안내가 있다. 코드 분석 결과/취약점 발견은 아니며 당시 Backend CI도 job 생성 전 queued였다. GitHub 공식 상태에는 당시 장애 공지가 없었으므로 서비스 전체 장애로 단정하지 않는다.
 
 기본 설정의 동적 CodeQL 실행은 일반 rerun이 거절됐고 check-suite 재요청도404였다. 이 기록을 포함한 정상 문서 커밋으로 새 검사를 요청한다. 검사 설정/권한/보호 규칙은 변경하지 않는다. 최종 검사의 실제 결과는 PR 체크와 실행 링크를 따른다. 로컬 통과를 원격 CI/CodeQL 통과로 대신 표시하거나 미검증 상태로 병합하지 않는다.
+
+후속 확인에서989a6f6의 CodeQL도 같은 내부 오류로 job 생성 전 종료됐고 Backend CI는 대기가 지속됐다. 이후 독립 상담 링크 PR71에서 CI/CodeQL 작업이 새로 생성되기 시작한 것을 확인했다. 원격 실행 상태가 달라져 이 경위 기록 커밋으로 PR69의 새 검사를 요청한다. 같은 오류 중 무조건 반복하거나 보안 설정을 변경하지 않으며, 최신 head의 실제 체크 성공 후에만 병합한다.
