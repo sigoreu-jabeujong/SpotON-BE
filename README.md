@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 health·서울 주소 검색·건물별 점포 이력 API, 공통 응답·오류 처리, PostgreSQL/PostGIS·stores, 인허가 수집·정제·멱등 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 사용자 제공 검증 CSV 689,440건을 적재했으며 migration `0003`부터 배치 출처를 저장합니다. 현재 API의 최신 전체 수집과 주변·시점·분석·AI 해석 API는 후속 작업입니다.
+현재는 health·서울 주소 검색·건물별 점포 이력·주변 점포 조회 API, 공통 응답·오류 처리, PostgreSQL/PostGIS·stores, 인허가 수집·정제·멱등 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 사용자 제공 검증 CSV 689,440건을 적재했으며 migration `0003`부터 배치 출처를 저장하고 `0004`에서 거리 조회용 geography 인덱스를 추가합니다. 현재 원천의 최신 전체 수집, data-range·snapshot·분석·AI 해석 API와 FE 반영은 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -48,6 +48,19 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 - FE의 nullable 기간·복합 식별자 호환은 [FE 수정 요청 보고서](docs/fe-store-history-api-request.md)를 통해 담당자에게 요청하며 아직 반영되지 않았습니다. 후속 API 개발 중에는 FE의 기존 `VITE_USE_MOCK=true`, `VITE_REAL_API_PATHS=/geocode,/stores/history`로 두 API만 실제 연결할 수 있습니다.
 
 설계·원본 계약 차이·검증 기록은 [이슈 36 설계](docs/designs/feat36-store-history-api.md)를 확인합니다. 원본 v1.2 전체 계약의 일괄 동기화 완료를 뜻하지 않습니다.
+
+## 주변 점포 조회
+
+`GET /api/stores/nearby?lat={위도}&lng={경도}&category={cafe|restaurant}`는 선택 시점의 반경 내 지원 점포를 반환합니다. 좌표는 geocode 결과를 사용하고 radius는 300/500/1000m(기본 500), as_of는 선택 YYYY-MM입니다. 과거 월은 월말, 최신 월은 검증 배치의 전역 원천 갱신일을 적용합니다.
+
+- `sub_category`는 음식점 4종 또는 cafe를 쉼표로 전달합니다. 면적·가맹 조건과 독립적인 `include_unknown_area`·`include_unknown_franchise`는 기본 true입니다. 기존 `include_unknown` 단독 전송은 두 조건에 함께 적용하고 개별 토글과 혼합하면 거절합니다.
+- 0㎡와 null은 정보 없음입니다. 0㎡ 원본을 수정하지 않으며 응답 `area_m2=null`, 알려진 면적 필터에서는 제외합니다. 가맹 미확인을 개인 매장으로 바꾸지 않습니다.
+- 원본 날짜가 유효한 점포에 `open_date<=T AND (close_date IS NULL OR close_date>T)`를 적용합니다. 날짜 미확인·오류, 폐업일 없는 폐업, 한시 영업 true는 제외합니다. 현재 상태와 전체 운영기간은 최신 데이터 기준이며 과거 시점 상태나 T까지의 기간으로 바꾸지 않습니다.
+- geography 미터 거리로 반경 경계를 포함합니다. 반올림 전 거리 순서를 유지하며 표시값만 소수 첫째 자리로 반환합니다. 식별자는 `source+license_no`, 상호·기간·면적은 nullable입니다.
+- `excluded_no_coord`는 **서울 전체에서 같은 비공간 조건을 만족하는 좌표 미확보 수**이며 반경 내 누락 수가 아닙니다. `meta.excluded_no_coord_scope=seoul_nonspatial_cohort`를 함께 확인합니다.
+- 검증된 배치·기준일이 없거나 DB가 실패하면 500입니다. 준비 실패를 정상 0건으로 바꾸지 않습니다. 입력 오류는 422이며 모든 응답은 no-store입니다. 개발 실행은 좌표 query가 access log에 남지 않도록 `--no-access-log`를 유지합니다.
+
+실행 전 migration `0004`까지 적용합니다. [구현·검증 기록](docs/designs/feat41-nearby-api.md), [FE 수정 요청 보고서](docs/fe-nearby-api-request.md)를 확인합니다. FE 화면·CLAUDE.md 반영은 담당자 대기이며 data-range·snapshot API는 이번 범위에 없습니다.
 
 ## AI LLM client
 
@@ -144,7 +157,7 @@ uv run --locked --extra dev --no-editable python -m etl.localdata --source gener
 - `--from-csv --write`는 허용하지 않습니다. CSV dry-run으로 만든 snapshot을 확인한 뒤
   같은 파일을 `--from-snapshot --write`로 적재합니다. 원본 CSV·보고서는 수정하지 않습니다.
 - `--write`는 localhost의 `spoton_dev`·`spoton_app`만 허용합니다. 연결 후 계정·권한·revision
-  `0003`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
+  `0004`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
 - 같은 snapshot으로 다시 실행하면 기존 `(source, license_no)`를 갱신합니다. `affected`는
   성공적으로 처리한 입력 수이고, 값이 실제로 변경된 행 수를 뜻하지 않습니다.
 - 실제 원천은 성공 코드 `0`, 날짜 `YYYY-MM-DD`, 갱신시각 `YYYY-MM-DD hh:mm:ss`를 사용합니다.

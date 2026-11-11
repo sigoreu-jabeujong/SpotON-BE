@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from geoalchemy2 import Geometry
+from geoalchemy2 import Geography, Geometry
 from geoalchemy2.elements import WKBElement, WKTElement
 from sqlalchemy import (
     BigInteger,
@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    cast,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
@@ -83,3 +84,13 @@ class Store(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     batch_id: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True))
+
+
+# No geography typmod: query and index must have the same cast expression.
+STORE_GEOGRAPHY = Geography(geometry_type=None, spatial_index=False)
+Index(
+    "ix_stores_geography_gist",
+    cast(Store.geom, STORE_GEOGRAPHY),
+    postgresql_using="gist",
+    postgresql_where=Store.geom.is_not(None),
+)
