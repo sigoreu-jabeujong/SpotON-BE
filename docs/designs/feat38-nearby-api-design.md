@@ -5,8 +5,8 @@
 - 작성일: 2026-11-12
 - 이슈: [#38 주변 점포 조회 API 공간·시점·필터 설계](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/38)
 - 브랜치: `feat#38-nearby-api-design`, 대상: `develop`
-- 기반: 최신 develop `1e7a2a6`. 기존 #36 작업 폴더와 분리한 Git worktree에서 작성한다.
-- 선행: [BE PR #37](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/37)의 배치 출처·기간 계산·DB 요청 세션. 작성 시점에는 미병합이다.
+- 기반: 작성 시작 시 develop `1e7a2a6`에서 분리했고, 검토 중 PR #37이 병합되어 최신 develop `2160e64`를 정상 merge로 반영했다. 기존 #36 작업 폴더는 유지한다.
+- 선행: [BE PR #37](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/37)의 배치 출처·기간 계산·DB 요청 세션은 2026-11-12 develop 반영을 확인했다. nearby 구현은 이번 범위가 아니다.
 - **이번 범위는 BE 설계·Claude 설계 MD 검토·Codex 점검·FE 변경 요청 보고서다. API 코드·migration·DB 데이터는 변경하지 않는다.** 구현은 선행 PR 반영 후 별도 작업으로 진행한다.
 - FE 코드·설정·문서와 FE 이슈·PR은 직접 수정하거나 생성하지 않는다. [FE 요청 보고서](../fe-nearby-api-request.md)는 미구현 설계안의 검토 요청이며, FE 합의나 반영 완료를 뜻하지 않는다.
 
@@ -180,6 +180,8 @@ WHERE geom IS NOT NULL;
 
 현재 PR #37 migration head=0003을 전제로 후속 migration 0004를 계획한다. 실제 번호는 구현 시 최신 head를 확인한다. SQLAlchemy 모델의 인덱스 표현식과 질의 cast를 동일하게 컴파일하고, 독립된 인덱스 정의 검사·EXPLAIN ANALYZE BUFFERS·관리 테이블 메타데이터 비교로 확인한다. 작은 fixture에서 Seq Scan이 선택되는 것만으로 실패시키지 않고 대표 분포/규모에서 인덱스 후보 검색이 가능한지 검증한다. 이 설계 PR에서 인덱스를 생성하지 않는다.
 
+현재 ETL runner가 migration 0003을 검사하므로 새 head 적용 시 runner의 준비 상태 검사·관련 단위 검사도 함께 갱신해야 한다. 기존 migration 단계별 왕복 검사는 유지하고, head 검사와 표현식 인덱스 기대값은 새 스키마에 맞춰 독립적으로 검증한다.
+
 기존 geom·ETL 원본·점포 행을 다시 쓰거나 재적재하지 않는다. 일반 인덱스 생성의 쓰기 잠금과 유지 비용은 구현 시 기록한다. downgrade는 새 인덱스만 제거하고 점포·PostGIS 확장을 삭제하지 않는다.
 
 인덱스·cast 일치에 대한 검토 보완:
@@ -252,12 +254,14 @@ geom이 없으면 어느 반경 안에 있는지 알 수 없다. 따라서 서�
 
 meta에는 R5/R6, as_of=T, space=radius_{radius}m, denominator=count, data_updated_at=D, 실제 확인된 collected_at 또는 null, is_demo=false, 결과·기준일 산정에 사용한 배치 IDs/매핑·규칙 버전과 §5 범위를 제공한다. 수집 완료일을 모르면 기존처럼 사유를 남기고 오늘·검증일을 채우지 않는다.
 
+nearby의 규칙 버전은 공간·시점·0㎡ 미확인 정책을 식별해야 한다. history의 규칙 버전 문자열을 그대로 복사해 다른 정책을 같은 버전으로 표시하지 않는다.
+
 - meta 필드 구조는 BE-04 공통 meta(DataVersion 등)가 미완료이므로 이 표는 설계안이다. 작업계획상 "필드 구조를 임의로 만들지 않는다"에 따라 excluded_no_coord_scope·operating_period_basis·원천별 기준일·가맹 데이터 상태 등 신규 meta 키는 FE 보고서의 검토 항목이며 확정 계약이 아니다.
 - R5는 일반음식점, R6는 휴게음식점 원천이며 현행 BE/FE 출처 표와 일치시킨다.
 
 ## 7. 구현 계층·운영 계획
 
-- 선행 PR #37 반영 후, 중복될 지원 업종·배치 기준일·기간 계산을 공통 서비스로 분리할지 검토한다. history의 기존 동작을 변경하지 않는 회귀 검사가 필요하다.
+- develop에 반영된 PR #37 기반에서 지원 업종·배치 기준일·기간 계산의 공통 분리를 검토한다. history의 기존 동작을 변경하지 않는 회귀 검사가 필요하다.
 - `app/schemas/nearby.py`: 요청·응답·enum·출력 일관성. `app/services/nearby.py`: 공통 cohort·시점·공간 SQL·마커 변환. `app/routers/stores.py`: 검증·응답·no-store.
 - 배치 조회·최소 월·마커·좌표 누락 수는 같은 요청의 READ ONLY REPEATABLE READ 트랜잭션에서 처리한다. 서로 다른 cohort 구현으로 count가 어긋나지 않게 공통 조건을 재사용한다.
 - 세션 connection 취득 시 REPEATABLE READ 실행 옵션을 적용하고 첫 데이터 조회 전에 SET TRANSACTION READ ONLY를 설정한다. autobegin 자체가 문제가 아니라 이미 조회한 뒤 격리 수준을 바꾸는 것이 문제다. 확인한 PR #37 헬퍼의 기존 설정 순서를 재사용하고 필요한 공통화만 history 회귀 검사와 함께 진행한다.
@@ -301,7 +305,7 @@ meta에는 R5/R6, as_of=T, space=radius_{radius}m, denominator=count, data_updat
 - Codex: 기존 코드·원본 API·FE 요청 경로를 대조했다. 실제 DB metadata와 공간 함수 288개는 읽기 전용으로만 확인했다.
 - Claude Code: 2026-11-12 이 MD 한 파일만 Read/Edit로 검토·직접 수정했다. 원본 PDF·코드·DB·PR #37은 직접 확인하지 않았고, 원본 계약·실 DB 사실은 MD 기재 내용만 근거로 했다. 문서 검토이며 API·SQL·migration 테스트를 실행한 것이 아니다. Codex가 실제 diff를 점검한다.
 - FE 확인 대기: 좌표 누락 수의 서울 범위 표시, 신규 독립 unknown UI와 호환 인자, 마커 nullable/복합 식별자, 과거 필터와 현재 운영 기간 표기.
-- 구현 선행: PR #37 반영, 실제 develop head 재확인, 본 설계의 FE 영향 검토. 검토 대기를 FE 합의 완료로 표시하지 않는다.
+- 구현 선행: PR #37 반영은 확인했고, 실제 구현 시 develop head 재확인과 FE 영향 검토가 필요하다. 검토 대기를 FE 합의 완료로 표시하지 않는다.
 
 ### Claude 검토 이유와 수정 내역
 
