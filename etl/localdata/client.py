@@ -12,7 +12,7 @@ from etl.localdata.constants import (
     PAGE_SIZE,
     SEOUL_AUTHORITY_CODES,
     SOURCE_ENDPOINTS,
-    SUCCESS_RESULT_CODE,
+    SUCCESS_RESULT_CODES,
     Source,
 )
 from etl.localdata.dto import LocalDataRow
@@ -43,6 +43,8 @@ class Page:
 
 def _safe_int(value: object, *, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise LocalDataContractError(f"contract_error:{name}")
+    if isinstance(value, str) and not value.isascii():
         raise LocalDataContractError(f"contract_error:{name}")
     try:
         result = int(value)
@@ -197,8 +199,11 @@ class LocalDataClient:
         body = envelope.get("body")
         if not isinstance(header, Mapping) or not isinstance(body, Mapping):
             raise LocalDataContractError("contract_error:envelope")
-        result_code = str(header.get("resultCode", "")).strip()
-        if result_code != SUCCESS_RESULT_CODE:
+        result_code = header.get("resultCode")
+        success = (type(result_code) is int and result_code == 0) or (
+            isinstance(result_code, str) and result_code in SUCCESS_RESULT_CODES
+        )
+        if not success:
             raise LocalDataContractError("contract_error:result_code")
         page_no = _safe_int(body.get("pageNo"), name="page_no")
         total_count = _safe_int(body.get("totalCount"), name="total_count")
@@ -212,6 +217,10 @@ class LocalDataClient:
             raise LocalDataContractError("contract_error:items")
         if not isinstance(raw_rows, list) or not all(isinstance(row, dict) for row in raw_rows):
             raise LocalDataContractError("contract_error:rows")
+        if raw_rows and any(
+            not any(key in row for row in raw_rows) for key in ("MNG_NO", "OPN_ATMY_GRP_CD")
+        ):
+            raise LocalDataContractError("contract_error:required_fields")
         rows = tuple(LocalDataRow.from_api(row) for row in raw_rows)
         if page_no != requested_page:
             raise LocalDataContractError("contract_error:page_no_mismatch")

@@ -14,7 +14,8 @@ SOURCE_ENDPOINTS: dict[Source, str] = {
     Source.REST_CAFE: "https://apis.data.go.kr/1741000/rest_cafes/info",
 }
 PAGE_SIZE = 100
-SUCCESS_RESULT_CODE = "00"
+# Live responses use 0; retain 00 for the previously documented/fixture format.
+SUCCESS_RESULT_CODES = frozenset({"0", "00"})
 
 # 공공데이터포털 공식 공지 NOTICE_0000000004824 첨부자료
 # 개방자치단체코드_영업상태코드_행정체제개편반영_20260702.xlsx

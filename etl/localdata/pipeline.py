@@ -8,6 +8,7 @@ from uuid import UUID
 from etl.address.building_key import parse_jibun_address
 from etl.address.floor_unit import LocationLevel, parse_floor_unit, reconcile_floor_units
 from etl.localdata.constants import SEOUL_AUTHORITY_CODES, Source
+from etl.localdata.dates import parse_source_timestamp
 from etl.localdata.dto import LocalDataRow
 from etl.localdata.normalize import (
     CoordinateNormalizer,
@@ -71,13 +72,7 @@ class TransformResult:
 
 
 def _update_datetime(value: str | None) -> datetime | None:
-    if value is None:
-        return None
-    try:
-        parsed = datetime.strptime(value, "%Y%m%d%H%M%S")
-    except ValueError:
-        return None
-    return parsed if parsed.strftime("%Y%m%d%H%M%S") == value else None
+    return parse_source_timestamp(value)
 
 
 def _dedupe_key(row: LocalDataRow) -> tuple[datetime, datetime, tuple[str, ...]]:
