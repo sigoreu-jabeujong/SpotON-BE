@@ -119,3 +119,11 @@ primary READ ONLY REPEATABLE READ의 snapshot/DB/role/시작시각/GUC 지문으
 AI 값은 현재 허용 후보와 검증한 선택 ID와 모델명뿐이다. snapshot/데이터/context/prompt/provider/model/max tokens/후보/schema/검증규칙을 key에 포함한다. 생성시각·이전 재생성 이력·문장/프롬프트는 저장하지 않는다. generated_at은 현재 응답 문장 조립 시각, regenerated는 현재 요청의 재생성 여부이며 hit=false다. 같은 key 생성만 single-flight로 합치고 key 대기는 semaphore 밖, 준비/공급자 실행만 gate 안이다. 전체 예산·hit의 앱 한도·miss의 공급자 한도·서버문장 실패500·no-store는 유지한다. 키 미설정/실패는 cache로 숨기지 않는다.
 
 TTL은 hit로 늘리지 않고 만료 경계부터 miss다. lifespan의1초 sweep으로 유휴 만료 참조도 정리하며 close→task cancel/await→DB close, 늦은 저장 차단·외부 취소 전파를 지킨다. 정지/이벤트루프 지연/시계 오류의 정확한 물리 삭제·덤프/스왑 secure erase를 보장하지 않는다. 공유 캐시의 시간 차이로 최근 동일 조건 조회가 추론될 수 있어 완전 익명성도 주장하지 않는다. 설계·세 차례 Claude MD 검토와 최종 결정은 docs/designs/feat74-risk-ai-cache.md, FE에는 기존 docs/fe-risk-interpret-api-request.md로 필드 의미를 전달한다. 응답 schema는 그대로이며 FE 저장소/CLAUDE.md 반영은 담당자 대기다.
+
+## BE API 연속 조회 검증 (BE #76)
+
+tests/integration/test_analysis_flow.py는 합성 snapshot→기존 runner→격리 PostGIS→실제 geocode 서비스(mock HTTP)→이력/월범위/주변/시점/활동/Risk/AI(mock 모델)/지원링크를 검증한다. Settings(_env_file=None)·fixture DB 동일성 확인·pytest 제한 override로 실제 개발 DB 쓰기를 차단한다. CI XML에 필수 함수10종 실행 조건을 두고 기존 no-skip/error/xfail 검사를 유지한다. endpoint별200만 확인하거나 parametrize 수로 필수 시나리오를 대신하지 않는다.
+
+같은 좌표/반경/업종/필터/T일 때 nearby.count=snapshot.N=Risk.competitor_count=활동open_count합이다. 이력total은 지원업종 전체/결측을 보존하여 별도다. nearby/snapshot의 좌표누락 수는 T시점영업, 활동/Risk는 T이전개업전체라 다를 수 있다. 전역D·과거월말T·현재기준상태·날짜결측과 실제0을 구분한다. 독립 HTTP 호출 사이의 원자적 snapshot은 보장하지 않는다. 원천 없는 이력0건/as_of=null은 기존 계약이며 전체 준비 완료를 뜻하지 않는다.
+
+실제 개발 검증은 로컬 uvicorn HTTP+실제 Kakao/READ ONLY DB+모의 모델로 수행했고 head0009·앱모델차이0·14테이블 행/geometry hash를 보존했다. schema/앱코드·모델/migration·프롬프트·의존성·실제 .env/Docker·FE 변경은 없다. 재현·결과·한계는 docs/be-api-verification.md, 설계/Claude 실제 검토/최종 결정은 docs/designs/feat76-api-flow-verification.md다. FE 계약/화면·실제 LLM 안전성·공식/조건부 활성화·브랜드57·로그30일삭제·운영/최종제출을 완료로 주장하지 않는다.

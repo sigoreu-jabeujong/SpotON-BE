@@ -109,3 +109,16 @@ Claude의 실제 MD diff를 읽었다. 실제 코드 대조 결과 캐시는 앱
 고정 합성 기대값·서로 다른 지번의 음성대조·동률좌표의 식별/순서·두원천 같은ID·면적0/결측·윤년/30일 월말을 검증한다. 최소6개 **고유 테스트 함수명**과 필수 시나리오명이 CI에 존재해야 하며 기존 no-skip/error 검사와 함께 적용한다. 일반 endpoint의 세부 파서/HTTP 오류는 기존 검사도 유지하고 새 연속흐름에 필요한 실패만 더한다.
 
 모의 공급자는 원문 주소/점포명/관리번호/층호/원좌표/정확 WGS84/배치UUID가 없음을 확인한다. 성공 주소 응답에는 계약상 원문이 있으므로 로그·오류 body 검사와 구분한다. 로그/실패 canary 확인·순차2요청 공급자1회·변경/동일내용 재적재의 새 버전과 호출증가·실패한 적재의 값/버전 보존을 채택한다. 동시 cold 합치기/취소는 기존74 검증 범위이며 이 작업에서 완료를 확대하지 않는다. 실제 환경은 공개 주소/기존키로 확인하고 nearby>0 case를 최소1개 요구한다. 실제 외부 인증 실패 시 중단/요청 원칙도 유지한다.
+
+## 9. 실제 구현·검증 결과
+
+Claude CLI JSON은 is_error=false·3turns·permission_denials=[]였고 실제 MD diff를 읽고 §8의 판단을 남긴 뒤 구현했다. tests/integration의 합성 helper/연속 검사와 기존 CI의 XML 필수 함수10종 guard를 추가했다. 앱/공개schema·DB모델/migration·프롬프트·의존성은 바꾸지 않았다. 실제 API 결함으로 확인된 항목은 없으며 아래 두 가지 잘못된 검증 가정을 교정했다.
+
+- 원천없는 이력은 기존get_history가0건/as_of=null을 허용한다. 빈 원천의 nearby/월범위/활동/Risk/AI는500이며 이력을 준비 probe로 쓰지 않는다.
+- 실제 데이터에서 좌표미확보 수를 모두 같게 보던 단언이 실패했다. 코드와 기존 FE 활동/Risk 요청서에 따르면 nearby/snapshot은 T시점영업, 활동/Risk는 T이전개업 전체 이력이다. 후자가 폐업 이력을 포함하므로 `nearby.excluded<=activity.excluded=Risk.excluded`로 교정하고, 합성 폐업·좌표없음 행으로1 vs2를 고정했다. 기존 계약을 바꾸거나 앱의 모집단을 통일하지 않았다.
+
+일반 **1,166 passed**, 일회용 PostGIS 전체 **146 passed**(신규22), ruff check/format, mypy **135files** 통과. 최종 fixture와 로그 stdout/stderr 범위를 보완한 연결22개도 재검증했다. 기존 Starlette 경고1건은 유지한다. 실제 integration XML을 그대로 CI guard에 넣어 통과하고 필수함수1개 제거 시 거절하는 음성대조를 확인했다. 기본 DB 미준비/skip 회피는 기존 conftest와 no-skip guard를 그대로 사용한다.
+
+실제 로컬 uvicorn HTTP23요청에서 docs/OpenAPI10경로/health와 카카오 실제검색2사례→DB후속연결을 확인했다. 이력5/2건·주변595/604건으로 빈집합 공허 통과가 아니었고, 각 조회의 식별/분해합계/영업수·D/T/버전/AI서버수치 일치·모의공급자1회/AI2요청을 확인했다. 앞선 가정 진단의 카카오2회를 포함해 실제카카오4회·실모델0회다. READ ONLY 개발DB head0009·모델차이0·14테이블 전체행/geometry hash·건수 보존을 확인했다. raw주소/좌표/키/응답은 보고서에 저장하지 않고 ignored local evidence/helper는 커밋하지 않는다.
+
+범위/재현/사례·FE전달·잔여 작업은 docs/be-api-verification.md에 기록했다. FE 저장소/CLAUDE.md·화면/계약·실제LLM안전성·브랜드57승인·공식/조건부활성화·지원맞춤정렬·로그30일삭제·운영/제출은 미완료다. 지정PR·CI/CodeQL 후 develop 일반Squash 병합하며 실제상태는 이슈76 연결기록을 따른다.
