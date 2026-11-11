@@ -11,6 +11,7 @@ from app.core.middleware import UnhandledErrorMiddleware
 from app.db.dependencies import DatabaseResources
 from app.routers.geocode import router as geocode_router
 from app.routers.health import router as health_router
+from app.routers.market import router as market_router
 from app.routers.meta import router as meta_router
 from app.routers.nearby import router as nearby_router
 from app.routers.snapshot import router as snapshot_router
@@ -54,6 +55,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(nearby_router, prefix="/api")
     application.include_router(snapshot_router, prefix="/api")
     application.include_router(meta_router, prefix="/api")
+    application.include_router(market_router, prefix="/api")
     return application
 
 
