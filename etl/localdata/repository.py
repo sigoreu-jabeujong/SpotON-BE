@@ -106,7 +106,9 @@ def upsert_records(
             payloads = [_payload(record) for record in records[offset : offset + chunk_size]]
             if not payloads:
                 continue
-            statement = insert(Store).values(payloads)
+            # Reuse a single-row statement: psycopg batches parameter sets instead
+            # of compiling tens of thousands of SQLAlchemy bind nodes per chunk.
+            statement = insert(Store)
             statement = statement.on_conflict_do_update(
                 constraint=UNIQUE_CONSTRAINT,
                 set_={
@@ -114,7 +116,7 @@ def upsert_records(
                     "updated_at": func.now(),
                 },
             )
-            connection.execute(statement)
+            connection.execute(statement, payloads)
             # psycopg/SQLAlchemy의 ON CONFLICT rowcount는 실행 방식에 따라 0이 될 수 있다.
             # 입력 키는 위에서 유일함을 검증하므로 성공한 payload 수가 처리 행 수다.
             affected += len(payloads)

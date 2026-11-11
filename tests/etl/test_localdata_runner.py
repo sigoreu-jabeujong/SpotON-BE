@@ -109,7 +109,7 @@ def test_connected_identity_must_match(identity: tuple[object, ...]) -> None:
         runner.check_local_database(connection)
 
 
-@pytest.mark.parametrize("revisions", [[], ["0001"], ["0002", "0002"]])
+@pytest.mark.parametrize("revisions", [[], ["0001"], ["0002"], ["0002", "0002"]])
 def test_connected_migration_must_match(revisions: list[str]) -> None:
     connection = MagicMock()
     connection.execute.return_value.one.return_value = ("spoton_dev", "spoton_app", False, True)
