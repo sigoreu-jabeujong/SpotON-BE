@@ -160,7 +160,9 @@ def load_source(
             data = stream.read(MAX_BYTES + 1)
         if len(data) > MAX_BYTES or hashlib.sha256(data).hexdigest() != expected_sha256:
             fail("hash_or_size")
-        encoding, count, rows, markets, quarters = _parse(data, year, reference)
+        encoding, count, rows, markets, quarters = _parse(
+            data, year, retrieved_at.astimezone(ZoneInfo("Asia/Seoul"))
+        )
     except ChangeImportError:
         raise
     except Exception:

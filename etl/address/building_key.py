@@ -130,8 +130,6 @@ def _valid_lot_number(value: int, *, minimum: int) -> bool:
 def _legal_dong_failure(token: str) -> BuildingKeyFailure | None:
     if LEGAL_DONG_RE.fullmatch(token) or LEGAL_GA_RE.fullmatch(token):
         return None
-    if token.endswith(("로", "길")) or token.endswith("동") or token.endswith("가"):
-        return BuildingKeyFailure.LEGAL_DONG_UNSUPPORTED
     return BuildingKeyFailure.LEGAL_DONG_UNSUPPORTED
 
 

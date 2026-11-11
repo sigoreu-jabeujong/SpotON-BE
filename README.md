@@ -145,6 +145,8 @@ uv run --locked --extra dev pytest
 
 테스트는 DB·외부 API 없이 health, 공통 응답·오류·OpenAPI·CORS·정보 비노출·환경 설정, DB 설정·세션 제어와 인허가 수집·정제, LLM client의 재시도·한도·응답 분류·비노출, 프롬프트 지문·조립과 AI 결과 검증·재생성을 검증합니다. 실제 SQL·공간 함수·권한·stores upsert는 아래 PostGIS 통합 job에서 수행합니다. 작업별 설계·Claude 검토·검증 결과는 `docs/designs/`에 기록합니다.
 
+2026-11-12 [전체 시스템 점검·수정 기록](docs/designs/feat58-system-audit-cleanup.md): 일반893개·격리 PostGIS92개 통과. 실제 DB head0009·모델차이0·조회 API5개와 카카오 주소 검색/이력 연결을 확인했습니다. LLM 전체/요청별 시간 예산·비정상 Retry-After·과도한 지번 숫자·CSV 수집시각 이후 분기 검증을 보완했습니다. FE lint/build/format은 통과했지만 nullable/복합 식별자 등 실제 화면 연동은 기존 FE 요청 보고서 반영 대기입니다. 유료 LLM 실제 호출·미구현 분석 API·브라우저 전체 시연을 검증한 것은 아닙니다.
+
 ## 지방행정 인허가 ETL
 
 기존 수집·정제 모듈을 연결하는 개발용 실행기를 제공합니다. 아래 명령은 저장소 루트에서

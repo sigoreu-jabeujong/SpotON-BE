@@ -4,7 +4,7 @@
 - 요청 대상: SpotON FE 담당자
 - 관련 작업: BE-12 / F-02 점포 이력
 - BE 이슈: [#36](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/36)
-- BE PR: [#37](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/37), develop 대상 검토 중
+- BE PR: [#37](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/37), develop 병합 완료 · FE 반영 대기
 - 상태: **FE 검토·구현 요청 / 반영 대기**
 
 ## 요청 내용

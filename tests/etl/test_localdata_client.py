@@ -104,6 +104,28 @@ def test_retries_transient_status_then_succeeds() -> None:
     assert sleeps == [30.0, 2]
 
 
+@pytest.mark.parametrize("value", ["NaN", "nan", "Infinity", "-Infinity", "1e400", "invalid"])
+def test_nonfinite_retry_after_uses_bounded_fallback(value: str) -> None:
+    responses = iter(
+        [
+            httpx.Response(429, headers={"Retry-After": value}),
+            httpx.Response(200, json=envelope(page=1, total=0, rows=[])),
+        ]
+    )
+    sleeps: list[float] = []
+    client = make_client(lambda _: next(responses), sleeps=sleeps)
+    assert client.collect_authority(Source.REST_CAFE, "3000000") == []
+    assert sleeps == [1.0]
+
+
+@pytest.mark.parametrize(("value", "expected"), [("-2", 0.0), ("2.5", 2.5), ("99", 30.0)])
+def test_finite_retry_after_clamping_is_preserved(value: str, expected: float) -> None:
+    assert (
+        LocalDataClient._retry_delay(httpx.Response(429, headers={"Retry-After": value}), 2)
+        == expected
+    )
+
+
 def test_truncated_page_and_wrong_authority_fail() -> None:
     truncated = make_client(
         lambda _: httpx.Response(

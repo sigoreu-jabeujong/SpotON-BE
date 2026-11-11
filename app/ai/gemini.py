@@ -98,8 +98,19 @@ class GeminiClient:
         if not self._api_key or not MODEL_NAME_PATTERN.fullmatch(self._model):
             raise LlmError(LlmErrorKind.NOT_CONFIGURED)
 
+        budget = asyncio.timeout(self._policy.time_budget)
+        try:
+            async with budget:
+                return await self._generate(request, self._api_key)
+        except TimeoutError:
+            if not budget.expired():
+                raise
+        # Raise outside the handler so request data cannot remain in __context__.
+        raise LlmError(LlmErrorKind.TIMEOUT)
+
+    async def _generate(self, request: LlmRequest, api_key: str) -> LlmResult:
         url = f"{GEMINI_MODELS_URL}/{self._model}:generateContent"
-        headers = {"x-goog-api-key": self._api_key}
+        headers = {"x-goog-api-key": api_key}
         body = self._body(request)
         deadline = self._monotonic() + self._policy.time_budget
         attempts = 0
@@ -113,6 +124,8 @@ class GeminiClient:
                 attempts += 1
                 timeout = min(self._policy.request_timeout, remaining)
                 response, failure = await self._post(client, url, headers, body, timeout)
+                if self._monotonic() >= deadline:
+                    raise LlmError(LlmErrorKind.TIMEOUT)
 
                 retryable = True
                 if response is not None:
@@ -156,8 +169,12 @@ class GeminiClient:
         timeout: float,
     ) -> tuple[httpx.Response | None, LlmErrorKind | None]:
         # 원인 예외가 LlmError의 __context__에 남지 않도록 except 안에서는 종류만 돌려준다.
+        attempt = asyncio.timeout(timeout)
         try:
-            response = await client.post(url, json=body, headers=headers, timeout=timeout)
+            async with attempt:
+                response = await client.post(url, json=body, headers=headers, timeout=timeout)
+        except TimeoutError:
+            return None, LlmErrorKind.TIMEOUT if attempt.expired() else LlmErrorKind.UPSTREAM
         except httpx.TimeoutException:
             return None, LlmErrorKind.TIMEOUT
         except httpx.HTTPError:

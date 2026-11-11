@@ -252,8 +252,133 @@ def test_slow_attempt_consumes_budget_before_retry() -> None:
         return httpx.Response(503)
 
     error = failure(make_client(slow, clock, time_budget=20))
-    assert error.kind is LlmErrorKind.UPSTREAM
+    assert error.kind is LlmErrorKind.TIMEOUT
     assert clock.sleeps == []
+
+
+def test_success_after_monotonic_deadline_is_rejected() -> None:
+    clock = Clock()
+
+    def late(_request: httpx.Request) -> httpx.Response:
+        clock.now += 21
+        return httpx.Response(200, json=ok_body())
+
+    error = failure(make_client(late, clock, time_budget=20))
+    assert error.kind is LlmErrorKind.TIMEOUT
+    assert error.__context__ is None
+
+
+def event_client(
+    handler, *, request_timeout=1, time_budget=0.01, max_retries=0, sleep=asyncio.sleep
+):
+    return GeminiClient(
+        api_key=SECRET_KEY,
+        model=MODEL,
+        policy=RetryPolicy(request_timeout, time_budget, max_retries, 0.001, 0.001),
+        limiter=RequestLimiter(per_minute=None, per_day=None),
+        max_output_tokens=10,
+        transport=httpx.MockTransport(handler),
+        sleep=sleep,
+        rng=lambda: 1,
+    )
+
+
+def test_total_budget_cancels_pending_transport_without_exception_context() -> None:
+    async def scenario():
+        cancelled = asyncio.Event()
+
+        async def pending(_request):
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        with pytest.raises(LlmError) as caught:
+            await asyncio.wait_for(event_client(pending).generate(request()), timeout=2)
+        assert caught.value.kind is LlmErrorKind.TIMEOUT
+        assert caught.value.__context__ is None and caught.value.__cause__ is None
+        assert cancelled.is_set()
+
+    asyncio.run(scenario())
+
+
+def test_attempt_timeout_retries_when_overall_budget_remains() -> None:
+    async def scenario():
+        calls = 0
+        cancelled = asyncio.Event()
+
+        async def handler(_request):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    cancelled.set()
+            return httpx.Response(200, json=ok_body())
+
+        result = await asyncio.wait_for(
+            event_client(
+                handler,
+                request_timeout=0.01,
+                time_budget=1,
+                max_retries=1,
+            ).generate(request()),
+            timeout=2,
+        )
+        assert result.attempts == calls == 2
+        assert cancelled.is_set()
+
+    asyncio.run(scenario())
+
+
+def test_overall_budget_cancels_retry_sleep() -> None:
+    async def scenario():
+        entered = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def blocked_sleep(_delay):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        with pytest.raises(LlmError) as caught:
+            await asyncio.wait_for(
+                event_client(
+                    lambda _: httpx.Response(429),
+                    max_retries=2,
+                    sleep=blocked_sleep,
+                ).generate(request()),
+                timeout=2,
+            )
+        assert caught.value.kind is LlmErrorKind.TIMEOUT
+        assert entered.is_set() and cancelled.is_set()
+
+    asyncio.run(scenario())
+
+
+def test_caller_cancellation_propagates() -> None:
+    async def scenario():
+        entered = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def pending(_request):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        task = asyncio.create_task(event_client(pending, time_budget=10).generate(request()))
+        await asyncio.wait_for(entered.wait(), timeout=2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert cancelled.is_set()
+
+    asyncio.run(scenario())
 
 
 def test_request_timeout_shrinks_to_remaining_budget() -> None:
