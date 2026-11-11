@@ -152,3 +152,9 @@ Claude 실제 수정 diff 전체와 JSON(is_error=false,3turns,permission_denial
 ### 반영 범위와 후속
 
 BE README/CLAUDE.md/작업계획과 [FE 요청 보고서](../fe-risk-interpret-api-request.md)를 갱신했다. FE 코드·CLAUDE.md 반영과 원본 계약 합의는 담당자 대기다. 이력/활동 추가문맥·캐시·공식/조건부 수치·브랜드57·분산 한도·전체 통합/브라우저 시연은 완료로 표시하지 않는다. 전체 본문을 미리 읽는 framework 뒤에서16KiB 검사하므로 이를 streaming 업로드 제한으로 주장하지 않는다. 취소된 동기 worker는 즉시 종료되지 않으며 부하 중 풀/executor 공유 한계는 남아 있다.
+
+## 11. PR·외부 검사 기록
+
+[PR69](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/69)를 develop 대상으로 생성했다. 초기 커밋 f35f25f의 [CodeQL 실행](https://github.com/sigoreu-jabeujong/SpotON-BE/actions/runs/43096721342)은 job 생성 전 startup_failure로 종료됐다. 실행 화면에는 GitHub의 unexpected internal error·일시적 오류 시 재시도 안내가 있다. 코드 분석 결과/취약점 발견은 아니며 당시 Backend CI도 job 생성 전 queued였다. GitHub 공식 상태에는 당시 장애 공지가 없었으므로 서비스 전체 장애로 단정하지 않는다.
+
+기본 설정의 동적 CodeQL 실행은 일반 rerun이 거절됐고 check-suite 재요청도404였다. 이 기록을 포함한 정상 문서 커밋으로 새 검사를 요청한다. 검사 설정/권한/보호 규칙은 변경하지 않는다. 최종 검사의 실제 결과는 PR 체크와 실행 링크를 따른다. 로컬 통과를 원격 CI/CodeQL 통과로 대신 표시하거나 미검증 상태로 병합하지 않는다.
