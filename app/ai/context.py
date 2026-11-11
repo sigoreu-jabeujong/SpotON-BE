@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.ai.client import LlmRequest
 from app.ai.prompts.builder import build_interpret_request, serialize_context
 from app.ai.prompts.loader import PromptError, load_prompt_bundle
+from app.core.cache import CacheResources
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.dependencies import NO_STORE
@@ -29,6 +30,7 @@ from app.schemas.common import ApiResponse, ErrorCode
 from app.schemas.risk import Risk, RiskIndicator, RiskQuery
 from app.services.market_activity import year_cutoff
 from app.services.risk import RULE_VERSION, get_risk, percent, period
+from app.services.risk_cache import snapshot_token
 from app.services.spatial_stores import effective_date
 from app.services.store_cohort import MIN_OPEN_DATE
 
@@ -62,6 +64,7 @@ class PreparedRiskInterpretation:
     data_version_hash: str
     prompt_version: str
     prompt_sha256: str
+    snapshot_token: str | None = field(default=None, repr=False)
 
     def json_context(self) -> dict[str, JsonValue]:
         return self.context.model_dump(mode="json")
@@ -71,13 +74,20 @@ def prepare_risk_interpretation(
     session: Session,
     query: RiskQuery,
     settings: Settings,
+    *,
+    cache: CacheResources | None = None,
 ) -> PreparedRiskInterpretation:
     """No client metrics, no provider invocation; caller supplies the read-only transaction."""
     try:
         checked = RiskQuery.model_validate(
             query.model_dump(exclude={"include_unknown"}, warnings="error")
         )
-        response = get_risk(session, checked, settings)
+        token = None
+        if cache is not None and cache.enabled:
+            token = snapshot_token(session, cache)
+            response = get_risk(session, checked, settings, cache=cache)
+        else:
+            response = get_risk(session, checked, settings)
         context, data_version_hash = _extract_context(response, checked)
         safe = context.model_dump(mode="json")
         serialized = serialize_context(safe)
@@ -89,6 +99,7 @@ def prepare_risk_interpretation(
             data_version_hash=data_version_hash,
             prompt_version=bundle.version,
             prompt_sha256=bundle.sha256,
+            snapshot_token=token,
         )
     except (ValueError, TypeError, AttributeError, PromptError):
         pass

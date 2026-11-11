@@ -39,11 +39,11 @@ label은 기존 계약의 `AI 해석`을 유지하고 method=`server_sentences_m
 | missing_data | 모델 선택과 무관한 필수 미확인/소표본/자료 한계. 숨기거나 빈 상태를 수치0으로 채우지 않음 |
 | checklist | 서버의 일반 현장 확인 후보 중 모델이 고른1~3개 |
 | verification | 선택 형식/문장 안전성 검사 통과 표시. 사실 정확도·신뢰도 점수가 아님 |
-| model / generated_at | 최종 채택 모델명·서버 UTC 생성시각 |
+| model / generated_at | 채택 선택을 만든 모델명·현재 응답의 서버 UTC 문장 조립 시각. 새 모델 호출 시각이 아님 |
 
 official_values의 각 항목은 text/indicator_ids, favorable/unfavorable은 text/indicator_ids/sources, missing_data는 text/reason, checklist는 item/why를 유지합니다. sources는 배열입니다. 이력·문구·원인·방향을 FE에서 다시 생성하지 않습니다.
 
-정상 verification은 passed=true, mismatches=[], regenerated=검증 실패 후1회 재생성 여부입니다. checked_numbers는 보이는 문장의 숫자 출현 횟수이며 점수로 표시하지 않습니다.
+정상 verification은 passed=true, mismatches=[], regenerated=현재 요청에서 검증 실패 후1회 재생성 여부입니다(서버 캐시 적중 시 false). 이전 생성의 재시도 이력이나 품질 점수가 아닙니다. checked_numbers는 보이는 문장의 숫자 출현 횟수이며 점수로 표시하지 않습니다.
 
 ## 3. 계산·미확인 상태 유지
 
@@ -60,7 +60,7 @@ Risk의 최근 기간 폐업률·고정 개업 주년 생존율과 같은 필터
 - 입력 오류422 INVALID_PARAM은 본문을 수정해야 합니다. 서버 DB/준비/템플릿 오류500 INTERNAL_ERROR, 공급자·한도·전체예산 실패503 AI_UNAVAILABLE, 검증2회 실패503 AI_VERIFY_FAILED를 구분해 주세요.
 - 서버가 이미1회 검증 재생성을 수행하므로 FE가 자동 재호출을 반복하지 않습니다. 명시적 사용자 재시도만 제공해 주세요.
 - 앱 기본 한도는 유효 요청5회/분·50회/일·동시2개이며 프로세스별입니다. 서버 한도 실패도503 AI_UNAVAILABLE입니다. 공급자/다중 프로세스 전체 한도와 같다고 표시하지 않습니다.
-- 모든 응답은 no-store이며 AI 응답 캐시는 아직 구현하지 않았습니다. 이전 조건의 AI 결과를 새 조건에 표시하지 않도록 진행 중 요청/응답을 구분해 주세요.
+- 모든 응답은 no-store이며 BE #74의 프로세스 내부 캐시는 별도로 적용됩니다. 기본300초 동안 동일 데이터/조건/프롬프트/모델의 검증된 선택 ID를 재사용할 수 있고 서버가 현재 집계로 문장을 다시 조립합니다. `generated_at`을 새 모델 호출 시각으로 표시하지 말고 `regenerated`를 과거 재시도 이력으로 설명하지 마세요. hit 여부/이전 사용자 시각은 응답에 없습니다. 이전 조건의 AI 결과를 새 조건에 표시하지 않도록 진행 중 요청/응답을 구분해 주세요.
 
 meta는 T/D/수집일null·반경·분모null·입력/데이터/프롬프트 hash·버전을 제공합니다. hash는 사용자 화면에 직접 표시할 필요가 없으며 수집일을 오늘/생성시각으로 대체하지 않습니다. 해석 결과에서 source 배열은 원래 지표와 연결해 표시합니다.
 

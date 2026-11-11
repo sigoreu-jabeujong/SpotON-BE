@@ -39,7 +39,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         try:
-            yield
+            async with resources.cache.maintenance():
+                yield
         finally:
             resources.close()
 

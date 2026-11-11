@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     interpret_requests_per_minute: int = Field(default=5, ge=1, le=10000)
     interpret_requests_per_day: int = Field(default=50, ge=1, le=100000)
     interpret_max_concurrent: int = Field(default=2, ge=1, le=16)
+    cache_enabled: bool = True
+    risk_cache_ttl_seconds: int = Field(default=300, ge=1, le=604800)
+    ai_cache_ttl_seconds: int = Field(default=300, ge=1, le=604800)
+    cache_max_entries: int = Field(default=256, ge=1, le=4096)
+    cache_max_bytes: int = Field(default=4194304, ge=1024, le=67108864)
 
     @field_validator("llm_requests_per_minute", "llm_requests_per_day", mode="before")
     @classmethod

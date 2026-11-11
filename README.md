@@ -157,11 +157,23 @@ AI 해석 프롬프트는 `app/ai/prompts/risk_interpret/`의 `system.md`(시스
 
 - 서버가 Risk를 재계산하고 식별정보 없는 허용 집계와 문장 후보만 모델에 전송합니다. 모델은 모든 유리/불리 비교의 순서와 현장 질문 1~3개를 고릅니다. 숫자·비교 방향·최종 문장은 서버가 만들며, `method=server_sentences_model_ordering`으로 이 역할을 표시합니다. 자유로운 AI 서술이나 성공 가능성 판정이 아닙니다.
 - `official_values`에는 참고 계산도 포함됩니다. 필수 사실·미확인/자료 한계는 전부 보존하고, 소표본·공식/조건부 지표 pending·수집일 null을 임의로 채우지 않습니다. `verification.checked_numbers`는 표시 문장의 숫자 출현 횟수이며 정확도 점수가 아닙니다.
-- 프로세스별 기본 한도는 `INTERPRET_REQUESTS_PER_MINUTE=5`, `INTERPRET_REQUESTS_PER_DAY=50`, `INTERPRET_MAX_CONCURRENT=2`입니다. 공급자 client 한도와 별개이며 다중 worker 전역 한도·프로젝트 quota를 보장하지 않습니다. 캐시는 후속입니다.
+- 프로세스별 기본 한도는 `INTERPRET_REQUESTS_PER_MINUTE=5`, `INTERPRET_REQUESTS_PER_DAY=50`, `INTERPRET_MAX_CONCURRENT=2`입니다. 공급자 client 한도와 별개이며 다중 worker 전역 한도·프로젝트 quota를 보장하지 않습니다. 캐시 적중도 앱 요청 한도를 소비하고 공급자 한도는 실제 호출에만 적용합니다.
 - 대기·DB 준비·생성/검증 후 최대 1회 재생성·조립을 `LLM_TIME_BUDGET`(기본 20초)에 포함합니다. 읽기 전용 DB 세션은 모델 호출 전에 닫습니다. 취소 시 실행 중 동기 SQL은 문장 제한 이후 정리되므로 즉시 강제 중단이나 네트워크 전체 SLA를 보장하지 않습니다.
 - 입력 오류 422, DB/서버 결함 500, 한도·공급자·시간 초과 503 `AI_UNAVAILABLE`, 두 번의 선택 검증 실패 503 `AI_VERIFY_FAILED`입니다. 실패를 기본 문장으로 대체하지 않습니다. 모든 응답은 no-store입니다.
 
-[설계·Claude 검토·실제 검증](docs/designs/feat68-risk-interpret-api.md), [FE 변경 요청](docs/fe-risk-interpret-api-request.md)을 확인합니다. FE 구현·CLAUDE.md 반영은 담당자 대기이며 추가 문맥·캐시·전체 BE-32 통합 완료를 뜻하지 않습니다.
+[설계·Claude 검토·실제 검증](docs/designs/feat68-risk-interpret-api.md), [FE 변경 요청](docs/fe-risk-interpret-api-request.md)을 확인합니다. FE 구현·CLAUDE.md 반영은 담당자 대기이며 추가 문맥·전체 BE-32 통합 완료를 뜻하지 않습니다.
+
+### Risk·AI 서버 캐시
+
+앱마다 별도 메모리 LRU/TTL 캐시를 사용합니다. 환경 설정 기본값은 `CACHE_ENABLED=true`, `RISK_CACHE_TTL_SECONDS=300`, `AI_CACHE_TTL_SECONDS=300`, `CACHE_MAX_ENTRIES=256`, `CACHE_MAX_BYTES=4194304`입니다. TTL은 1~604800초(최대7일), 각 캐시의 항목 상한은 1~4096, payload bytes 상한은 1024~67108864입니다. 기본 Risk/AI payload 합계는 최대8MiB이며 Python 객체·키·인덱스 등의 비용은 별도입니다. worker마다 메모리와 캐시가 독립적이고 재시작/종료 시 폐기합니다.
+
+- 원문 좌표·조회조건을 key에 저장하지 않고 앱 수명의 난수 salt로 HMAC합니다. 좌표6자리와 정확한 float guard를 함께 사용해 반경 경계가 다른 요청을 합치지 않습니다. Risk 값에는 query echo가 없고 현재 요청으로 복원합니다. 업종집합/필터·요청 월·경계/계산 규칙도 구분합니다.
+- 같은 primary의 READ ONLY REPEATABLE READ 가시성 지문을 확인합니다. 일반 MVCC INSERT/UPDATE/DELETE는 배치ID·updated_at이 같아도 새 namespace가 되며 옛 트랜잭션은 별도로 유지됩니다. 관련 없는 쓰기/rollback에도 보수적으로 miss가 발생합니다. 적중에도 DB 접속이 필요하며 DB/원천 오류를 과거 성공으로 대체하지 않습니다.
+- AI는 현재 허용 후보와 재대조한 선택 ID·모델명만 저장합니다. 데이터/컨텍스트·프롬프트·공급자/모델·후보/Schema·검증 규칙이 달라지면 재사용하지 않습니다. 같은 key의 동시 생성은 합치며 대기 중에는 실행 슬롯을 점유하지 않습니다. 실패/미설정 키는 저장하거나 이전 성공으로 숨기지 않습니다.
+- `generated_at`은 **현재 응답의 서버 문장 조립 시각**입니다. 새 공급자 호출 시각이 아니며, `verification.regenerated`는 **현재 요청**의 검증 재생성 여부(적중 시 false)입니다. 선택 결과는 TTL 동안 재사용될 수 있고 과거 사용자의 생성시각/재생성 이력은 저장하지 않습니다. HTTP 응답은 계속 `no-store`이고 적중 여부를 응답/로그로 공개하지 않습니다. 공유 캐시의 응답시간·반복 선택 차이로 최근 동일 조건 조회를 추론할 수 있는 한계가 있어 완전 익명성을 보장하지 않습니다.
+- 동시 TRUNCATE·테이블 rewrite·DB 복구는 지원 갱신 범위 밖입니다. 이런 유지보수는 **요청 drain → 캐시 종료 → 변경 → 앱 재시작** 순서로 수행합니다. 일반 MVCC 갱신에 따른 옛 항목은 더 이상 조회되지 않습니다. 만료 후 다음 요청이 없어도 1초 간격 sweep으로 참조를 정리하고, 종료 시 정리 task를 취소·회수하고 늦은 저장을 막습니다. TTL 경계부터 재사용하지 않지만 OS 정지/이벤트 루프 지연·시계 오류 중의 정확한 물리 삭제 시한이나 메모리 덤프/스왑의 secure erase는 보장하지 않습니다. 분산 캐시·오프라인 응답·운영 hit율/SLA도 미검증입니다.
+
+[설계·Claude 검토·검증](docs/designs/feat74-risk-ai-cache.md)에 선택 근거와 지원 범위를 기록합니다.
 
 ### AI 결과 검증
 
