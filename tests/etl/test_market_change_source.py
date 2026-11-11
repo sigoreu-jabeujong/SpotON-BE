@@ -116,6 +116,35 @@ def test_dates_timezones_and_complete_year(tmp_path):
     assert load_change(p, sha).retrieved_at == RETRIEVED
 
 
+def test_observation_quarter_cannot_postdate_declared_retrieval(tmp_path):
+    p = tmp_path / "c.csv"
+    rows = annual_change_rows()
+    rows.append({**rows[0], a.FIELDS[0]: "20264"})
+    sha = make_change_csv(p, rows)
+    with pytest.raises(a.ChangeImportError, match="quarter"):
+        a.load_source(p, sha, 2025, RETRIEVED, now=NOW)
+
+
+@pytest.mark.parametrize(
+    ("stamp", "accepted"),
+    [
+        ("2026-09-30T14:59:00+00:00", False),
+        ("2026-09-30T15:00:00+00:00", True),
+        ("2026-10-01T00:00:00+09:00", True),
+    ],
+)
+def test_retrieval_quarter_uses_seoul_timezone(tmp_path, stamp, accepted):
+    p = tmp_path / "c.csv"
+    rows = annual_change_rows()
+    rows.append({**rows[0], a.FIELDS[0]: "20264"})
+    sha = make_change_csv(p, rows)
+    if accepted:
+        assert len(a.load_source(p, sha, 2025, datetime.fromisoformat(stamp), now=NOW).rows) == 16
+    else:
+        with pytest.raises(a.ChangeImportError, match="quarter"):
+            a.load_source(p, sha, 2025, datetime.fromisoformat(stamp), now=NOW)
+
+
 def test_bad_headers_csv_size_rows_fields_encoding_and_repository_input(tmp_path, monkeypatch):
     p = tmp_path / "c.csv"
     for headers in (a.FIELDS[:-1], a.FIELDS + (a.FIELDS[0],), a.FIELDS[:-1] + (a.FIELDS[0],)):
