@@ -51,7 +51,7 @@ class VerifyResult:
 
 
 NUMBER_PATTERN = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?")
-PENDING_STATUSES = frozenset({"pending", "no_data"})
+PENDING_STATUSES = frozenset({"pending", "no_data", "link_only", "unverified"})
 SOURCE_KEYS = frozenset({"source", "sources"})
 
 FORBIDDEN_EXPRESSIONS = tuple(

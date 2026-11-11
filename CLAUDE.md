@@ -75,3 +75,9 @@ LLM 전체 await(재시도 대기 포함)와 개별 요청은 asyncio timeout으
 비율은 Decimal HALF_UP 소수1자리, 소표본/0분모는 value/numerator=null·실제 denominator 보존이다. 같은 필터·좌표 확보 서울의 분자합/분모합을 비교하며 competitor_count에는 서울 평균을 붙이지 않는다. source는 배열이고 지표별 분모를 쓰므로 공통 denominator=null이다. flags의 표본 부족은 로컬 비율에만 적용하며 missing은 필수 검증 경계/요청 선택 자료에만 쓴다.
 
 선택 서버 설정 RISK_BOUNDARY_VERSION_ID가 있어도 후보 미리보기만 제공하며 market.status=unverified, 확정 상권 필드는null이다. 없는 설정을 최신 버전으로 대체하지 않는다. 공식 폐업률/상권변화 유형·인구비는pending이고 공식 창업위험도는link_only다. 가맹 분류 미확인·D/T/collected_at=null·좌표 범위와 인허가/지위승계/과거 재구성 한계를 보존한다. 기존 읽기 전용 세션·no-store·안전한500을 따른다. 설계는 docs/designs/feat64-risk-reference-api.md, FE 타입/문구/CLAUDE.md 반영은 docs/fe-risk-reference-api-request.md로 담당자에게 요청하며 대기다.
+
+## AI 집계 입력 준비 기준 (BE #66)
+
+`prepare_risk_interpretation(session,RiskQuery,settings)`는 클라이언트 지표를 받지 않고 서버 Risk를 재계산한다. 위치/상권 후보·UUID/raw meta·URL/link/copy_text 없이 업종/면적/가맹 필터·반경·T/D·지표/분모/출처/상태·고정 방법론만 typed allowlist로 구성한다. 사유/출처도 enum으로 제한하고 기간·비율·metadata 의미·조회조건을 대조한다. 소표본은 기존 Risk의 null/실제분모를 유지하며 불명확한 입력을 정제해 통과시키지 않는다.
+
+입력은 nested frozen/tuple이며 JSON 복사본·정렬 직렬화의 context_hash와 내부 데이터/프롬프트 hash를 구분한다. 원문은 repr/로그/오류에 남기지 않는다. 호출자가 기존 읽기 전용 세션을 제공하며 준비 함수는 공급자/외부 API를 호출하지 않는다. 프롬프트는 risk-interpret-v2·지문 이력을 따르고 verifier는 link_only/unverified 값 생성도 차단한다. 지표 간 숫자 바꿔치기·자유문장 의미 검증 전체나 실제 모델 안전성을 완료로 주장하지 않는다. 상세는 docs/designs/feat66-ai-risk-context.md이며 공개 AI API/응답 스키마/이력 추가 문맥/캐시는 후속이다.
