@@ -45,7 +45,7 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 - 기간은 달력상 완료 개월 수입니다. 폐업은 확인된 폐업일, 영업 중은 DB에 연결된 검증 배치의 DAT_UPDT_PNT 최대 날짜를 종료점으로 사용합니다. 오늘·DB 적재일로 대체하지 않습니다. 동일한 층만 확인되면 같은 자리라고 표시하지 않습니다.
 - `meta.collected_at`은 실제 수집 완료일이 확인되지 않으면 null입니다. CSV 검증 시각과 원천 갱신일·적재일을 구분합니다.
 - health·geocode는 DB 없이 동작합니다. 이력 요청은 지연 생성한 DB 엔진과 요청별 읽기 전용 트랜잭션을 사용하고 종료 시 정리합니다. `DATABASE_STATEMENT_TIMEOUT_MS`는 SQL 문장별 제한이며 전체 요청 SLA가 아닙니다. DB 실패·timeout은 원문 없는 500 INTERNAL_ERROR입니다.
-- FE는 [연동 PR #27](https://github.com/sigoreu-jabeujong/SpotON-FE/pull/27)의 nullable 기간·복합 식별자를 함께 적용합니다. 후속 API 개발 중에는 FE의 기존 `VITE_USE_MOCK=true`, `VITE_REAL_API_PATHS=/geocode,/stores/history`로 두 API만 실제 연결할 수 있습니다.
+- FE의 nullable 기간·복합 식별자 호환은 [FE 수정 요청 보고서](docs/fe-store-history-api-request.md)를 통해 담당자에게 요청하며 아직 반영되지 않았습니다. 후속 API 개발 중에는 FE의 기존 `VITE_USE_MOCK=true`, `VITE_REAL_API_PATHS=/geocode,/stores/history`로 두 API만 실제 연결할 수 있습니다.
 
 설계·원본 계약 차이·검증 기록은 [이슈 36 설계](docs/designs/feat36-store-history-api.md)를 확인합니다. 원본 v1.2 전체 계약의 일괄 동기화 완료를 뜻하지 않습니다.
 
