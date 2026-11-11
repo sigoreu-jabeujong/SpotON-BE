@@ -42,11 +42,16 @@ def upgrade() -> None:
             "loaded_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
         ),
         sa.CheckConstraint(
-            "input_bytes > 0 AND member_bytes > 0 AND source_dataset='OA-15572' AND source_encoding IN ('cp949','utf-8-sig') AND boundary_compatibility='unverified' AND jsonb_typeof(code_check)='object' AND currency='KRW' AND amount_basis='source_reported' AND amount_period_status='unverified'",
+            "input_bytes > 0 AND member_bytes > 0 AND source_dataset='OA-15572' AND "
+            "source_encoding IN ('cp949','utf-8-sig') AND "
+            "boundary_compatibility='unverified' AND jsonb_typeof(code_check)='object' "
+            "AND currency='KRW' AND amount_basis='source_reported' AND "
+            "amount_period_status='unverified'",
             name=op.f("ck_market_sale_versions_source"),
         ),
         sa.CheckConstraint(
-            "input_sha256 ~ '^[0-9a-f]{64}$' AND member_sha256 ~ '^[0-9a-f]{64}$' AND content_sha256 ~ '^[0-9a-f]{64}$'",
+            "input_sha256 ~ '^[0-9a-f]{64}$' AND member_sha256 ~ '^[0-9a-f]{64}$' AND "
+            "content_sha256 ~ '^[0-9a-f]{64}$'",
             name=op.f("ck_market_sale_versions_hashes"),
         ),
         sa.CheckConstraint(
@@ -94,18 +99,22 @@ def upgrade() -> None:
         sa.Column("source_sales_count", sa.BigInteger(), nullable=True),
         sa.Column("source_row_sha256", sa.String(length=64), nullable=False),
         sa.CheckConstraint(
-            "market_code ~ '^[0-9]{7}$' AND quarter ~ '^20[0-9]{2}[1-4]$' AND induty_cd IN ('CS100001','CS100002','CS100003','CS100004','CS100010') AND market_type_code IN ('A','D','R','U')",
+            "market_code ~ '^[0-9]{7}$' AND quarter ~ '^20[0-9]{2}[1-4]$' AND induty_cd "
+            "IN ('CS100001','CS100002','CS100003','CS100004','CS100010') AND "
+            "market_type_code IN ('A','D','R','U')",
             name=op.f("ck_market_sales_codes"),
         ),
         sa.CheckConstraint(
             "source_row_sha256 ~ '^[0-9a-f]{64}$'", name=op.f("ck_market_sales_hash")
         ),
         sa.CheckConstraint(
-            "(est_sales IS NULL OR est_sales >= 0) AND (source_sales_count IS NULL OR source_sales_count >= 0)",
+            "(est_sales IS NULL OR est_sales >= 0) AND (source_sales_count IS NULL OR "
+            "source_sales_count >= 0)",
             name=op.f("ck_market_sales_nonnegative"),
         ),
         sa.CheckConstraint(
-            "length(btrim(market_name))>0 AND length(btrim(market_type_name))>0 AND length(btrim(induty_name))>0",
+            "length(btrim(market_name))>0 AND length(btrim(market_type_name))>0 AND "
+            "length(btrim(induty_name))>0",
             name=op.f("ck_market_sales_names"),
         ),
         sa.ForeignKeyConstraint(
