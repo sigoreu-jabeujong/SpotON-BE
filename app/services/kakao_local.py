@@ -71,7 +71,10 @@ def _parse_number(value: str | None) -> int | None:
         return None
     if not value.isascii() or not value.isdecimal():
         return None
-    return int(value)
+    digits = value.lstrip("0") or "0"
+    if len(digits) > 4:
+        return None
+    return int(digits)
 
 
 def _coordinates(document: KakaoDocument) -> tuple[float, float] | None:

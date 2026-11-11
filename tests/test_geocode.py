@@ -113,3 +113,41 @@ def test_geocode_openapi_declares_common_error_models(geocode_client: TestClient
         assert responses[status]["content"]["application/json"]["schema"] == {
             "$ref": "#/components/schemas/ErrorResponse"
         }
+
+
+@pytest.mark.parametrize("field", ["main_address_no", "sub_address_no"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("10000", id="existing-out-of-range"),
+        pytest.param("9" * 5000, id="oversized-number"),
+    ],
+)
+def test_out_of_range_upstream_lot_uses_existing_404(field, value) -> None:
+    raw = document()
+    raw["address"][field] = value
+    app = create_app(Settings(_env_file=None, app_env="test"))
+    app.dependency_overrides[get_geocode_service] = lambda: KakaoLocalService(
+        api_key="synthetic",
+        timeout=1,
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json={"documents": [raw]})),
+    )
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get(
+            "/api/geocode",
+            params={"query": ADDRESS, "category": "cafe"},
+            headers={"Origin": "http://localhost:5173"},
+        )
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "ADDRESS_NOT_FOUND"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert value not in response.text
+
+
+def test_zero_padded_upstream_lot_does_not_convert_the_large_original_string() -> None:
+    from app.services.kakao_local import _parse_number
+
+    assert _parse_number("0" * 5000 + "162") == 162
+    assert _parse_number("0" * 5000) == 0
+    assert _parse_number("9999") == 9999
