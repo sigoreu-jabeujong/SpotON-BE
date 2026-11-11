@@ -5,7 +5,7 @@ from geoalchemy2 import Geometry
 from sqlalchemy import Boolean, DateTime, Identity, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
-from sqlalchemy.schema import CreateTable
+from sqlalchemy.schema import CreateIndex, CreateTable
 
 import app.models
 from app.db.base import Base
@@ -67,7 +67,12 @@ def test_store_geometry_constraints_and_indexes_match_contract() -> None:
     assert tuple(column.name for column in unique.columns) == ("source", "license_no")
 
     indexes = {index.name: index for index in table.indexes}
-    assert set(indexes) == set(INDEX_SPECS)
+    assert set(indexes) == set(INDEX_SPECS) | {"ix_stores_geography_gist"}
+    geography_ddl = str(
+        CreateIndex(indexes["ix_stores_geography_gist"]).compile(dialect=postgresql.dialect())
+    )
+    assert "USING gist (CAST(geom AS geography))" in geography_ddl
+    assert "WHERE geom IS NOT NULL" in geography_ddl
     for name, (method, columns) in INDEX_SPECS.items():
         index = indexes[name]
         assert tuple(column.name for column in index.columns) == columns
