@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해 API와 인허가 ETL, 상권 경계·공식 점포 통계·추정매출 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 인허가 점포 689,440건·경계 1,650건·2025년 4개 분기의 지원 업종 점포 통계 24,810행·추정매출 원천 14,391행을 적재했습니다. migration `0007`이 현재 head입니다. 매출 집계 기간·경계 적용 시점/통계 분기 호환은 미확인이며 분석/매출 API와 FE 반영은 후속 작업입니다.
+현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해 API와 인허가/상권/생활인구 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 점포 689,440건·상권 경계 1,650건·2025년 점포 통계 24,810행·추정매출 14,391행과 2026-11-07 생활인구 531,922행·공식 250m 격자 10,125개를 적재했습니다. migration `0008`이 현재 head입니다. 원천별 시점을 혼합하지 않으며 매출 집계 기간·경계 적용일·반경 분석/인구 API와 FE 반영은 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -179,7 +179,7 @@ uv run --locked --extra dev --no-editable python -m etl.localdata --source gener
 - `--from-csv --write`는 허용하지 않습니다. CSV dry-run으로 만든 snapshot을 확인한 뒤
   같은 파일을 `--from-snapshot --write`로 적재합니다. 원본 CSV·보고서는 수정하지 않습니다.
 - `--write`는 localhost의 `spoton_dev`·`spoton_app`만 허용합니다. 연결 후 계정·권한·revision
-  `0007`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
+  `0008`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
 - 같은 snapshot으로 다시 실행하면 기존 `(source, license_no)`를 갱신합니다. `affected`는
   성공적으로 처리한 입력 수이고, 값이 실제로 변경된 행 수를 뜻하지 않습니다.
 - 실제 원천은 성공 코드 `0`, 날짜 `YYYY-MM-DD`, 갱신시각 `YYYY-MM-DD hh:mm:ss`를 사용합니다.
@@ -270,6 +270,38 @@ uv run --locked --extra dev python -m etl.market_sales `
 - `currency=KRW`, `amount_basis=source_reported`, **`amount_period_status=unverified`**, **`boundary_compatibility=unverified`**를 유지합니다. 집계 기간·경계 적용일·통계/인허가 모집단 동일성은 추가 확인 대상입니다. BE-17 공통화 전후 hash·실행 결과 회귀와 실제 원본 replay를 검증하며 FE·API·Docker·환경설정은 변경하지 않습니다.
 
 상세 설계·검증·미확인 사항은 [이슈 51 기록](docs/designs/feat51-market-sales-import.md)을 확인합니다.
+
+## 250m 생활인구 원천 적재 (BE-19)
+
+서울특별시·KT 추계 [생활인구 공식 안내](https://data.seoul.go.kr/dataVisual/seoul/seoulLivingPopulation.do), [내국인 OA-22784](https://data.seoul.go.kr/dataList/OA-22784/S/1/datasetView.do)·[장기외국인 OA-22785](https://data.seoul.go.kr/dataList/OA-22785/S/1/datasetView.do)·[단기외국인 OA-22786](https://data.seoul.go.kr/dataList/OA-22786/S/1/datasetView.do)를 사용합니다. 일별 원천은 공공누리 1유형 출처표시입니다. 실제 방문객 수·하루 고유 인구가 아닌 시각별 추계이며 원천별 행정동 차원을 보존합니다.
+
+세 일별 ZIP과 공식 격자 SHP ZIP은 저장소 밖에 두고, 아래 구조의 로컬 manifest를 만듭니다. hash는 파일별 실제 SHA256, file_date는 확인한 원천 첨부 수정일입니다. 실제 `.env`나 인증키는 넣지 않습니다.
+
+```json
+{
+  "observation_date": "2026-11-07",
+  "grid": {"path": "<공식 격자 ZIP 경로>", "sha256": "<SHA256>"},
+  "sources": {
+    "local": {"path": "<내국인 ZIP 경로>", "sha256": "<SHA256>", "file_date": "2026-11-11"},
+    "long": {"path": "<장기외국인 ZIP 경로>", "sha256": "<SHA256>", "file_date": "2026-11-11"},
+    "short": {"path": "<단기외국인 ZIP 경로>", "sha256": "<SHA256>", "file_date": "2026-11-11"}
+  }
+}
+```
+
+```powershell
+uv run --locked --extra dev python -m etl.living_pop --manifest "<로컬 manifest JSON 경로>"
+# 기본은 REPEATABLE READ READ ONLY dry-run입니다. 확인 후 같은 명령에 --write 추가.
+```
+
+- manifest의 상대 경로는 manifest 파일 위치 기준입니다. 날짜와 세 원천을 모두 명시하며 자동 백필·기간 전체 다운로드는 하지 않습니다. 현재 검증 범위는 **2026-11-07 하루**입니다.
+- 격자는 EPSG:5179의 원본 250m 사각형을 검증해 MULTIPOLYGON4326·GIST로 저장합니다. 원본 hash와 변환 저장 hash를 구분하며 내부 파일 시각을 적용일로 바꾸지 않습니다. `grid_as_of=null`, `spatial_compatibility=unverified`입니다.
+- 내국인 253,400·장기 137,137·단기 141,385, 합계 **531,922행**입니다. 관측은 `(version_id,source,hour,admin_code,grid_id)`로 구분하며 같은 격자·시각의 복수 행정동 행을 제거하거나 합산하지 않습니다. 전체 geometry는 셀 도형이며 행정동별 부분 도형/면적 배분을 만들지 않습니다.
+- `population`은 Numeric(20,5) 원천 총계, `value_status`는 observed/suppressed/missing입니다. `*`는 suppressed/null, 빈 값은 missing/null, 실제0은 observed/0이며 행 없음과 구분합니다. 후행 소수점 정수 표기를 포함한 명시적 ASCII 십진수만 받으며 원문 표기는 hash와 집계로 추적합니다. 세부 성별/연령/국적 숫자는 검사·hash만 하고 별도 적재하거나 총계를 복원하지 않습니다.
+- 사용자가 확정한 기준대로 공식 격자에 없는 내국인 1개 격자의 **24개 비식별 행**을 원문 코드·unlocated/null 참조로 보존합니다. 가짜 좌표·격자 행을 생성하지 않습니다. located 행은 복합 FK로 공식 격자와 연결하고 공간 inner join은 unlocated를 제외합니다. 전역 source/date 범위 미확인 수를 반경 내 missing_grid_count로 표시하지 않습니다.
+- 원본/규칙별 불변 버전과 실제 저장 hash를 검증하며 --write는 격자 및 세 원천 전체를 한 트랜잭션으로 처리합니다. replay는 기존 UUID·loaded_at·내용을 유지하며, 실패 시 이번 신규 버전/행을 모두 rollback합니다. 자료가 있으면 downgrade는 실패합니다.
+
+실행·검증·원천 특이사항과 선택 근거는 [이슈 53 설계](docs/designs/feat53-living-population-import.md)를 확인합니다. 생활인구/반경 API·주야간 비율·FE 연동과 다일 누적·파티셔닝은 후속 범위입니다.
 
 ## PostgreSQL·PostGIS 설정과 마이그레이션
 

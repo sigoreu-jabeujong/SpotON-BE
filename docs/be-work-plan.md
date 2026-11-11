@@ -10,13 +10,14 @@
 - `develop`은 GitHub 기본·개발 통합 브랜치이고 `main`은 최종 반영용이다. **개발 전 이슈를 만들고 해당 작업 브랜치에서 구현한 뒤 PR로 `develop`에 병합한다.**
 - 이슈 제목은 어떤 기능인지 알 수 있는 한국어로 짓고, 브랜치는 `feat#{작업 순번}-{영문-kebab-case}` 형식을 사용한다. 첫 작업은 `feat#1-initialize-fastapi`다. GitHub 실제 이슈 번호는 PR과 번호를 공유하므로 작업 순번과 다를 수 있으며 PR에서 실제 이슈를 연결한다. 셸에서는 `#`가 포함된 브랜치명을 따옴표로 감싼다.
 - 기본 절차는 이슈 → 작업 브랜치 → Codex 설계 MD → Claude Code 검토·MD 직접 수정 → Codex 구현·기능별 커밋 → 로컬 테스트·실패 수정·재검증 → 푸시·develop 대상 PR → CI 확인 → Squash 병합이다. 2026-11-12 사용자가 이후 BE PR의 자동 승인·머지를 요청했다. CI·저장소 조건을 만족하면 develop에 자동 병합하며, 본인 승인 제한·보호 규칙을 우회하지 않는다. main 반영·수동 브랜치 삭제·강제 푸시는 별도 요청 없이 하지 않는다.
+- 2026-11-12 추가 지시: 데이터 처리 등 유사한 선택은 Claude Code와 실제 설계 검토 후 가장 적절한 안을 선택하고 근거를 남긴다. 통상 선택마다 사용자에게 재확인하지 않는다. 필수 자료·키·권한이 없어 진행할 수 없는 경우의 요청/중단 원칙은 유지한다. BE-19 미매칭 격자 1개/24개 비식별 행은 사용자가 좌표 미확인 보존·공간 집계 제외로 확정했다.
 - API 명세서 v1.2가 FE↔BE 계약이다. 원본은 저장소에 커밋하지 않는다. 이슈 #36에서 로컬의 API·데이터 활용 v1.2 및 분석 정의 원본을 확보·대조했다. 현행 사용자 결정과 다른 부분은 별도 기록하며 보완안을 외부 문서 수정 완료로 간주하지 않는다. 확인 대기는 9절에서 관리한다.
-- BE-00~17 기반·조회·경계·공식 점포 통계가 develop에 반영됐고 BE-18 추정매출 원천 적재는 #51에서 구현했다. 전체 API 공통 meta·DataVersion 정리와 BE-19 이후 조건부 데이터·분석 API는 미완료다. 매출 집계 기간·최신 전체 관측/경계 적용 분기는 실제 원천 적재와 구분한다. 필요한 자료가 없거나 실제 원천 수집이 실패하면 그 지점에서 중단하고 사용자에게 요청한다.
+- BE-00~18 기반·조회·경계·공식 점포 통계·추정매출 원천 적재가 develop에 반영됐다. BE-19는 #53에서 설계·Claude 검토·구현·실제 적재 검증을 완료하고 PR·CI·병합을 진행한다. 전체 API 공통 meta·DataVersion 정리와 BE-20 이후 원천·분석 API는 미완료다. 매출 집계 기간·최신 전체 관측/경계 적용 분기는 실제 원천 적재와 구분한다. 필요한 자료가 없거나 실제 원천 수집이 실패하면 그 지점에서 중단하고 사용자에게 요청한다.
 - 이슈 #34 작업 브랜치에서는 실제 응답 코드·ISO 날짜/시각과 적재 실행기를 보완했다. 사용자 제공 검증 CSV(2026-11-09 검증, 원천 기준일 미확인)로 개발 DB에 일반음식점 541,169건·휴게음식점 148,271건, 합계 689,440건을 적재하고 재적재·20건 원자료 자동 대조를 통과했다. 현재 API의 최신 전체 수집 완료나 BE-12 구현 완료를 뜻하지 않는다. develop 반영은 이슈 #34의 PR 상태를 따른다.
 
 핵심 흐름은 `공공데이터 → ETL → DB → BE 계산 → API → FE 표시 → AI 해석`이다. 주소 검색만 명세에 따라 실시간 외부 호출을 허용한다. 앞 단계를 임시 수치로 우회하지 않는다.
 
-이슈 #34/PR #35 적재, #36/PR #37 이력, #38/PR #39·#40 설계, #41/PR #42 주변, #43/PR #44 월 범위, #45/PR #46 snapshot, #47/PR #48 경계, #49/PR #50 공식 점포 통계는 develop에 병합됐다. 현재 [#51 BE-18 추정매출 원천](designs/feat51-market-sales-import.md)은 `feat#51-market-sales-import`에서 구현·검증 후 PR·CI와 자동 Squash 병합을 진행한다. FE 저장소는 수정하지 않으며 기존 네 조회 기능은 FE 담당자 반영 대기다. 이번 적재는 API/FE 변경이 없다.
+이슈 #34/PR #35 적재, #36/PR #37 이력, #38/PR #39·#40 설계, #41/PR #42 주변, #43/PR #44 월 범위, #45/PR #46 snapshot, #47/PR #48 경계, #49/PR #50 공식 점포 통계, #51/PR #52 추정매출 원천은 develop에 병합됐다. 현재 [#53 BE-19 생활인구 적재](designs/feat53-living-population-import.md)는 `feat#53-living-population-import`에서 사용자 확정 기준·Claude 실제 검토 후 구현/검증했다. 로컬·CI·저장소 조건 통과 후 일반 Squash 병합한다. FE 저장소는 수정하지 않으며 기존 네 조회 기능은 FE 담당자 반영 대기다.
 
 ## 2. 서비스 범위
 
@@ -207,7 +208,7 @@ uv run --locked --extra dev pytest
 | market_areas | `market_code`, `market_name`, `market_type`, `gu_code`, `area_m2`, `geom`; 좌표계 변환·Polygon 보정·GIST |
 | market_stores | `market_code`, `quarter`, `induty_cd`, `total_stores`, `open_stores`, `closed_stores`, `closure_rate` |
 | market_sales | `version_id`, `market_code`, `quarter`, `induty_cd`, `est_sales`, `source_sales_count`; KRW 원천값·집계 기간 미확인, 환산·반경 매출·합산 금지 |
-| living_pop | `grid_id`, `date`, `hour`, `local_pop`, `long_foreign`, `short_foreign`, `geom`; 250m 격자 |
+| living_population_observations (living_pop) | `version_id`, `source`, `hour`, `admin_code`, `grid_id`, `located_grid_id`, `population`, 상태; 원천·행정동 차원 보존, 250m geometry는 living_grids 참조 |
 | 상권변화지표 | 상권코드·분기·서울시 원천 변화 유형 그대로 사용, 임의 점수화 금지 |
 | brands | `brand_id`, `brand_name`, `normalized_name`; 공정위 원천과 점포 상호 정규화 비교 |
 
@@ -457,3 +458,11 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - 일반 **798개**, 격리 PostGIS **72개**, ruff/format·mypy **97 files** 통과. 실제 DB 0007 dry-run→write→replay(동일 UUID/시각/hash·삽입0), 원자료 20행·모델 차이0·기존 API200을 확인했다. 기존 점포 689,440건·경계 1,650건·점포 통계 24,810행 및 전체 배치/버전 hash·원본은 보존됐다.
 - 매출 금액 단위는 원이지만 `당월_매출_금액`의 분기 합계/월평균 의미는 미확인이다. amount_period_status/boundary_compatibility=unverified·boundary_as_of=null을 유지하며 매출 API 활성화·월/분기 환산·반경 합산·점포당 계산은 하지 않았다. 점포 통계에만 있는 지원 조합은 분기별 2,602/2,619/2,594/2,604개이며 0으로 채우지 않았다.
 - 지정 PR·CI 후 develop에 일반 Squash 병합하며 실제 상태는 #51 연결 기록을 따른다. 다음은 **BE-19 생활인구 250m 격자·시간별 적재**로, 공식 제공 범위·권한·용량/기간·좌표계부터 확인한다. 키/자료가 없으면 사용자에게 요청하고 후속 큐를 우회하지 않는다. FE·Docker·환경설정 변경은 없다.
+
+## 20. BE-19 생활인구 격자·시각별 원천 적재 (#53)
+
+- #51/PR #52는 develop에 병합됐다. #53/브랜치 feat#53-living-population-import에서 사용자 1번 결정(좌표 미확인 보존·공간 집계 제외)을 반영했다. [Codex 상세 설계·Claude 실제 수정·Codex 점검](designs/feat53-living-population-import.md)을 거쳐 4개 테이블·migration 0008·일별 3개 원천/격자 manifest 실행기를 구현했다.
+- 공식 2026-11-07 내국인 253,400행·장기 137,137행·단기 141,385행과 EPSG5179 격자 10,125개를 검증했다. 합계 **531,922행**이며 행정동/시각/원천 차원·원문 hash·비식별/결측/실제0을 보존한다. 미매칭 **1개 격자/24개 비식별 행**은 located_grid_id=null·unlocated로 보존하고 공간 inner join에서 제외한다. 전역 source/date 미확인 수를 반경 내 missing_grid_count로 표현하지 않는다.
+- 후행 소수점 숫자 표기와 참조 무결성·메모리 등 선택은 사용자 추가 지시에 따라 Claude와 재검토 후 결정했다. Numeric(20,5)·명시적 문법·고정 소수 포맷·복합 FK·streaming/hash·일별 전체 트랜잭션을 적용했다. 통상 선택을 반복 질문하지 않고 근거를 남기며 필수 자료·키·권한 부재는 계속 요청한다.
+- 일반 **844개**, 격리 PostGIS **82개**, ruff/format·mypy **107 files**를 통과했다. 실제 개발 DB 0008에서 dry-run 무삽입→격자10,125개/관측531,922행 적재→replay 삽입0을 확인했다. 원자료20행·좌표20개 대조·실제 GIST·모델차이0·기존 API5개200, 기존8개 테이블 전체 행/geometry hash·원본 ZIP4개 보존도 확인했다. 실행 비용과 검증 한계는 설계의 구현 기록을 따른다.
+- API/FE·주야간 비율·반경 집계·다일 백필·Docker/환경설정 변경은 없다. grid_as_of=null·spatial_compatibility=unverified이며 사용자 결정만으로 격자의 실제 적용 시점이나 행정동 분할 합산 의미를 확정하지 않는다. CI 후 일반 develop Squash 병합하며 실제 상태는 #53 연결 기록을 따른다. 다음은 **BE-20 공식 상권변화지표 원천 적재**로, 제공 범위·기준 분기·원천 유형부터 확인한다.
