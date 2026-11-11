@@ -61,3 +61,9 @@ LLM 전체 await(재시도 대기 포함)와 개별 요청은 asyncio timeout으
 선택 수치는 이번 릴리스에서 항상 null이며 요청 항목만 flags.missing과 meta.optional_data의 pending/사유에 넣는다. 미요청과 원천 조건별 no_data를 섞지 않는다. 브랜드 승인 전 meta.franchise_classification은 pending이며 가맹 unknown을 개인으로 만들지 않는다. denominator=null, cohort_size는 폐업 포함, excluded_no_coord는 서울 동일 비공간·T 이전 개업 코호트라 nearby와 다를 수 있다. 출처 R5/R6·D/T/collected_at=null을 보존하며 읽기 전용 일관된 세션·no-store·안전한 오류 응답을 따른다.
 
 상세와 Claude 검토 후 Codex 최종 규칙은 docs/designs/feat60-market-activity-api.md를 따른다. FE 타입·표시·CLAUDE.md는 docs/fe-market-activity-api-request.md로 요청하며 담당자 반영 대기다. BE-21·조건부 수치·BE-22 전체 결합·FE 통합 완료로 표시하지 않는다.
+
+## Risk 선행 상권 공간 판정 (BE #62)
+
+`judge_market(session, BoundaryQuery)`는 서버가 명시한 경계 UUID에만 ST_Covers를 적용한다. 세부 상권 A/D/R은 같은 우선순위이며 하나면 primary, 여러 개면 ambiguous/candidates로 보존한다. 관광특구 U는 세부와 함께 있으면 also_in이며 특구만 여러 개여도 임의 선택하지 않는다. 밖에서만 polygon-point geography 최단거리 반경 교차 목록을 제공하고 가까운 상권의 공식 수치로 대체하지 않는다. 행 수가 버전 row_count와 다르거나 버전이 없으면 안전하게 실패한다.
+
+결과는 지정 파일의 공간 판정이며 provenance.applicability=unverified다. source_file_date/loaded_at·boundary_as_of 하나로 현재/과거 적용성·분기 호환을 확정하지 않는다. 이 상태의 primary/candidates를 공식 통계 조인의 근거로 사용하지 않는다. 호출자가 READ ONLY REPEATABLE READ 세션을 제공하며 서비스는 세션을 변경하지 않는다. 공개 Risk API·FE 계약은 아직 추가하지 않았고 상세·Claude 검토·실제 검증은 docs/designs/feat62-market-judgement.md를 따른다.

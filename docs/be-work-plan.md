@@ -17,7 +17,7 @@
 
 핵심 흐름은 `공공데이터 → ETL → DB → BE 계산 → API → FE 표시 → AI 해석`이다. 주소 검색만 명세에 따라 실시간 외부 호출을 허용한다. 앞 단계를 임시 수치로 우회하지 않는다.
 
-이슈 #34/PR #35 적재, #36/PR #37 이력, #38/PR #39·#40 설계, #41/PR #42 주변, #43/PR #44 월 범위, #45/PR #46 snapshot, #47/PR #48 경계, #49/PR #50 공식 점포 통계, #51/PR #52 추정매출, #53/PR #54 생활인구, #55/PR #56 공식 상권변화 유형과 [#58/PR #59 시스템 점검](designs/feat58-system-audit-cleanup.md)은 develop에 병합됐다. 현재 [#60 기본 활동 분석](designs/feat60-market-activity-api.md)은 `feat#60-market-activity-api`에서 Claude 실제 검토·Codex 구현·로컬 재검증을 마쳤다. CI·저장소 조건 통과 후 일반 Squash 병합하며 실제 상태는 GitHub 기록을 따른다. FE 저장소는 수정하지 않으며 기존 조회 및 새 활동 화면 반영은 담당자 대기다.
+이슈 #34/PR #35 적재, #36/PR #37 이력, #38/PR #39·#40 설계, #41/PR #42 주변, #43/PR #44 월 범위, #45/PR #46 snapshot, #47/PR #48 경계, #49/PR #50 공식 점포 통계, #51/PR #52 추정매출, #53/PR #54 생활인구, #55/PR #56 공식 상권변화 유형, [#58/PR #59 시스템 점검](designs/feat58-system-audit-cleanup.md)과 [#60/PR #61 기본 활동 분석](designs/feat60-market-activity-api.md)은 develop에 병합됐다. 현재 [#62 Risk 선행 상권 판정](designs/feat62-market-judgement.md)은 `feat#62-market-judgement`에서 Claude 실제 검토 후 구현·검증한다. CI·저장소 조건 통과 후 일반 Squash 병합하며 실제 상태는 GitHub 기록을 따른다. FE 저장소는 수정하지 않으며 조회 및 활동 화면 반영은 담당자 대기다.
 
 ## 2. 서비스 범위
 
@@ -78,7 +78,7 @@
 | BE-20 | 서울시 원천 상권변화 유형, 확보 후 공식 지표 제공 |
 | BE-21 | brands 정규화·프랜차이즈 추정 매핑 |
 | BE-22 | F-06 활동 분석·연도별 추이·조건부 데이터 결합. #60은 기본 집계·선택 항목 pending까지이며 조건부 수치는 후속 |
-| BE-23 | F-07 Risk·상권 판정·공식/참고 구분 |
+| BE-23 | F-07 Risk·상권 판정·공식/참고 구분. #62는 명시 버전 공간 판정 기반이며 공개 Risk는 후속 |
 | BE-24 | 공식 폐업률의 상권·업종·분기 매칭 |
 | BE-25 | 참고 폐업률과 분모 계산 |
 | BE-26 | 1년·3년 생존율·최소 표본 판단 보류 |
@@ -490,3 +490,10 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - `sales`/`living_pop`은 항상 null이고 요청된 항목만 missing·pending/사유에 넣는다. 가맹 분류 pending, denominator=null·폐업 포함 cohort_size·서울 동일 비공간 조건의 좌표 미확보 수·출처 D/T/collected_at=null을 명시한다. 기존 API 형식·모델·migration·의존성·Docker/환경설정 변경은 없다.
 - 전체 일반 **924개**, 격리 PostGIS **99개**, ruff/format **227 files**, mypy **116 files**를 통과했다. 새 일반31개·통합7개로 날짜 경계/윤년/YTD/폐업 보존/평균/거리·필터12조합/입력·DB오류·실제 READ ONLY 세션을 확인했다. 실제 개발 DB **10조합**을 독립 SQL과 대조했고 head0009·모델 차이0·기존14개 테이블 전체 행/geometry hash·건수 보존을 확인했다. API+독립 SQL 관측 시간은 SLA 검증이 아니다.
 - [FE 활동 분석 요청](fe-market-activity-api-request.md)에 기간·평균·미요청과 pending 구분·가맹 미확인·출처/시점을 요청한다. FE 코드/CLAUDE.md·이슈/PR은 수정하지 않았고 반영 대기다. 브랜드 승인·조건부 수치 활성화·BE-22 전체 결합·Risk/AI는 후속이다. CI/CodeQL·저장소 조건 통과 후 develop 일반 Squash 병합하며 실제 상태는 #60 연결 기록을 따른다.
+
+## 24. BE-23 선행 상권 공간 판정 (#62)
+
+- 활동 API PR61 이후 develop `408e32b`에서 `feat#62-market-judgement`를 만들었다. [Codex 설계·Claude 실제 MD 수정·Codex 최종 점검](designs/feat62-market-judgement.md)을 거쳐 명시 버전의 내부 공간 판정 서비스와 엄격한 모델을 구현했다. 공개 Risk 경로·공식 수치 연결은 후속이며 기존 API 형식·FE 계약은 바꾸지 않았다.
+- ST_Covers의 경계 포함·hole/multipart, 세부 상권 우선/관광특구 병기, 동순위 중첩의 ambiguous 후보, 상권 밖의 반경 교차 목록을 제공한다. 최신 버전 자동 선택이나 가까운 상권 대체는 하지 않으며 빈/부분 버전은 안전하게 실패한다. 적용성은 unverified로 고정하고 원천 수정일을 적용일로 바꾸지 않는다.
+- 전체 일반 **957개**, 격리 PostGIS **103개**, ruff/format **233 files**, mypy **118 files** 통과. 새 일반33개·통합4개로 경계/구멍/분리 영역/유형·중첩/거리/버전 격리/미확인 상태/읽기 전용 호출을 확인했다. 실제 **135조합**을 독립 SQL과 대조해 일치했고 모델차이0·head0009·무효 도형0을 확인했다. 기존 경로 검사 최초1회 실패 후 재확인은 모두200이며 원인 미확정·SLA 미검증이라는 한계도 남겼다.
+- 실제 개발 DB 기존14테이블 전체 행/geometry hash·건수 보존을 확인했다. PR·CI/CodeQL을 확인하고 develop 일반 Squash 병합하며 실제 상태는 #62 연결 기록을 따른다. DB 모델/migration·의존성·원본·Docker/로컬 설정·FE 변경은 없다. 이 내부 기반에는 FE 보고서가 필요한 공개 계약 변경이 없으며 후속 Risk 계약 때 요청서를 작성한다. 브랜드 승인 #57·경계 적용 분기 확인·공식/참고 지표·Risk API·FE 통합은 대기다.
