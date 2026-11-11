@@ -36,7 +36,7 @@ jobs:
         run: uv run --locked --extra dev ruff format --check .
 
       - name: Type check (mypy)
-        run: uv run --locked --extra dev mypy app migrations
+        run: uv run --locked --extra dev mypy app etl migrations
 
       - name: Test (pytest)
         run: uv run --locked --extra dev pytest

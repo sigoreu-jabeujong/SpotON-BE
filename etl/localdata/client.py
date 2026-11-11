@@ -2,12 +2,17 @@ import logging
 import math
 import time
 from collections.abc import Callable, Iterator, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
+from threading import Lock
+from zoneinfo import ZoneInfo
 
 import httpx
 from pydantic import SecretStr
 
+from etl.localdata.collection import AuthorityStats, CollectedSource
 from etl.localdata.constants import (
     PAGE_SIZE,
     SEOUL_AUTHORITY_CODES,
@@ -46,11 +51,12 @@ def _safe_int(value: object, *, name: str) -> int:
         raise LocalDataContractError(f"contract_error:{name}")
     if isinstance(value, str) and not value.isascii():
         raise LocalDataContractError(f"contract_error:{name}")
+    result: int | None = None
     try:
         result = int(value)
     except (TypeError, ValueError, OverflowError):
-        raise LocalDataContractError(f"contract_error:{name}") from None
-    if result < 0 or str(value).strip() not in {str(result), f"+{result}"}:
+        pass
+    if result is None or result < 0 or str(value).strip() not in {str(result), f"+{result}"}:
         raise LocalDataContractError(f"contract_error:{name}")
     return result
 
@@ -75,10 +81,22 @@ class LocalDataClient:
         *,
         client: httpx.Client | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        workers: int = 1,
+        max_requests: int | None = None,
+        progress: Callable[[Source, str, int, int], None] | None = None,
     ) -> None:
         key = service_key.get_secret_value().strip()
         if not key:
             raise LocalDataRequestError("configuration_error:service_key_missing")
+        if type(workers) is not int or not 1 <= workers <= 4:
+            raise ValueError("workers must be an integer from 1 to 4")
+        if max_requests is not None and (type(max_requests) is not int or max_requests < 1):
+            raise ValueError("max_requests must be positive")
+        self._workers = workers
+        self._max_requests = max_requests
+        self._progress = progress
+        self.request_count = 0
+        self._request_lock = Lock()
         self._service_key = service_key
         self._owns_client = client is None
         self._client = client or httpx.Client(
@@ -98,46 +116,92 @@ class LocalDataClient:
         self.close()
 
     def collect_source(self, source: Source) -> list[LocalDataRow]:
-        result: list[LocalDataRow] = []
-        for authority_code in SEOUL_AUTHORITY_CODES:
-            result.extend(self.collect_authority(source, authority_code))
-        return result
+        return list(self.collect(source).rows)
+
+    def collect(self, source: Source) -> CollectedSource:
+        started = datetime.now(ZoneInfo("Asia/Seoul")).replace(tzinfo=None, microsecond=0)
+        initial_requests = self.request_count
+        with _suppress_http_url_logs():
+            first_pages: dict[str, Page] = {}
+            for code in SEOUL_AUTHORITY_CODES:
+                first_pages[code] = self._fetch_page(source, code, 1)
+                if self._progress is not None:
+                    self._progress(source, code, 0, first_pages[code].total_count)
+            remaining = sum(
+                max(math.ceil(page.total_count / PAGE_SIZE) - 1, 0) for page in first_pages.values()
+            )
+            if self._progress is not None:
+                self._progress(source, "all", 0, len(first_pages) + remaining)
+            if (
+                self._max_requests is not None
+                and self.request_count + remaining > self._max_requests
+            ):
+                raise LocalDataRequestError("request_error:request_budget")
+            rows: list[LocalDataRow] = []
+            stats: list[AuthorityStats] = []
+            for code, first in first_pages.items():
+                authority_rows = self._collect_authority(source, code, first)
+                rows.extend(authority_rows)
+                stats.append(
+                    AuthorityStats(
+                        code,
+                        first.total_count,
+                        max(math.ceil(first.total_count / PAGE_SIZE), 1),
+                        len(authority_rows),
+                    )
+                )
+        return CollectedSource(
+            source, started, tuple(stats), tuple(rows), self.request_count - initial_requests
+        )
 
     def collect_authority(self, source: Source, authority_code: str) -> list[LocalDataRow]:
         if authority_code not in SEOUL_AUTHORITY_CODES:
             raise ValueError("지원하지 않는 관청 코드입니다")
+        with _suppress_http_url_logs():
+            first = self._fetch_page(source, authority_code, 1)
+            return self._collect_authority(source, authority_code, first)
+
+    def _collect_authority(
+        self, source: Source, authority_code: str, first: Page
+    ) -> list[LocalDataRow]:
         collected: list[LocalDataRow] = []
-        expected_total: int | None = None
-        max_pages: int | None = None
-        page_no = 1
-        while True:
-            page = self._fetch_page(source, authority_code, page_no)
+        expected_total = first.total_count
+        max_pages = max(math.ceil(expected_total / PAGE_SIZE), 1)
+
+        def accept(page_no: int, page: Page) -> None:
             if page.page_no != page_no:
                 raise LocalDataContractError("contract_error:page_no_mismatch")
-            if expected_total is None:
-                expected_total = page.total_count
-                max_pages = math.ceil(expected_total / PAGE_SIZE)
-                if expected_total == 0:
-                    if page.rows:
-                        raise LocalDataContractError("contract_error:unexpected_rows")
-                    return []
-            elif page.total_count != expected_total:
+            if page.total_count != expected_total:
                 raise LocalDataContractError("contract_error:total_count_changed")
-
-            if any(row.authority_code != authority_code for row in page.rows):
+            if any(
+                row.authority_code is not None and row.authority_code != authority_code
+                for row in page.rows
+            ):
                 raise LocalDataContractError("contract_error:authority_filter_ignored")
             if len(page.rows) > PAGE_SIZE:
                 raise LocalDataContractError("contract_error:page_size_exceeded")
+            if page_no < max_pages and len(page.rows) != PAGE_SIZE:
+                raise LocalDataContractError("contract_error:truncated_page")
             collected.extend(page.rows)
             if len(collected) > expected_total:
                 raise LocalDataContractError("contract_error:row_count_exceeded")
-            if len(collected) == expected_total:
-                return collected
-            if not page.rows or len(page.rows) < PAGE_SIZE:
-                raise LocalDataContractError("contract_error:truncated_page")
-            page_no += 1
-            if max_pages is None or page_no > max_pages:
-                raise LocalDataContractError("contract_error:max_pages_exceeded")
+            if self._progress is not None and (
+                page_no == 1 or page_no == max_pages or page_no % 50 == 0
+            ):
+                self._progress(source, authority_code, page_no, expected_total)
+
+        accept(1, first)
+        with ThreadPoolExecutor(max_workers=self._workers) as pool:
+            for start in range(2, max_pages + 1, self._workers):
+                page_numbers = range(start, min(start + self._workers, max_pages + 1))
+                pages = pool.map(
+                    lambda page_no: self._fetch_page(source, authority_code, page_no), page_numbers
+                )
+                for page_no, page in zip(page_numbers, pages, strict=True):
+                    accept(page_no, page)
+        if len(collected) != expected_total:
+            raise LocalDataContractError("contract_error:truncated_page")
+        return collected
 
     def _fetch_page(self, source: Source, authority_code: str, page_no: int) -> Page:
         params = {
@@ -149,16 +213,24 @@ class LocalDataClient:
         }
         response: httpx.Response | None = None
         for attempt in range(1, MAX_ATTEMPTS + 1):
+            with self._request_lock:
+                if self._max_requests is not None and self.request_count >= self._max_requests:
+                    raise LocalDataRequestError("request_error:request_budget")
+                self.request_count += 1
+            transport_failed = False
             try:
                 with _suppress_http_url_logs():
                     response = self._client.get(SOURCE_ENDPOINTS[source], params=params)
             except httpx.TransportError:
+                transport_failed = True
+            if transport_failed:
                 if attempt == MAX_ATTEMPTS:
                     raise LocalDataRequestError(
                         f"request_error:transport source={source} page={page_no}"
-                    ) from None
+                    )
                 self._sleep(min(2 ** (attempt - 1), MAX_RETRY_DELAY_SECONDS))
                 continue
+            assert response is not None
             if response.status_code in TRANSIENT_STATUS_CODES and attempt < MAX_ATTEMPTS:
                 self._sleep(self._retry_delay(response, attempt))
                 continue
@@ -169,7 +241,13 @@ class LocalDataClient:
             raise LocalDataRequestError(
                 f"request_error:http_{response.status_code} source={source} page={page_no}"
             )
-        return self._parse_page(response, page_no)
+        page = self._parse_page(response, page_no)
+        if any(
+            row.authority_code is not None and row.authority_code != authority_code
+            for row in page.rows
+        ):
+            raise LocalDataContractError("contract_error:authority_filter_ignored")
+        return page
 
     @staticmethod
     def _retry_delay(response: httpx.Response, attempt: int) -> float:
@@ -186,10 +264,14 @@ class LocalDataClient:
         content_type = response.headers.get("content-type", "").lower()
         if "json" not in content_type:
             raise LocalDataContractError("contract_error:non_json_response")
+        parsed = True
         try:
             payload = response.json()
         except ValueError:
-            raise LocalDataContractError("contract_error:invalid_json") from None
+            parsed = False
+            payload = None
+        if not parsed:
+            raise LocalDataContractError("contract_error:invalid_json")
         if not isinstance(payload, Mapping):
             raise LocalDataContractError("contract_error:envelope")
         envelope = payload.get("response")

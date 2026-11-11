@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any
 
@@ -75,6 +76,7 @@ def upsert_records(
     records: list[StoreRecord] | tuple[StoreRecord, ...],
     *,
     chunk_size: int = 1000,
+    before_write: Callable[[Connection], None] | None = None,
 ) -> int:
     if connection.in_transaction():
         raise RepositoryContractError("새 트랜잭션을 시작할 수 있는 연결이 필요합니다")
@@ -93,6 +95,8 @@ def upsert_records(
             text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
             {"lock_key": f"spoton:localdata:{source.value}"},
         )
+        if before_write is not None:
+            before_write(connection)
         for offset in range(0, len(records), chunk_size):
             payloads = [_payload(record) for record in records[offset : offset + chunk_size]]
             if not payloads:
