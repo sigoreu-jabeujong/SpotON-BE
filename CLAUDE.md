@@ -27,3 +27,7 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 ## 과거 시점 점포 조회 계약 (BE #45)
 
 `GET /api/stores/snapshot`은 nearby와 같은 입력·집합·순서·기간을 사용하되 as_of=YYYY-MM이 필수다. N=total_at_as_of=still_open+closed_since+other=stores.length이며 같은 목록에서 최신 기록 open/closed/other를 집계한다. source+license_no 식별, nullable 상호·기간 및 기간 상태/사유를 제공한다. 기간은 T까지가 아닌 최신 데이터 기준 전체 기간이고 요약은 실제 T와 최신 데이터 기준 상태를 사용한다. excluded_no_coord는 서울 동일 비공간 조건의 좌표 미확보 수로 N과 합산하지 않는다. 중복·응답 불변식/모델 검증 실패는 부분 응답 없는 안전한 500·no-store다. 상세는 docs/designs/feat45-store-snapshot-api.md, FE 변경은 docs/fe-store-snapshot-api-request.md를 따른다.
+
+## 상권 경계 적재 기준 (BE #47)
+
+현재 migration head는 0005다. `python -m etl.market_areas`는 공식 OA-15560 ZIP의 hash·첨부 수정일을 받아 기본 읽기 전용 dry-run, --write일 때 일반 로컬 앱 계정에서 원자적으로 적재한다. EPSG:5181 원본의 무효 도형만 linework 보정 후 유효 MULTIPOLYGON 4326·GIST로 저장한다. 원본 면적·hole/multipart·타입/5자리 구 코드를 보존하고 버전/데이터 digest를 검증한다. 같은 원본/규칙 재실행은 불변 버전을 재사용하며 기존 버전 수정/삭제·최신 자동 선택은 하지 않는다. source_file_date는 첨부 수정일이고 boundary_as_of는 미확인 null이다. 후속 통계 분기와의 코드/경계 호환 전에는 지표에 자동 적용하지 않는다. 현재 1,650행·6개 보정, 기존 stores 689,440건이다. 상세는 docs/designs/feat47-market-areas-import.md를 따른다. API 응답/FE 변경은 없다.
