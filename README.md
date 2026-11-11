@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해 API와 인허가 ETL, 상권 경계 버전 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 검증 CSV의 점포 689,440건과 공식 ZIP의 상권 경계 1,650건을 적재했습니다. migration `0005`가 현재 head입니다. 경계 적용 시점/통계 분기 호환은 미확인이며 공식 통계·분석 API와 FE 반영은 후속 작업입니다.
+현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해 API와 인허가 ETL, 상권 경계·공식 점포 통계 버전 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 인허가 점포 689,440건·상권 경계 1,650건·2025년 4개 분기의 공식 지원 업종 통계 24,810행을 적재했습니다. migration `0006`이 현재 head입니다. 경계의 실제 적용 시점/통계 분기 호환은 미확인이며 분석 API와 FE 반영은 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -179,7 +179,7 @@ uv run --locked --extra dev --no-editable python -m etl.localdata --source gener
 - `--from-csv --write`는 허용하지 않습니다. CSV dry-run으로 만든 snapshot을 확인한 뒤
   같은 파일을 `--from-snapshot --write`로 적재합니다. 원본 CSV·보고서는 수정하지 않습니다.
 - `--write`는 localhost의 `spoton_dev`·`spoton_app`만 허용합니다. 연결 후 계정·권한·revision
-  `0005`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
+  `0006`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
 - 같은 snapshot으로 다시 실행하면 기존 `(source, license_no)`를 갱신합니다. `affected`는
   성공적으로 처리한 입력 수이고, 값이 실제로 변경된 행 수를 뜻하지 않습니다.
 - 실제 원천은 성공 코드 `0`, 날짜 `YYYY-MM-DD`, 갱신시각 `YYYY-MM-DD hh:mm:ss`를 사용합니다.
@@ -225,6 +225,28 @@ uv run --locked --extra dev python -m etl.market_areas `
 - source gu_code는 5자리 SIGNGU_CD입니다. 점포의 7자리 관청 코드와 바로 조인하지 않습니다. 공개 API·FE 응답은 변경하지 않았습니다.
 
 실제 적재·재실행·원자료 표본·데이터 보존 검증은 [이슈 47 기록](docs/designs/feat47-market-areas-import.md)을 확인합니다. 소진공 상가정보(R7)는 현재 필수 ETL에서 사용하지 않습니다.
+
+## 공식 점포·개폐업 통계 적재 (BE-17)
+
+출처는 서울특별시·서울신용보증재단 [상권분석서비스(점포-상권), OA-15577](https://data.seoul.go.kr/dataList/OA-15577/S/1/datasetView.do), 공공누리 1유형 출처표시입니다. 공식 연간 ZIP을 저장소 밖에 두고 첨부 수정일·기대 SHA256·완료된 연도·대조 경계 UUID를 명시합니다. 명령 자체는 네트워크 다운로드를 하지 않습니다.
+
+```powershell
+uv run --locked --extra dev python -m etl.market_stores `
+  --zip "<저장소 밖 공식 연간 ZIP 경로>" `
+  --expected-sha256 "<ZIP SHA256>" `
+  --source-year 2025 --source-file-date 2026-05-21 `
+  --code-check-boundary-version "<대조할 market_area_versions UUID>"
+# 기본은 READ ONLY dry-run입니다. 확인 후 같은 명령에 --write를 추가합니다.
+```
+
+- 현재 검증 파일은 2,119,809 bytes, SHA256 `133bfc6ce79e13ee5b289490e4667dfba46a0af5d0d71df360a0d324e030a4e6`, 내부 CP949 CSV 31,051,537 bytes입니다. 첨부 수정일 2026-05-21과 통계 분기 20251~20254를 구분하며 최신 API 분기를 보장하지 않습니다.
+- 원본 304,775행 전체를 검증하고 CS100001/2/3/4/10 지원 업종 24,810행만 저장합니다. 분기별 6,219/6,215/6,191/6,185행, 나머지 279,965행은 미지원 업종 제외입니다. 없는 조합을 점포 0으로 채우지 않습니다.
+- `SIMILR_INDUTY_STOR_CO`가 **전체**, `STOR_CO`가 **일반**, `FRC_STOR_CO`가 **가맹** 점포 수입니다. 전체=일반+가맹을 검사하고 개폐업 수·공식 원천 비율을 그대로 보존합니다. 100% 초과 비율을 자르거나 다시 계산하지 않으며 빈 비율(null)과 실제 0을 구분합니다.
+- market_store_versions는 ZIP/CSV hash·내부 파일 시각·인코딩·규칙·집계·코드 대조 결과를 저장합니다. market_stores는 `(version_id, market_code, quarter, induty_cd)`로 구분하며 같은 원본/규칙/대조 경계의 재실행은 UUID·loaded_at·내용을 유지하고 삽입 0건입니다. 전체 연도를 한 트랜잭션으로 적재하며 실패 시 버전과 행을 모두 롤백합니다.
+- 대조 경계의 실제 내용 hash를 확인하고 분기별 양방향 코드·유형·명칭 차이를 건수로 남깁니다. 현재 코드/유형은 일치하고 명칭 차이는 분기별 1개입니다. `code_check_boundary_version_id`는 대조 근거이며 적용 경계 확정이 아닙니다. `boundary_compatibility=unverified`와 기존 `boundary_as_of=null`을 유지합니다.
+- 공식 통계와 인허가 점포의 모집단 동일성·분기별 유효 경계는 미확인입니다. 공식 비율을 반경 지표로 합산/평균하거나 참고 폐업률로 바꾸지 않습니다. 공개 API·FE 변경은 없습니다. 적재된 공식 통계가 있으면 migration downgrade는 실패하며 기존 버전 수정·삭제나 최신 자동 선택을 하지 않습니다.
+
+설계·Claude 검토·실제 검증은 [이슈 49 기록](docs/designs/feat49-market-stores-import.md)을 확인합니다.
 
 ## PostgreSQL·PostGIS 설정과 마이그레이션
 
