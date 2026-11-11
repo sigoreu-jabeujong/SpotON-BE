@@ -7,13 +7,14 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 from uuid import uuid4
 
 import httpx
 from sqlalchemy import Connection, Engine, text
 
 from app.core.config import Settings
+from app.core.operations import etl_phase, logged_import
 from app.db.session import create_db_engine, normalize_database_url
 from etl.localdata.client import LocalDataClient, LocalDataError
 from etl.localdata.constants import Source
@@ -29,6 +30,11 @@ DEFAULT_REQUEST_BUDGET = 9500
 
 class ImportConfigurationError(ValueError):
     pass
+
+
+class SafeParser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        self.exit(2, "invalid arguments\n")
 
 
 def validate_local_target(settings: Settings) -> None:
@@ -66,6 +72,7 @@ def check_local_database(connection: Connection) -> None:
         raise ImportConfigurationError("import:constraint")
 
 
+@logged_import("localdata")
 def run_import(
     source: Source,
     *,
@@ -96,41 +103,43 @@ def run_import(
         if write:
             validate_local_target(config)
             engine = create_db_engine(config)
-            with engine.connect() as connection, connection.begin():
+            with etl_phase("preflight"), engine.connect() as connection, connection.begin():
                 connection.exec_driver_sql("SET TRANSACTION READ ONLY")
                 check_local_database(connection)
-        if from_snapshot is not None:
-            collection = load_snapshot(from_snapshot, source)
-        elif from_csv is not None and validation is not None:
-            collection = load_validated_csv(from_csv, validation, source)
-        else:
-            if (
-                config.data_go_kr_service_key is None
-                or not config.data_go_kr_service_key.get_secret_value().strip()
-            ):
-                raise ImportConfigurationError("import:missing_key")
-            with httpx.Client(
-                timeout=httpx.Timeout(60.0, connect=5.0),
-                follow_redirects=False,
-                limits=httpx.Limits(max_connections=workers, max_keepalive_connections=workers),
-            ) as transport:
-                with LocalDataClient(
-                    config.data_go_kr_service_key,
-                    client=transport,
-                    workers=workers,
-                    max_requests=max_requests,
-                    progress=progress,
-                ) as client:
-                    collection = client.collect(source)
+        with etl_phase("collect"):
+            if from_snapshot is not None:
+                collection = load_snapshot(from_snapshot, source)
+            elif from_csv is not None and validation is not None:
+                collection = load_validated_csv(from_csv, validation, source)
+            else:
+                if (
+                    config.data_go_kr_service_key is None
+                    or not config.data_go_kr_service_key.get_secret_value().strip()
+                ):
+                    raise ImportConfigurationError("import:missing_key")
+                with httpx.Client(
+                    timeout=httpx.Timeout(60.0, connect=5.0),
+                    follow_redirects=False,
+                    limits=httpx.Limits(max_connections=workers, max_keepalive_connections=workers),
+                ) as transport:
+                    with LocalDataClient(
+                        config.data_go_kr_service_key,
+                        client=transport,
+                        workers=workers,
+                        max_requests=max_requests,
+                        progress=progress,
+                    ) as client:
+                        collection = client.collect(source)
         snapshot_path = save_snapshot(collection, ROOT / "datasets" / "localdata") if save else None
         batch_id = uuid4()
-        transformed = transform_rows(
-            source, collection.rows, batch_id=batch_id, today=collection.collected_at.date()
-        )
+        with etl_phase("transform"):
+            transformed = transform_rows(
+                source, collection.rows, batch_id=batch_id, today=collection.collected_at.date()
+            )
         affected = 0
         if engine is not None:
             batch = import_batch(collection, batch_id)
-            with engine.connect() as connection:
+            with etl_phase("persist"), engine.connect() as connection:
                 affected = upsert_records(
                     connection,
                     source,
@@ -192,7 +201,7 @@ def _progress(source: Source, authority: str, page: int, total: int) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Collect or import a complete Seoul source")
+    parser = SafeParser(description="Collect or import a complete Seoul source")
     parser.add_argument("--source", required=True, choices=[source.value for source in Source])
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--write", action="store_true", help="Write only to local spoton_dev")

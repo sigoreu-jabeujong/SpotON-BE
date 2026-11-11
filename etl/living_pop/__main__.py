@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 from app.core.config import Settings
+from app.core.operations import etl_phase, logged_import
 from app.db.session import create_db_engine
 from etl.living_pop.data import PopulationImportError
 from etl.living_pop.grid import prepare_grid
@@ -18,15 +19,17 @@ class SafeParser(argparse.ArgumentParser):
         raise PopulationImportError("living_pop:arguments")
 
 
+@logged_import("living_pop")
 def run_import(
     path: Path, *, write: bool = False, settings: Settings | None = None
 ) -> dict[str, Any]:
-    daily = load_input(path)
+    with etl_phase("read_source"):
+        daily = load_input(path)
     config = settings if settings is not None else Settings()
     validate_local_target(config)
     engine = create_db_engine(config)
     try:
-        with engine.connect() as c:
+        with etl_phase("prepare"), engine.connect() as c:
             c.exec_driver_sql("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             limits(c)
             check_local_database(c)
@@ -38,7 +41,7 @@ def run_import(
         reused = False
         inserted_grids = 0
         if write:
-            with engine.connect() as c, c.begin():
+            with etl_phase("persist"), engine.connect() as c, c.begin():
                 check_local_database(c)
                 gid, vid, reused, inserted_grids = save(c, daily, grid)
         return dict(
