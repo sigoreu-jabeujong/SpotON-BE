@@ -140,6 +140,14 @@ def test_official_risk_guide_name_is_not_forbidden() -> None:
     assert failures(summary("서울시 창업위험도 안내를 확인해 주세요.")) == set()
 
 
+def test_decimal_points_do_not_create_false_repeated_sentences() -> None:
+    context = {"values": [80.0, 40.0], "denominator": 5}
+    text = (
+        "개업 기간 비율은 80.0%이며 분모는 5건입니다. 다른 기간 비율은 40.0%이며 분모는 5건입니다."
+    )
+    assert VerifyFailure.REPETITION not in failures(summary(text), context=context)
+
+
 @pytest.mark.parametrize("indicator_id", ["survival_rate_3y", "official_closure_rate"])
 def test_pending_indicator_with_value_fails(indicator_id: str) -> None:
     output = {"summary": "요약", "indicators": [{"id": indicator_id, "value": 500}]}

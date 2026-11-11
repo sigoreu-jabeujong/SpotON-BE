@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from pydantic import BaseModel, JsonValue
@@ -47,14 +47,20 @@ async def generate_verified(
     context: Mapping[str, JsonValue],
     response_model: type[BaseModel] | None = None,
     policy: VerifyPolicy | None = None,
+    data_validator: Callable[[dict[str, JsonValue]], bool] | None = None,
+    before_generation: Callable[[int], None] | None = None,
 ) -> VerifiedOutput:
     verdict: VerifyResult | None = None
     for generation in range(1, MAX_GENERATIONS + 1):
+        if before_generation is not None:
+            before_generation(generation)
         result = await client.generate(request)
         verdict = verify_output(
             result.text, context=context, response_model=response_model, policy=policy
         )
         if verdict.ok and verdict.data is not None:
-            return VerifiedOutput(result=result, data=verdict.data, generations=generation)
+            if data_validator is None or data_validator(verdict.data):
+                return VerifiedOutput(result=result, data=verdict.data, generations=generation)
+            verdict = VerifyResult((VerifyFailure.SCHEMA_MISMATCH,))
     assert verdict is not None
     raise AiVerifyFailedError(verdict.failures)
