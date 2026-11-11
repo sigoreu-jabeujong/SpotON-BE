@@ -1,7 +1,7 @@
 # BE-23 선행 상권 공간 판정 (#62)
 
 - 기준: develop `408e32b`, `feat#62-market-judgement`, 2026-11-12
-- 상태: Codex 설계 후 Claude가 이 MD만 실제 Read/Edit, Codex 최종 점검 후 구현
+- 상태: Codex 설계 → Claude 실제 MD 수정 → Codex 최종 점검·구현·로컬 검증. CI 후 develop 일반 Squash 병합하며 실제 상태는 #62 연결 기록을 따른다.
 - 범위: 명시한 경계 버전의 공간 후보 판정 서비스·내부 모델·검증. 공개 API/공식 지표·FE는 이번에 추가하지 않는다.
 
 ## 1. 근거와 범위
@@ -127,3 +127,14 @@ provenance에는 version_id/source_dataset/source_url/source_file_date/boundary_
 Claude 실제 수정 diff 전체와 결과 JSON(is_error=false, 3 turns, permission_denials=[])을 읽었다. Literal 상태 고정·소비 측 공식 조인 금지·유형 allowlist·상태별 불변식·축 순서·동일 spheroid·시점/공간 차이·버전 누락/빈 버전·DB 오류 비노출을 채택한다. 실제 모델은 관광특구 U, (version_id,market_code) 복합 PK, MULTIPOLYGON SRID4326, 유효/비어있지 않은 도형 CHECK를 이미 보장한다. 버전 완료 상태 컬럼은 없고 연간 원자 적재 후 row_count가 저장된다. 조회는 실제 행 수가 row_count와 같은지도 확인해 빈/부분 손상을 정상 outside로 숨기지 않는다.
 
 중복 제거 제안은 조정한다. 한 상권의 multipart는 이미 단일 MULTIPOLYGON 행이고 중복 행은 복합 PK상 허용되지 않는다. 순수 선택 함수에서도 중복을 조용히 제거하면 손상을 숨기므로 같은 코드 중복은 동일 내용이어도 안전하게 실패한다. 적용성은 Literal unverified로 고정하며 primary/candidates를 공식 통계 조인 근거로 사용하지 않는다. geometry 포함과 geography 거리의 경계 차이는 허용하고 outside의 근처 거리가0이어도 모순으로 보지 않는다. 정확500m는 독립 DB 실측과 비교하되 499/501m는 확실한 경계 양쪽을 검사한다. 기존 좌표 정책과 달리 서울 밖을 오류로 바꾸는 새 정책은 이번 내부 서비스에서 도입하지 않는다.
+
+## 9. 구현·검증 결과 (2026-11-12)
+
+- `BoundaryQuery`·`MarketRef`·상태별 결과·출처 모델과 `classify_markets`·`judge_market`를 구현했다. 명시 UUID와 경계 행 수를 검사하고 ST_Covers 포함/경계 처리, 관광특구 별도 표시, 동순위 모호함, 밖에서만 spheroid 최단거리 기반 교차 목록을 반환한다. 순서는 코드 기준이며 하나를 임의 선택하지 않는다. DB/모델 실패는 원문과 예외 context가 없는 안전한 INTERNAL_ERROR다.
+- 서비스는 호출자가 제공하는 읽기 전용 일관된 Session만 사용한다. 생성/commit/rollback/세션 설정 변경을 하지 않는다. provenance의 applicability는 unverified로 고정하고 경계 적용일·통계 분기 매칭을 주장하지 않는다. 기존 API·라우터/main·DB 모델/migration·의존성·원본·Docker/.env·FE 변경은 없다.
+- 새 일반 **33개**, 새 PostGIS **4개**를 포함해 전체 일반 **957개**, 격리 통합 **103개** 통과. ruff/format **233 files**, mypy app/etl/migrations **118 files** 통과. 기존 Starlette/httpx deprecation 경고 1건은 그대로다.
+- 합성 PostGIS는 외곽선·꼭짓점·hole 경계 포함/hole 내부 제외·multipart, 세부 1개+특구 여러 개, 세부/특구 동순위 중첩, 반경 무관 포함 결과, 다른 버전 후보 배제, 499/500/500.001/501m 최단거리, 빈/부분/없는 버전 안전 실패와 READ ONLY 호출을 확인했다. 정확500m 후보는 독립 ST_Distance의 판정과 대조했다. 일반 모델 검증은 상태/목록 불변식·유형·중복·비유한 좌표·비노출·적용성 고정을 확인했다.
+- 실제 경계는 버전1개·적용일 확인0개, 골목1,090·발달249·전통시장305·관광특구6개다. 각 유형5건의 내부점/꼭짓점, 실제 세부 상권 교차3건, 추가2점에 300/500/1000m를 적용한 **135조합**을 독립 SQL(ST_Intersects 포함·직접 ST_Distance 거리)과 대조했다. 공간 상태는 in_market99·ambiguous30·outside6이며 모두 일치했다. 모델 차이0·무효/빈 도형/SRID 오류0·head0009도 확인했다. 이는 지정 버전의 공간 검증이며 현재/과거 적용성 검증이 아니다.
+- 기존 health·data-range·activity의 실제 앱/개발 DB 조회는 최종 모두200이고 공개 Risk 경로는 추가하지 않았다. 최초 검증 실행은 기존 경로 검사 구간의 assertion 1회가 실패했다. 경로별 상태를 기록하지 않아 어느 요청인지 확정할 수 없으며, 개별 재확인과 전체 도구 재실행에서는 모두200이었다. 원인/timeout이라고 단정하거나 콜드 캐시·동시 부하 SLA를 통과했다고 주장하지 않는다. 검증 도구의 오래된 비편집 설치본 import 문제도 저장소 루트 명시 후 바로잡았다.
+- 실제 개발 DB는 조회만 했고 기존14개 테이블 전체 행·geometry hash/건수가 이전 검증 기준과 동일함을 확인했다. 파괴적 회귀는 별도 임시 PostGIS에서만 실행했다. 검증 도구·실데이터·원본·키는 커밋하지 않는다.
+- 후속은 이 결과를 소비할 Risk의 상태/후보 계약·공식 분기/업종 호환 검증과 참고지표 분모/생존 코호트 구현이다. 이번 내부 기반을 BE-23 전체 API·BE-24/25/26·브랜드 승인·FE 통합 완료로 표시하지 않는다. 공개 계약이 바뀌는 후속 단계에서 BE측 FE 변경 요청서를 작성한다.

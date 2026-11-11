@@ -96,6 +96,12 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 
 [설계·검증](docs/designs/feat60-market-activity-api.md), [FE 변경 요청](docs/fe-market-activity-api-request.md)을 확인합니다. FE 연결과 조건부 수치 결합 완료를 뜻하지 않습니다.
 
+## Risk 선행 상권 판정
+
+내부 `judge_market(session, BoundaryQuery)`는 명시한 경계 UUID에서 상권 포함·밖·중첩을 구분합니다. 외곽선과 hole 경계를 포함하고 세부 상권 우선·관광특구 병기·동순위 후보 보존을 적용합니다. 상권 밖일 때만 반경과 교차하는 폴리곤 목록을 반환합니다. 호출자는 읽기 전용 일관된 세션을 제공해야 합니다.
+
+현재 경계의 적용일은 미확인이므로 결과의 `applicability=unverified`를 유지합니다. 공식 통계 연결이나 현재/과거 상권 확정 근거가 아니며 공개 `/api/risk`는 후속 작업입니다. [설계·Claude 검토·검증](docs/designs/feat62-market-judgement.md)을 확인합니다.
+
 ## AI LLM client
 
 `app/ai/`는 AI 해석 API(BE-32)가 사용할 공급자 분리 LLM client입니다. 아직 API 경로는 없습니다. `create_llm_client(settings)`가 `LLM_PROVIDER=google`이면 Gemini `generateContent` 어댑터를 만들고, 그 밖의 값은 호출 시 실패하는 client를 돌려줘 설정 오류가 지표 API 시작을 막지 않습니다.
