@@ -157,7 +157,7 @@ GET /api/stores/nearby
 
 검토 대상은 `src/types/stores.ts`, `src/types/api.ts`, `src/api/params.ts`, 진단 조건 타입·URL 변환, 주변 지도·표·팝업·진단서, `src/constants/messages.ts`와 관련 목업·문서·CLAUDE.md입니다. 기존 getNearbyStores()와 query 변환 경로를 우선 활용해 주세요. BE-14 data-range나 snapshot 구현 완료를 이번 요청에 포함하지 않습니다.
 
-후속 data-range는 원본 v1.2처럼 category 필수·sub_category 선택으로 최소 월을 계산할 계획입니다. 해당 API가 구현될 때 nearby와 같은 업종 조건을 전달해 달력 범위와 질의 허용 범위를 맞춰야 합니다.
+BE-14 data-range는 원본 v1.2처럼 category 필수·sub_category 선택으로 구현했습니다. [월 범위 API 연동 요청](fe-data-range-api-request.md)에 따라 nearby와 같은 업종 조건을 전달해 달력 범위와 질의 허용 범위를 맞춰 주세요. snapshot API는 별도 후속 작업입니다.
 
 - [ ] 좌표 누락 수의 서울 범위 표시 또는 다른 계약을 BE와 합의
 - [ ] 독립 unknown 조건과 legacy include_unknown 전달 방식 확인

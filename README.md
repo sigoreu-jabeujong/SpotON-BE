@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 health·서울 주소 검색·건물별 점포 이력·주변 점포 조회 API, 공통 응답·오류 처리, PostgreSQL/PostGIS·stores, 인허가 수집·정제·멱등 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 사용자 제공 검증 CSV 689,440건을 적재했으며 migration `0003`부터 배치 출처를 저장하고 `0004`에서 거리 조회용 geography 인덱스를 추가합니다. 현재 원천의 최신 전체 수집, data-range·snapshot·분석·AI 해석 API와 FE 반영은 후속 작업입니다.
+현재는 health·서울 주소 검색·건물별 점포 이력·주변 점포 조회·업종별 조회 가능 월 범위 API, 공통 응답·오류 처리, PostgreSQL/PostGIS·stores, 인허가 수집·정제·멱등 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 사용자 제공 검증 CSV 689,440건을 적재했으며 migration `0003`부터 배치 출처를 저장하고 `0004`에서 거리 조회용 geography 인덱스를 추가합니다. 현재 원천의 최신 전체 수집, snapshot·분석·AI 해석 API와 FE 반영은 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -61,6 +61,17 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 - 검증된 배치·기준일이 없거나 DB가 실패하면 500입니다. 준비 실패를 정상 0건으로 바꾸지 않습니다. 입력 오류는 422이며 모든 응답은 no-store입니다. 개발 실행은 좌표 query가 access log에 남지 않도록 `--no-access-log`를 유지합니다.
 
 실행 전 migration `0004`까지 적용합니다. [구현·검증 기록](docs/designs/feat41-nearby-api.md), [FE 수정 요청 보고서](docs/fe-nearby-api-request.md)를 확인합니다. FE 화면·CLAUDE.md 반영은 담당자 대기이며 data-range·snapshot API는 이번 범위에 없습니다.
+
+## 조회 가능 월 범위
+
+`GET /api/meta/data-range?category={cafe|restaurant}&sub_category={선택 세부 업종}`은 시점 선택에 필요한 `min_month`, `max_month`, `max_date`, `data_updated_at`, `collected_at`을 반환합니다. 지원 세부 업종은 nearby와 같고 쉼표로 구분합니다. 좌표·반경·면적·가맹 등의 인자는 받지 않습니다.
+
+- nearby와 같은 검증된 인허가 날짜 후보에서 가장 이른 개업 월을 계산합니다. 과거 폐업 점포와 좌표 미확보·속성 미확인도 날짜가 신뢰할 수 있으면 최소 월에 기여합니다. 특정 반경의 결과 존재 범위나 과거 현황 전체 관측을 뜻하지 않습니다.
+- 최신 월은 전역 원천 갱신일의 월이며 실제 최신 기준일은 `max_date`입니다. 현재 자료는 `max_month=2026-11`, `max_date=2026-11-08`이고 오늘이나 11월 말일로 바꾸지 않습니다.
+- 검증된 D가 있지만 해당 업종의 유효 후보가 없으면 `min_month=null`입니다. FE에는 과거 월·빠른 선택을 비활성화하도록 요청합니다. 출처·기준일 미준비는 500으로 구분하며 최소 월을 임의로 채우지 않습니다.
+- 현재 `collected_at=null`을 유지합니다. 모든 응답은 no-store이고 기존 읽기 전용 일관된 세션·안전한 오류 처리를 사용합니다.
+
+[설계·검증](docs/designs/feat43-data-range-api.md), [FE 수정 요청 보고서](docs/fe-data-range-api-request.md)를 확인합니다. `/api/stores/snapshot`은 BE-15에서 후속 구현합니다.
 
 ## AI LLM client
 

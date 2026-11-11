@@ -110,3 +110,27 @@ Codex: 원본 §4-5의 sub_category와 max_date를 확인했다. 기존 FE는 ca
 ### Codex 최종 점검
 
 Claude의 실제 MD diff를 원본 §4-5·현행 코드와 대조했다. 날짜 unknown은 비어 있지 않은 date_flag의 오류/미지원 토큰이며 NULL/빈 문자열은 오류 없음으로 유지한다. meta 규칙 버전은 기존 `meta.data_version.rule_version`에 기록한다. endpoint별 rule_version이 다르므로 cross-endpoint 일치 검사는 배치 ID·매핑 버전을 비교하도록 정정했다. 주변 입력 오류 우선순위는 현행 코드와 일치한다. Claude의 날짜 경계·원천과 BE history 구분·수집일 구분은 채택한다. 측정만으로 새 중단/승인 절차를 추가하거나 문서 변경 후 같은 테스트를 반복하는 제안은 채택하지 않고, 실제 실패는 범위 내 수정·재검증한다. nullable 최소 월·과거 데이터 완전성의 FE 표시는 요청 보고서로 넘기며 반영 완료로 표시하지 않는다.
+
+## 8. 구현·검증 결과 (2026-11-12)
+
+- `CategoryFilters`에 category/sub_category 검증을 모으고 NearbyQuery가 상속하도록 했다. data-range는 좌표 없는 독립 요청 모델을 사용한다. 출처·최소 날짜 후보·출처 meta를 store_cohort에 추출하고 두 API가 사용한다. 기존 출처/날짜 후보 함수 본문을 주석·docstring 제외 AST로 비교해 로직이 동일함을 확인했다.
+- meta/data-range 라우터·서비스·응답과 OpenAPI를 구현했다. 기존 읽기 전용 REPEATABLE READ·문장 timeout·no-store·원문 없는 오류를 재사용한다. DB 모델·migration·환경·원본 데이터는 변경하지 않았다.
+- 잠긴 의존성의 `uv run --locked --extra dev`로 ruff check·format check·mypy app etl migrations(70 files)를 통과했다. 일반 pytest **693 passed**, integration 43 deselected. 별도 임시 PostgreSQL/PostGIS의 integration **43 passed**, 일반 693 deselected. 기존 Starlette/httpx 경고 1건, 실패·skip·xfail은 없다.
+- 입력 오류 우선순위·세부 업종·중복/미지원 인자·DB 연결 전 거절·입력값 비노출·OpenAPI, 과거 폐업/other·좌표 없음·0㎡/가맹 unknown, 모든 기존 날짜 플래그·미지원 토큰·불완전/역전/미래 날짜·1960 경계·D/D+1·한시/검토/삭제, 윤년·연말·최신 기준일, 빈 후보 null·전역 출처 실패를 검증했다.
+- 같은 배치·매핑에서 data-range의 최소 월을 nearby가 허용하고 직전 월은 거절하는지, 면적·가맹·반경이 달력 최소 월을 바꾸지 않는지 확인했다. 기존 history/nearby와 세션 read-only/timeout 회귀도 모두 통과했다.
+
+### 실제 개발 DB·원자료·HTTP
+
+앱 일반 계정 identity·migration 0004·689,440건을 확인한 뒤 읽기만 수행했다. API 9개 조합(restaurant/cafe·음식점 4종·두 조합·cafe 명시)의 결과는 별도로 작성한 SQL과 사전 표의 최소 월에 일치했다. 전역 max_month=2026-11, max_date/data_updated_at=2026-11-08, collected_at=null을 유지한다. 두 업종 및 chinese에서 실제 nearby 최소 월 허용·직전 월 AS_OF_OUT_OF_RANGE를 확인했다.
+
+원자료 CSV에서 각 세부 업종의 가장 이른 날짜 표본 4건씩 **20건**의 개업일·폐업일·원본 업종 입력을 대조했다. 두 전체 CSV의 DAT_UPDT_PNT 최대 날짜는 일반 2026-11-08·휴게 2026-11-07로 DB 전역 D와 일치한다. 관리번호·상호·주소·원문·키·접속 정보는 출력하거나 커밋하지 않았다.
+
+실제 ORM 세 SELECT를 출력 없이 캡처해 EXPLAIN ANALYZE를 확인했다. active_batches 약 376.281ms, missing_provenance 157.412ms, minimum_date 0.036ms였다. 9개 API 요청 관측값은 약 0.48~1.93초이며 부하·전체 요청 SLA를 보장하지 않는다. 새 인덱스나 migration은 필요하지 않았다.
+
+uvicorn을 `--no-access-log`로 임시 실행해 실제 HTTP health 200·data-range 200·중식 min_month=1962-03·no-store를 확인하고 해당 검증 서버만 종료했다. 검사 후 689,440건의 전체 행(식별자·배치·시각 포함)·geometry 해시는 기존 검증 파일과 동일하며 revision은 0004다. 파괴적 fixture는 실제 개발 DB에서 실행하지 않았다.
+
+### 전달·후속 범위
+
+BE CLAUDE.md·README·작업계획과 [FE 월 범위 요청 보고서](../fe-data-range-api-request.md)를 갱신한다. FE 저장소 변경은 없으며 nullable 최소 월·세부 업종 전달·max_date·과거 자료 한계 안내는 담당자 반영/합의 대기다. 관련 PR 확인 문구는 유지하되 FE·BE 동기화 완료 항목은 미체크로 둔다.
+
+PR 제목은 `feat: 조회 가능한 데이터 월 범위 API 구현`, 본문은 지정 양식으로 #43을 연결한다. 비밀값/인코딩 변형·diff 검사, CI 통과 후 일반 Squash로 develop에 병합한다. 실제 PR·병합 상태는 이슈 연결 기록을 따른다. snapshot은 후속 BE-15이며 전체 meta/HTTP 오류 규격 정리·원천 최신 전체 수집·FE 화면 통합 완료를 뜻하지 않는다.
