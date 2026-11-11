@@ -1,25 +1,27 @@
-# 주변 점포 조회 API 설계에 대한 FE 변경 검토 요청
+# 주변 점포 조회 API 연동을 위한 FE 수정 요청 보고서
 
 - 작성일: 2026-11-12
 - 요청 대상: SpotON FE 담당자
 - 관련 작업: BE-13 / F-03·F-04
 - BE 설계 이슈: [#38](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/38)
 - BE 설계: [주변 점포 API 설계](designs/feat38-nearby-api-design.md)
-- 상태: **설계안 검토 요청 / API 미구현 / FE 미반영**
+- BE 구현 이슈: [#41](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/41)
+- BE 구현 계획·검증: [구현 기록](designs/feat41-nearby-api.md)
+- 상태: **BE 구현 / FE 검토·구현 요청 / 반영 대기**
 
 ## 요청 내용
 
-주변 점포 조회 API의 공간·시점·필터 계약을 BE에서 설계하고 있습니다. 아래 FE 영향 사항을 검토해 주세요. 아직 실제 API가 구현된 것은 아니므로 이 문서를 실행 가능한 API 연동 완료 보고서로 사용하지 않습니다. FE 구현은 담당자가 계약 검토 후 진행하며, BE가 FE 코드·문서·이슈·PR을 직접 수정하거나 만들지 않습니다.
+BE에 구현한 `GET /api/stores/nearby`를 주변 지도·필터·점포 표·진단서에 연결해 주세요. 아래는 현재 BE 구현 기준이며, FE 담당자가 계약을 검토하고 구현합니다. 조정이 필요한 표시·필드는 BE와 합의해 주세요. FE 코드·문서·이슈·PR은 FE 담당자가 관리합니다.
 
-점포 이력 API의 선행 [BE PR #37](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/37)은 develop에 병합됐습니다. **주변 조회 API는 여전히 설계 단계**입니다. 이 요청은 이력 요청 보고서와 별개로 주변 지도·필터·주변 점포 표·진단서에 필요한 항목을 다룹니다.
+점포 이력 API의 선행 [BE PR #37](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/37)은 develop에 병합됐습니다. 이 보고서는 이력 요청 보고서와 별개로 주변 조회 연동을 요청하며, FE 반영·실제 화면 통합 완료를 뜻하지 않습니다.
 
-## 1. 예정 요청 계약
+## 1. 요청 계약
 
 ```http
 GET /api/stores/nearby
 ```
 
-| 인자 | 설계안 |
+| 인자 | 처리 기준 |
 |---|---|
 | lat, lng | 필수 WGS84 좌표. 기존 geocode 결과 |
 | category | 필수 cafe/restaurant. 주변 조회에서는 실제 업종 필터 |
@@ -31,15 +33,15 @@ GET /api/stores/nearby
 | include_unknown_area | 면적 정보 없음 포함, 기본 true |
 | include_unknown_franchise | 프랜차이즈 정보 없음 포함, 기본 true |
 
-기존 FE의 include_unknown 단독 전송은 두 조건에 같은 값을 적용하는 호환 인자로 유지하는 설계입니다. 신규 개별 인자와 기존 인자를 섞으면 422로 거절합니다. 개별 토글을 도입할 경우 공통 query 타입·변환 함수·URL 상태·query key를 함께 검토해 주세요.
+기존 FE의 include_unknown 단독 전송은 두 조건에 같은 값을 적용하는 호환 인자로 유지합니다. 신규 개별 인자와 기존 인자를 섞으면 값이 같아도 422로 거절합니다. bool은 `true`/`false` 문자열만 허용합니다. 미지원·중복 인자, 업종에 맞지 않는 세부 업종과 중복 세부 업종도 거절합니다. 개별 토글을 도입할 경우 공통 query 타입·변환 함수·URL 상태·query key를 함께 검토해 주세요.
 
-**사용자 확정 사항: 0㎡는 정보 없음입니다.** BE는 DB 원본 0을 보존하고 응답 area_m2=null로 표시하며, 필터에서는 0/null을 같은 unknown으로 다루도록 설계합니다. 0㎡를 확인된 33㎡ 미만으로 표시하지 말아 주세요. 정보 없음 포함이 켜져 있으면 해당 행이 결과에 포함될 수 있고, 꺼져 있으면 제외됩니다. 합성 목업에서도 0㎡를 실측 면적으로 표시하지 않도록 검토해 주세요.
+**사용자 확정 사항: 0㎡는 정보 없음입니다.** BE는 DB 원본 0을 보존하고 응답 area_m2=null로 표시하며, 필터에서는 0/null을 같은 unknown으로 다룹니다. 0㎡를 확인된 33㎡ 미만으로 표시하지 말아 주세요. 정보 없음 포함이 켜져 있으면 해당 행이 결과에 포함될 수 있고, 꺼져 있으면 제외됩니다. 합성 목업에서도 0㎡를 실측 면적으로 표시하지 않도록 검토해 주세요.
 
 원본 API v1.2의 독립 플래그를 반영하되 이번 설계에서는 지원 업종을 늘리지 않습니다. 주변 category 필터와 달리 이력 category는 진단 맥락이라는 차이를 유지해 주세요.
 
 ## 2. 응답 타입 검토 요청
 
-기존 NearbyStores의 center/radius_m/as_of/count/markers/message는 유지하는 안입니다. 변경·보완 검토 대상은 아래와 같습니다.
+기존 NearbyStores의 center/radius_m/as_of/count/markers/message는 유지합니다. 변경·보완 검토 대상은 아래와 같습니다. null 허용은 키 생략을 뜻하지 않습니다.
 
 | 대상 | 요청 사항 |
 |---|---|
@@ -60,7 +62,7 @@ GET /api/stores/nearby
 
 ## 3. 좌표 누락 수 표시를 먼저 확인해 주세요
 
-좌표가 없으면 반경 안인지 알 수 없습니다. 현재 명세의 `excluded_no_coord`에 다음 의미를 명시하는 설계안을 제안합니다.
+좌표가 없으면 반경 안인지 알 수 없습니다. BE가 반환하는 `excluded_no_coord`는 다음 범위입니다. FE 표시 방식은 담당자 검토·합의가 필요합니다.
 
 - 서울 전체에서 같은 업종·시점·면적·가맹 등 비공간 조건을 만족하지만 geom이 없는 점포 수.
 - 응답 meta.excluded_no_coord_scope=seoul_nonspatial_cohort.
@@ -81,11 +83,13 @@ GET /api/stores/nearby
 - 현재 적재 데이터의 가맹 여부는 모두 미확인입니다. 브랜드 원천 매핑 이전에 상호로 FE가 가맹 여부를 추정하지 않습니다.
 - 현재 가맹 미확인 포함을 끄면 가맹 분류에 관계없이 0건이 될 수 있습니다. 이를 확인된 가맹점이 실제로 0곳이라는 뜻으로 표시하지 않습니다. 추가 데이터 상태 안내 방식은 BE와 검토해 주세요.
 - 빈 결과는 count=0, markers=[], 안내 메시지입니다. 기준일/배치가 준비되지 않은 오류를 0건으로 바꾸지 않습니다.
+- 유효한 개업일이 없거나 날짜가 역전·미래인 점포, 폐업인데 폐업일이 없는 점포는 시점 판단에서 제외합니다. 과거 점포 수가 실제 영업 수보다 작을 수 있으며 이 제외 수를 좌표 누락 수와 합산하지 않습니다. 한시 영업 true는 제외하고 한시 여부 미확인은 포함합니다.
+- 유효 표본이 없는 세부 업종은 기본 현재 조회가 200·0건이며 과거 월은 AS_OF_OUT_OF_RANGE일 수 있습니다. data-range API는 이번 범위에 없으므로 임의의 달력 최소 월을 만들지 말아 주세요.
 - 잘못된 일반 인자는 422 INVALID_PARAM, 업종 누락/잘못된 업종은 422 CATEGORY_REQUIRED, 시점 범위 밖은 422 AS_OF_OUT_OF_RANGE입니다. DB 오류·문장 timeout은 현행 500 INTERNAL_ERROR 설계입니다.
 
 ## 5. 표시 검토용 합성 응답
 
-아래는 **API 미구현 상태의 합성 예시**입니다. 선택 시점은 2026-10-31, 최신 데이터 기준일은 2026-11-08입니다. 두 점포는 합성 중심점과 같은 좌표여서 거리 0m입니다. meta의 배치 상세는 생략했습니다.
+아래는 **구현 응답 구조에 맞춘 합성 예시**입니다. 선택 시점은 2026-10-31, 최신 데이터 기준일은 2026-11-08입니다. 두 점포는 합성 중심점과 같은 좌표여서 거리 0m입니다. meta의 배치 상세는 생략했습니다. 실제 API의 is_demo는 false이며 collected_at=null은 실제 수집 완료일이 기록되지 않았다는 의미입니다.
 
 ```json
 {
@@ -140,6 +144,7 @@ GET /api/stores/nearby
     "denominator": 2,
     "data_updated_at": "2026-11-08",
     "collected_at": null,
+    "collection_reason": "source_completion_time_not_recorded",
     "is_demo": true,
     "excluded_no_coord_scope": "seoul_nonspatial_cohort",
     "operating_period_basis": "latest_data"
@@ -164,4 +169,6 @@ GET /api/stores/nearby
 - [ ] 실제 API 구현 후 BE와 연결해 지도·표·진단서 검증
 - [ ] FE 계약·CLAUDE.md 반영 및 결과 전달
 
-현재 완료한 것은 BE 설계와 읽기 전용 DB·공간 함수 확인입니다. 위 API·FE 구현과 통합 검증은 대기입니다.
+연결 시 기존 `VITE_API_BASE_URL`을 사용합니다. API client가 `/api`를 붙이는 구조를 유지하고, 일부 API만 실제 연결한다면 기존 `VITE_REAL_API_PATHS`에 `/stores/nearby`를 추가하는 방식을 검토해 주세요. BE 키·DB 접속 정보는 FE에 넣지 않습니다. FE build·lint·관련 회귀와 실제 지도·표·진단서 통합 결과를 반영 후 전달해 주세요.
+
+BE 검증 결과는 [구현 기록](designs/feat41-nearby-api.md)을 따릅니다. FE 구현과 통합 검증은 담당자 반영 대기입니다.
