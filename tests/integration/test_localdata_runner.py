@@ -1,8 +1,9 @@
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import DataError
 
 from app.core.config import Settings
@@ -34,13 +35,27 @@ def test_runner_replay_is_idempotent(
 ) -> None:
     settings = configure_isolated_runner(temporary_database, monkeypatch)
     path = save_snapshot(collection(), tmp_path)
-    for _ in range(2):
+    protected_time = datetime(2025, 1, 1, tzinfo=UTC)
+    for attempt in range(2):
         result = runner.run_import(
             Source.GENERAL_RESTAURANT, settings=settings, write=True, from_snapshot=path
         )
         assert result["affected"] == 2
+        if attempt == 0:
+            with temporary_database.engine.begin() as connection:
+                connection.execute(
+                    update(Store)
+                    .where(Store.license_no == "synthetic-0")
+                    .values(brand_id=123, is_franchise=True, deleted_at=protected_time)
+                )
     with temporary_database.engine.connect() as connection:
         assert connection.scalar(select(func.count()).select_from(Store)) == 2
+        protected = connection.execute(
+            select(Store.brand_id, Store.is_franchise, Store.deleted_at).where(
+                Store.license_no == "synthetic-0"
+            )
+        ).one()
+        assert tuple(protected) == (123, True, protected_time)
 
 
 def test_runner_invalid_payload_rolls_back_entire_source(
