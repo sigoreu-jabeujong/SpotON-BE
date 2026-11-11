@@ -1,7 +1,7 @@
 # BE-20 공식 상권변화지표 원천 적재
 
 - 이슈 #55 / feat#55-market-change-import / 2026-11-12
-- 상태: Codex 설계 작성 → Claude Code가 이 MD를 실제 Read/Edit로 검토·수정함(7.1절). Codex 최종 점검 후 구현한다.
+- 상태: Claude 실제 MD 검토·Codex 최종 점검 후 구현 및 로컬 검사/실제 적재·기존 자료 보존 확인 완료. PR/CI 후 develop 일반 Squash 병합한다. 실제 상태는 이슈 #55 연결 기록을 따른다.
 - 범위: OA-15576 전체 CSV 검증·완료 연도 선택·불변 버전 적재. 지표 API/FE·임의 점수·판정·반경 합산은 별도다.
 
 ## 1. 공식 자료와 실제 확보 결과
@@ -121,3 +121,31 @@ write는 advisory transaction lock namespace0x53504F54/key20, lock_timeout5s/sta
 ### 7.2 Codex 최종 점검
 
 Claude JSON의 is_error=false·9turns·permission_denials=0과 실제 파일 diff 전부를 확인했다. narrow Protocol은 rows/markets/quarter_rows 읽기 속성만 추가하면 되므로 기존 함수 본문·출력·hash는 변경하지 않는다. 기존 2정수 advisory lock key는 경계16·점포17·매출18·생활인구19이며 이번20과 중복되지 않는다(인허가의 별도 bigint hash lock과도 방식이 다르다). 최초 수집 시각을 재사용하고 같은 bytes의 다른 provenance는 실패시키며 동일 내용·다른 bytes 버전 수는 정보로만 반환한다. 2025년 선택·정수/null/0·분기 변경 보존·업종 없음 정책을 채택했다. 포털의 의미 미확인 항목은 추정하지 않고 위 한계를 유지한다.
+
+## 8. 구현·검증 결과
+
+전용 모델2개·고정 Alembic migration0009·CSV 입력/저장/CLI·공통 audit의 Protocol 타입 힌트를 구현했다. 기존 migration·공통 audit 본문/hash·API·FE·Docker/환경설정·의존성은 변경하지 않았다. 공통 로컬 DB head guard와 관련 회귀는0009를 따르며 이전0008은 거절한다.
+
+- `ruff check .`, `ruff format --check .`(**220 files**), `mypy app etl migrations`(**113 files**) 통과.
+- 일반 전체 **870 passed**(integration92 deselected), 별도 임시 PostgreSQL17/PostGIS 전체 **92 passed**(일반870 deselected). XML의 실제 실행92개·skip/xfail/실패0을 확인했다. 기존 Starlette/httpx 경고1건이다.
+- 신규 일반25개는 4유형/평균null·0·정수상한/원문hash·헤더순서/인코딩·분기/코드/명칭·연도선택/외부행오류·누락/중복·시각/한도·오류 비노출·hash/lock key를 확인했다. 새 통합10개는 실제 CHECK/FK/index·모델차이0·downgrade보존·연간rollback·재실행/새규칙/다른연도·동일내용다른bytes·provenance충돌·동시writer·row/manifest/참조경계 변조 거절·READ ONLY·분기명칭변경/누락 미보충을 확인했다.
+- 고정 내용 hash 벡터: `7346c2362bdd2e10cd0b365f8cffa0dd408d1dae74b701084952a06133b98ae5`. 기존 BE-17/18 합성 원본의 content hash 벡터도 각각 `1edd356d6da9572639263e8e058a4c32cb43a6be8a96e09b0db16acd693514bf` / `c4f3b27ed6917eca39397b3392b1f6f31be88cc6fa2d80fc57e5a1032bfe6507`로 고정했다. 기존 점포/매출의 보고서·출력은 전체 회귀 테스트로 검증했으며 모든 항목의 별도 고정 벡터를 추가했다고 주장하지 않는다.
+
+### 실제 개발 DB
+
+일반 spoton_app 계정의 DB/role·superuser/DB생성/role생성 false·기존head0008을 확인한 후0009를 적용했다. 실제 기본 CLI dry-run은 신규2개 테이블0행을 유지했다. write는 **버전1개·2025년6,600행**을 저장했고 replay는 같은 UUID/loaded_at/manifest/hash를 유지하며 **inserted=0**이었다. 원본36,300행을 전부 검사하고 선택 연도 밖29,700행을 비저장 집계했다. 최초 dry-run2.79초/write3.95초/replay3.36초로 환경 의존 관측값이며 SLA가 아니다.
+
+| 원천 유형 | 행 수 |
+|---|---:|
+| HH 정체 | 2,167 |
+| LL 다이나믹 | 2,061 |
+| LH 상권확장 | 994 |
+| HL 상권축소 | 1,378 |
+
+분기별1,650행이며 코드/구분 차이0·경계 명칭 차이3개·선택 연도 안 분기 간 명칭/구분 변경0개다. 차이를 수정하거나 공식 유형을 재계산하지 않았고 경계 적용시점의 일치로 간주하지 않았다. 실제 평균의 null/0은0건이며 해당 구분은 합성 자료·격리 DB에서 검증했다.
+
+분기별5행씩 **원자료20행**을 별도 csv.DictReader로 읽어 원천 코드/명칭·평균4개·정규화 전 원문 map SHA256을 독립 대조했다. 앱 관리 모델차이0·기존 health/history/nearby/snapshot/data-range API 모두200을 확인했다.
+
+기존 **12개 테이블**(점포/배치·경계/버전·공식 점포/버전·추정매출/버전·생활인구 격자/관측과 각 버전)의 전체 행·geometry를 포함한 hash/건수가 적재 전 baseline과 일치했다. 기존 점포689,440건·경계1,650개·점포 통계24,810행·매출14,391행·생활인구531,922행·격자10,125개 및 전체 버전을 보존했다. 원본 CSV SHA256도 일치했다. 실제 `.env` 비밀값과 인코딩 변형이 변경 파일에 없고 `.env`·원본ZIP/CSV/SHP/DBF는 추적되지 않는 것을 확인했다.
+
+이번 검증은 2025년1~4분기 파일상 존재·적재 검증이며 최신/전체 공표 완료나 특정 분석 기준 분기 선택을 보장하지 않는다. 평균 산정 기간/모집단·경계 적용일·포털 재배포 이력은 미확인이고 source_file_date=null·boundary_compatibility=unverified를 유지한다. 실제 개발 DB에 파괴적 integration/downgrade를 실행하지 않았다. market_change API·FE·전체 기간 백필은 후속이다.

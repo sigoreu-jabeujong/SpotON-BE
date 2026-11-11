@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해 API와 인허가/상권/생활인구 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 점포 689,440건·상권 경계 1,650건·2025년 점포 통계 24,810행·추정매출 14,391행과 2026-11-07 생활인구 531,922행·공식 250m 격자 10,125개를 적재했습니다. migration `0008`이 현재 head입니다. 원천별 시점을 혼합하지 않으며 매출 집계 기간·경계 적용일·반경 분석/인구 API와 FE 반영은 후속 작업입니다.
+현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해 API와 인허가/상권/생활인구 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 점포 689,440건·상권 경계 1,650건·2025년 점포 통계 24,810행·추정매출 14,391행·공식 상권변화 유형 6,600행과 2026-11-07 생활인구 531,922행·공식 250m 격자 10,125개를 적재했습니다. migration `0009`가 현재 head입니다. 원천별 시점을 혼합하지 않으며 매출 집계 기간·경계 적용일·반경 분석/인구/변화지표 API와 FE 반영은 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -179,7 +179,7 @@ uv run --locked --extra dev --no-editable python -m etl.localdata --source gener
 - `--from-csv --write`는 허용하지 않습니다. CSV dry-run으로 만든 snapshot을 확인한 뒤
   같은 파일을 `--from-snapshot --write`로 적재합니다. 원본 CSV·보고서는 수정하지 않습니다.
 - `--write`는 localhost의 `spoton_dev`·`spoton_app`만 허용합니다. 연결 후 계정·권한·revision
-  `0008`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
+  `0009`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
 - 같은 snapshot으로 다시 실행하면 기존 `(source, license_no)`를 갱신합니다. `affected`는
   성공적으로 처리한 입력 수이고, 값이 실제로 변경된 행 수를 뜻하지 않습니다.
 - 실제 원천은 성공 코드 `0`, 날짜 `YYYY-MM-DD`, 갱신시각 `YYYY-MM-DD hh:mm:ss`를 사용합니다.
@@ -302,6 +302,27 @@ uv run --locked --extra dev python -m etl.living_pop --manifest "<로컬 manifes
 - 원본/규칙별 불변 버전과 실제 저장 hash를 검증하며 --write는 격자 및 세 원천 전체를 한 트랜잭션으로 처리합니다. replay는 기존 UUID·loaded_at·내용을 유지하며, 실패 시 이번 신규 버전/행을 모두 rollback합니다. 자료가 있으면 downgrade는 실패합니다.
 
 실행·검증·원천 특이사항과 선택 근거는 [이슈 53 설계](docs/designs/feat53-living-population-import.md)를 확인합니다. 생활인구/반경 API·주야간 비율·FE 연동과 다일 누적·파티셔닝은 후속 범위입니다.
+
+## 공식 상권변화 유형 적재 (BE-20)
+
+서울신용보증재단 제공·서울특별시 저작권의 [공식 OA-15576](https://data.seoul.go.kr/dataList/OA-15576/S/1/datasetView.do) 자료를 사용합니다. 공공누리1유형 출처표시 대상입니다. 포털의 **내려받기(CSV)**에서 전체 파일을 받아 저장소 밖에 보관합니다. 미리보기 1,000행을 전체로 사용하거나 ZIP으로 다시 포장하지 않습니다.
+
+```powershell
+# 기본: 파일 전체 검증 + 로컬 DB 읽기 전용 dry-run
+uv run --locked --extra dev python -m etl.market_changes `
+  --csv "<전체 CSV 경로>" --expected-sha256 "<실제 SHA256>" `
+  --source-year 2025 --retrieved-at "<다운로드 완료 ISO 시각, timezone 포함>" `
+  --code-check-boundary-version "<검증된 market_area_versions UUID>"
+# 위 명령에 --write를 추가하면 선택 연도를 한 트랜잭션으로 저장합니다.
+```
+
+- 실제 전체36,300행(2021년1분기~2026년2분기)을 검사하고 **2025년6,600행**, 분기별1,650행을 적재했습니다. 나머지29,700행은 선택 연도 밖입니다. 업종 제외 수가 아니며 출력의 `excluded_scope=outside_selected_year`로 구분합니다. 자동 최신 선택·전체 기간 백필은 하지 않습니다.
+- `market_change_versions`/`market_changes`에 LL=다이나믹·LH=상권확장·HL=상권축소·HH=정체와 원천 평균 영업 개월4개를 보존합니다. 평균 빈 셀은null·실제0은0·행 없음은누락이며 0으로 채우지 않습니다. 평균으로 유형을 재계산하거나 자체 점수/좋음·나쁨 판정을 만들지 않습니다.
+- 원천에는 업종 필드가 없습니다. 카페/음식점으로 복제하거나 업종 필터를 적용하지 않습니다. 평균의 모집단·산정 기간을 자체 점포 이력과 같다고 가정하지 않습니다.
+- `retrieved_at`은 다운로드 완료시각을 재실행 때도 그대로 전달합니다. 파일 자체 수정일은 미확인 `source_file_date=null`이며 포털 갱신일로 채우지 않습니다. 같은 bytes/연도/규칙/경계는 같은 UUID를 재사용하고, 다른 provenance나 저장 내용 훼손은 실패합니다. 다른 bytes는 같은 내용이어도 별도 버전이며 `same_content_versions_before`는 참고 건수입니다.
+- 경계 코드·유형 차이는0개, 명칭 차이는 분기별3개입니다. 실제 적용시점 일치는 미확인이므로 `boundary_compatibility=unverified`를 유지합니다. 실제 조회 API·FE 변경은 없습니다.
+
+원천·Claude 검토·실제 검증과 한계는 [이슈55 설계](docs/designs/feat55-market-change-import.md)를 따릅니다.
 
 ## PostgreSQL·PostGIS 설정과 마이그레이션
 

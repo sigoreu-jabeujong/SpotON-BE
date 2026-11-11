@@ -12,12 +12,12 @@
 - 기본 절차는 이슈 → 작업 브랜치 → Codex 설계 MD → Claude Code 검토·MD 직접 수정 → Codex 구현·기능별 커밋 → 로컬 테스트·실패 수정·재검증 → 푸시·develop 대상 PR → CI 확인 → Squash 병합이다. 2026-11-12 사용자가 이후 BE PR의 자동 승인·머지를 요청했다. CI·저장소 조건을 만족하면 develop에 자동 병합하며, 본인 승인 제한·보호 규칙을 우회하지 않는다. main 반영·수동 브랜치 삭제·강제 푸시는 별도 요청 없이 하지 않는다.
 - 2026-11-12 추가 지시: 데이터 처리 등 유사한 선택은 Claude Code와 실제 설계 검토 후 가장 적절한 안을 선택하고 근거를 남긴다. 통상 선택마다 사용자에게 재확인하지 않는다. 필수 자료·키·권한이 없어 진행할 수 없는 경우의 요청/중단 원칙은 유지한다. BE-19 미매칭 격자 1개/24개 비식별 행은 사용자가 좌표 미확인 보존·공간 집계 제외로 확정했다.
 - API 명세서 v1.2가 FE↔BE 계약이다. 원본은 저장소에 커밋하지 않는다. 이슈 #36에서 로컬의 API·데이터 활용 v1.2 및 분석 정의 원본을 확보·대조했다. 현행 사용자 결정과 다른 부분은 별도 기록하며 보완안을 외부 문서 수정 완료로 간주하지 않는다. 확인 대기는 9절에서 관리한다.
-- BE-00~18 기반·조회·경계·공식 점포 통계·추정매출 원천 적재가 develop에 반영됐다. BE-19는 #53에서 설계·Claude 검토·구현·실제 적재 검증을 완료하고 PR·CI·병합을 진행한다. 전체 API 공통 meta·DataVersion 정리와 BE-20 이후 원천·분석 API는 미완료다. 매출 집계 기간·최신 전체 관측/경계 적용 분기는 실제 원천 적재와 구분한다. 필요한 자료가 없거나 실제 원천 수집이 실패하면 그 지점에서 중단하고 사용자에게 요청한다.
+- BE-00~19 기반·조회·상권/생활인구 원천 적재가 develop에 반영됐다. BE-20은 #55에서 설계·Claude 검토·구현·실제 적재·기존 자료 보존 검증을 완료하고 PR·CI·병합을 진행한다. 전체 API 공통 meta·DataVersion 정리와 BE-21 이후 원천·분석 API는 미완료다. 매출 집계 기간·최신 전체 관측/경계 적용 분기는 실제 원천 적재와 구분한다. 필요한 자료가 없거나 실제 원천 수집이 실패하면 그 지점에서 중단하고 사용자에게 요청한다.
 - 이슈 #34 작업 브랜치에서는 실제 응답 코드·ISO 날짜/시각과 적재 실행기를 보완했다. 사용자 제공 검증 CSV(2026-11-09 검증, 원천 기준일 미확인)로 개발 DB에 일반음식점 541,169건·휴게음식점 148,271건, 합계 689,440건을 적재하고 재적재·20건 원자료 자동 대조를 통과했다. 현재 API의 최신 전체 수집 완료나 BE-12 구현 완료를 뜻하지 않는다. develop 반영은 이슈 #34의 PR 상태를 따른다.
 
 핵심 흐름은 `공공데이터 → ETL → DB → BE 계산 → API → FE 표시 → AI 해석`이다. 주소 검색만 명세에 따라 실시간 외부 호출을 허용한다. 앞 단계를 임시 수치로 우회하지 않는다.
 
-이슈 #34/PR #35 적재, #36/PR #37 이력, #38/PR #39·#40 설계, #41/PR #42 주변, #43/PR #44 월 범위, #45/PR #46 snapshot, #47/PR #48 경계, #49/PR #50 공식 점포 통계, #51/PR #52 추정매출 원천은 develop에 병합됐다. 현재 [#53 BE-19 생활인구 적재](designs/feat53-living-population-import.md)는 `feat#53-living-population-import`에서 사용자 확정 기준·Claude 실제 검토 후 구현/검증했다. 로컬·CI·저장소 조건 통과 후 일반 Squash 병합한다. FE 저장소는 수정하지 않으며 기존 네 조회 기능은 FE 담당자 반영 대기다.
+이슈 #34/PR #35 적재, #36/PR #37 이력, #38/PR #39·#40 설계, #41/PR #42 주변, #43/PR #44 월 범위, #45/PR #46 snapshot, #47/PR #48 경계, #49/PR #50 공식 점포 통계, #51/PR #52 추정매출, #53/PR #54 생활인구 원천은 develop에 병합됐다. 현재 [#55 BE-20 공식 상권변화 유형](designs/feat55-market-change-import.md)은 `feat#55-market-change-import`에서 Claude 실제 검토 후 구현/검증했다. 로컬·CI·저장소 조건 통과 후 일반 Squash 병합한다. FE 저장소는 수정하지 않으며 기존 네 조회 기능은 FE 담당자 반영 대기다.
 
 ## 2. 서비스 범위
 
@@ -209,7 +209,7 @@ uv run --locked --extra dev pytest
 | market_stores | `market_code`, `quarter`, `induty_cd`, `total_stores`, `open_stores`, `closed_stores`, `closure_rate` |
 | market_sales | `version_id`, `market_code`, `quarter`, `induty_cd`, `est_sales`, `source_sales_count`; KRW 원천값·집계 기간 미확인, 환산·반경 매출·합산 금지 |
 | living_population_observations (living_pop) | `version_id`, `source`, `hour`, `admin_code`, `grid_id`, `located_grid_id`, `population`, 상태; 원천·행정동 차원 보존, 250m geometry는 living_grids 참조 |
-| 상권변화지표 | 상권코드·분기·서울시 원천 변화 유형 그대로 사용, 임의 점수화 금지 |
+| market_changes | `version_id`, `market_code`, `quarter`, `change_code`, `change_name`, 평균 영업 개월4개; 업종 없는 서울시 원천 분류, 임의 점수화 금지 |
 | brands | `brand_id`, `brand_name`, `normalized_name`; 공정위 원천과 점포 상호 정규화 비교 |
 
 브랜드 판정은 `franchise`, `independent`, `unknown`을 구분하고 화면에는 프랜차이즈(추정)로 표시한다. 원천 브랜드 정보만으로 확정 가맹 여부를 단정하지 않는다.
@@ -466,3 +466,11 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - 후행 소수점 숫자 표기와 참조 무결성·메모리 등 선택은 사용자 추가 지시에 따라 Claude와 재검토 후 결정했다. Numeric(20,5)·명시적 문법·고정 소수 포맷·복합 FK·streaming/hash·일별 전체 트랜잭션을 적용했다. 통상 선택을 반복 질문하지 않고 근거를 남기며 필수 자료·키·권한 부재는 계속 요청한다.
 - 일반 **844개**, 격리 PostGIS **82개**, ruff/format·mypy **107 files**를 통과했다. 실제 개발 DB 0008에서 dry-run 무삽입→격자10,125개/관측531,922행 적재→replay 삽입0을 확인했다. 원자료20행·좌표20개 대조·실제 GIST·모델차이0·기존 API5개200, 기존8개 테이블 전체 행/geometry hash·원본 ZIP4개 보존도 확인했다. 실행 비용과 검증 한계는 설계의 구현 기록을 따른다.
 - API/FE·주야간 비율·반경 집계·다일 백필·Docker/환경설정 변경은 없다. grid_as_of=null·spatial_compatibility=unverified이며 사용자 결정만으로 격자의 실제 적용 시점이나 행정동 분할 합산 의미를 확정하지 않는다. CI 후 일반 develop Squash 병합하며 실제 상태는 #53 연결 기록을 따른다. 다음은 **BE-20 공식 상권변화지표 원천 적재**로, 제공 범위·기준 분기·원천 유형부터 확인한다.
+
+## 21. BE-20 공식 상권변화 유형 원천 적재 (#55)
+
+- #53/PR #54 생활인구는 develop에 병합됐다. [#55 설계·Claude 실제 Read/Edit·Codex 최종 점검](designs/feat55-market-change-import.md)을 거쳐 market_change_versions/market_changes·migration0009·전체 CSV 검증/완료 연도 적재 CLI를 구현했다.
+- 공식 OA-15576 전체 CSV **36,300행**(2021년1분기~2026년2분기)을 검증하고 기존 점포/매출 자료와 같은 **2025년6,600행**(분기별1,650행)을 적재했다. 나머지29,700행은 선택 연도 밖이며 업종 제외가 아니다. 업종 필드를 추가하지 않고 원천4유형·공식 명칭·평균 정수개월을 보존한다.
+- 기본 READ ONLY dry-run·연간 원자성·동시 writer 직렬화·hash 재검증/불변 버전·provenance 충돌 거절을 구현했다. 수집 시각은 재실행 시에도 최초값을 전달하고 source_file_date=null을 유지한다. 공통 boundary audit은 Protocol 타입만 변경했고 기존 동작·hash·lock key를 유지한다.
+- 일반 **870개**, 격리 PostGIS **92개**, ruff/format **220 files**·mypy **113 files** 통과. 실제 DB0009에서 dry-run→write→같은 UUID/loaded_at/hash replay 삽입0·원자료20행·모델차이0·기존 API5개200을 확인했다. 기존12개 테이블 전체 행/geometry hash·건수와 원본 CSV SHA256도 보존됐다. 상세 결과는 설계의 구현 기록을 따른다.
+- 경계 코드/구분 차이0·명칭 차이 분기별3개, boundary_compatibility=unverified다. 평균의 모집단·산정 기간/경계 적용일은 미확인이며 평균으로 분류를 재계산하지 않는다. 공개 API/FE·Docker/로컬 환경설정·의존성 변경은 없다. 지정 PR·CI 후 develop 일반 Squash 병합하며 실제 상태는 #55 연결 기록을 따른다. 다음은 **BE-21 브랜드 정규화·프랜차이즈 추정 매핑**으로, 공정위 공식 원천·권한·매칭 기준부터 확인한다.
