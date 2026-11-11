@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 FastAPI·health API·공통 응답·오류 처리, PostgreSQL/PostGIS 기반, stores 모델과 지방행정 인허가 데이터 수집·정제·멱등 upsert, 카카오 로컬 API 기반 서울 주소 지오코딩, AI 해석용 공급자 분리 LLM client를 제공합니다. 실제 개발 DB 연결과 원천 전체 적재·분석·AI 해석 API는 후속 작업입니다.
+현재는 FastAPI·health API·공통 응답·오류 처리, PostgreSQL/PostGIS 기반, stores 모델과 지방행정 인허가 데이터 수집·정제·멱등 upsert, 카카오 로컬 API 기반 서울 주소 지오코딩, AI 해석용 공급자 분리 LLM client를 제공합니다. Docker 로컬 개발 DB 연결과 migration `0002` 적용을 확인했으며, 원천 전체 적재·분석·AI 해석 API는 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -10,6 +10,8 @@ Python 3.11을 설치한 뒤 저장소 루트에서 실행합니다. `uv.lock`�
 
 ```powershell
 py -3.11 -m pip install uv==0.13.7
+# Windows 한글 경로에서 Python 3.11의 editable 설치 인코딩 오류 방지
+$env:UV_NO_EDITABLE = "1"
 uv sync --locked --extra dev
 # 환경변수가 필요하면 .env.example을 .env로 복사하고 로컬에서 값을 설정합니다.
 # 기존 .env는 덮어쓰지 않습니다. health 실행에는 API 키나 DB가 필요하지 않습니다.
@@ -107,6 +109,37 @@ uv run --locked --extra dev pytest
 상세 계약과 검증 근거는 [작업 5 설계서](docs/designs/feat5-license-etl.md)에서 확인합니다.
 
 ## PostgreSQL·PostGIS 설정과 마이그레이션
+
+### Docker 로컬 개발 DB
+
+Docker Desktop의 Linux engine이 실행 중이어야 합니다. Windows에서는 WSL 2 설치·활성화 후 재부팅이 필요할 수 있습니다.
+
+`.env.example`을 `.env`로 복사하고 `SPOTON_DB_ADMIN_PASSWORD`와 `SPOTON_DB_PASSWORD`에 서로 다른 임의 비밀번호를 설정합니다. 기존 `.env`는 덮어쓰지 않습니다. `DATABASE_URL`은 `postgresql+psycopg://spoton_app:<앱 비밀번호>@127.0.0.1:5432/spoton_dev`로 설정합니다. URL의 특수문자는 percent-encoding하고, 포트를 바꾸면 `SPOTON_DB_PORT`와 URL 포트를 함께 수정합니다.
+
+```powershell
+# 저장소 루트에서 실행. config --quiet는 비밀번호를 출력하지 않습니다.
+$env:UV_NO_EDITABLE = "1"
+docker compose config --quiet
+docker compose up -d --wait db
+docker compose ps
+
+# 로컬 개발 DB 접속 설정을 확인한 뒤 기존 migration 적용
+uv run --locked --extra dev alembic upgrade head
+uv run --locked --extra dev alembic current
+
+# 데이터는 유지하고 컨테이너만 중단
+docker compose stop db
+```
+
+CI와 동일한 digest의 PostGIS 이미지를 사용하며 포트는 `127.0.0.1`에만 엽니다. `spoton_admin`은 초기화 계정이고, 백엔드는 superuser 권한이 없는 `spoton_app`으로 연결합니다. 앱 계정에는 자체 테이블·migration 생성을 위한 public 스키마 권한을 부여합니다.
+
+데이터는 Compose의 `postgres_data` named volume에 보존합니다. `down -v`는 데이터를 삭제하므로 일반 중단에 사용하지 않습니다. 초기화 스크립트와 암호 설정은 **빈 볼륨의 최초 실행에만** 적용됩니다. 기존 볼륨에서 `.env`만 바꾸면 DB 계정 암호는 바뀌지 않습니다.
+
+Windows의 한글 경로에서는 Python 3.11이 editable 설치의 `.pth` 파일을 시스템 인코딩으로 읽다가 시작에 실패할 수 있습니다. 위 `UV_NO_EDITABLE`은 현재 PowerShell 창에 적용되므로 새 창에서는 다시 설정합니다. 또는 `uv sync`·`uv run`에 `--no-editable`을 붙입니다. 일반 설치 후에도 저장소 루트에서 실행하면 현재 작업 중인 `app` 코드를 사용합니다.
+
+`alembic check`는 모델에 없는 PostGIS 내부 테이블(`spatial_ref_sys`·topology 테이블)을 삭제 대상으로 보고할 수 있습니다. 자동 생성된 삭제 변경을 적용하지 말고 앱이 관리하는 테이블만 비교합니다. 로컬 DB 구성 검증 결과는 [연동 기록](docs/designs/local-postgis-setup.md)에 있습니다.
+
+아래 기존 설정 안내는 Docker 외 PostgreSQL에도 적용됩니다.
 
 개발 DB의 접속 URL은 실제 `.env` 또는 서버 시크릿의 `DATABASE_URL`에 설정합니다. 형식은 `postgresql+psycopg://<user>:<password>@<host>:5432/<database>`이며 기본 `postgresql://`·`postgres://`도 psycopg로 정규화합니다. `DATABASE_CONNECT_TIMEOUT`은 1~60초(기본 5초)입니다. 값은 출력·커밋하지 않습니다.
 
