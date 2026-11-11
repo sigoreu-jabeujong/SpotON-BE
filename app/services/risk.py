@@ -191,6 +191,7 @@ def pending_indicator(identifier: IndicatorId, reason: str) -> RiskIndicator:
         status="link_only" if identifier == "official_risk" else "pending",
         reason=reason,
         link=OFFICIAL_RISK_URL if identifier == "official_risk" else None,
+        source_url=OFFICIAL_RISK_URL if identifier == "official_risk" else None,
     )
 
 

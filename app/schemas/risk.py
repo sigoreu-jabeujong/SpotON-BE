@@ -89,6 +89,7 @@ class RiskIndicator(RiskModel):
     space: str
     period: str | None = None
     source: list[str]
+    source_url: str | None = None
     status: Literal["fact", "pending", "link_only"]
     reason: str | None
     link: str | None = None
