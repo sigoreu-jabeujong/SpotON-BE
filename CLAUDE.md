@@ -66,4 +66,12 @@ LLM 전체 await(재시도 대기 포함)와 개별 요청은 asyncio timeout으
 
 `judge_market(session, BoundaryQuery)`는 서버가 명시한 경계 UUID에만 ST_Covers를 적용한다. 세부 상권 A/D/R은 같은 우선순위이며 하나면 primary, 여러 개면 ambiguous/candidates로 보존한다. 관광특구 U는 세부와 함께 있으면 also_in이며 특구만 여러 개여도 임의 선택하지 않는다. 밖에서만 polygon-point geography 최단거리 반경 교차 목록을 제공하고 가까운 상권의 공식 수치로 대체하지 않는다. 행 수가 버전 row_count와 다르거나 버전이 없으면 안전하게 실패한다.
 
-결과는 지정 파일의 공간 판정이며 provenance.applicability=unverified다. source_file_date/loaded_at·boundary_as_of 하나로 현재/과거 적용성·분기 호환을 확정하지 않는다. 이 상태의 primary/candidates를 공식 통계 조인의 근거로 사용하지 않는다. 호출자가 READ ONLY REPEATABLE READ 세션을 제공하며 서비스는 세션을 변경하지 않는다. 공개 Risk API·FE 계약은 아직 추가하지 않았고 상세·Claude 검토·실제 검증은 docs/designs/feat62-market-judgement.md를 따른다.
+결과는 지정 파일의 공간 판정이며 provenance.applicability=unverified다. source_file_date/loaded_at·boundary_as_of 하나로 현재/과거 적용성·분기 호환을 확정하지 않는다. 이 상태의 primary/candidates를 공식 통계 조인의 근거로 사용하지 않는다. 호출자가 READ ONLY REPEATABLE READ 세션을 제공하며 서비스는 세션을 변경하지 않는다. #62는 내부 기반 범위이며 상세·Claude 검토·실제 검증은 docs/designs/feat62-market-judgement.md, 후속 공개 Risk 참고지표 계약은 아래 #64를 따른다.
+
+## Risk 참고지표 API 계약 (BE #64)
+
+`GET /api/risk`는 nearby 입력과 include=market_change,day_night_ratio를 받는다. 기간 중 영업 기록 분모10의 최근12개월 참고 폐업률, 개업 코호트 `(T-(n+1)년,T-n년]`의 고정 n주년 생존율(표본5), T의 동종업체 수를 반환한다. 생존은 close가 없거나 개업 n주년보다 뒤여야 하며 주년 후 T전에 폐업해도 포함한다. 이는 원본의 모호한 현재 잔존 서술을 보완한 BE 계약안이며 원본/FE 합의 완료가 아니다. rule_version=risk-reference-fixed-anniversary-v1·FE 요청서의 차이를 유지한다.
+
+비율은 Decimal HALF_UP 소수1자리, 소표본/0분모는 value/numerator=null·실제 denominator 보존이다. 같은 필터·좌표 확보 서울의 분자합/분모합을 비교하며 competitor_count에는 서울 평균을 붙이지 않는다. source는 배열이고 지표별 분모를 쓰므로 공통 denominator=null이다. flags의 표본 부족은 로컬 비율에만 적용하며 missing은 필수 검증 경계/요청 선택 자료에만 쓴다.
+
+선택 서버 설정 RISK_BOUNDARY_VERSION_ID가 있어도 후보 미리보기만 제공하며 market.status=unverified, 확정 상권 필드는null이다. 없는 설정을 최신 버전으로 대체하지 않는다. 공식 폐업률/상권변화 유형·인구비는pending이고 공식 창업위험도는link_only다. 가맹 분류 미확인·D/T/collected_at=null·좌표 범위와 인허가/지위승계/과거 재구성 한계를 보존한다. 기존 읽기 전용 세션·no-store·안전한500을 따른다. 설계는 docs/designs/feat64-risk-reference-api.md, FE 타입/문구/CLAUDE.md 반영은 docs/fe-risk-reference-api-request.md로 담당자에게 요청하며 대기다.
