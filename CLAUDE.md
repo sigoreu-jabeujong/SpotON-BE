@@ -53,3 +53,11 @@ LLM 전체 await(재시도 대기 포함)와 개별 요청은 asyncio timeout으
 ## 공식 상권변화 유형 적재 기준 (BE #55)
 
 `python -m etl.market_changes --csv PATH --expected-sha256 HEX --source-year YYYY --retrieved-at ISO_WITH_ZONE --code-check-boundary-version UUID [--write]`는 OA-15576 전체 CSV를 검사하고 선택 완료 연도만 적재한다. 업종 필드가 없으며 원천 LL/LH/HL/HH와 공식 명칭·평균 정수개월4개를 그대로 보존한다. 빈 셀null·실제0·행누락을 구분하며 평균으로 유형을 재계산하거나 점수/자체 판정을 만들지 않는다. 기본 REPEATABLE READ READ ONLY, write는 격자 등 다른 원천 없이 독립 연간 트랜잭션·advisory lock20·재조회 hash 검증을 수행한다. 같은 bytes/연도/규칙/경계는 불변 버전을 재사용하며 수집 시각 등 provenance 충돌/저장 훼손은 거절한다. source_file_date=null·retrieved_at은 최초 다운로드시각, boundary_compatibility=unverified다. 실제 2025년6,600행이고 2026년 자료나 전체 기간 백필·market_change API/FE는 후속이다. 상세는 docs/designs/feat55-market-change-import.md를 따른다.
+
+## 기본 상권 활동 분석 계약 (BE #60)
+
+`GET /api/market/activity`는 nearby 입력에 선택 include=sales,living_pop을 더한다. 폐업 기록을 제거하지 않는 유효 인허가 코호트에서 최근 `(T의 전년 같은 월일, T]` 개폐업 사건을 센다. 존재하지 않는 날짜만 clamp하고 연도별 추이는 실제 사건 연도만 반환하는 같은 월일 YTD다. T에 유효한 세부 업종별 점포 수와 완료 개월의 정수 평균(버림)을 반환하며 0분모는 null·실제 0개월은 0이다. latest 전체 기간·수명 평균·생존율과 구분한다. 최종 거리는 반올림 전 반경 이하다.
+
+선택 수치는 이번 릴리스에서 항상 null이며 요청 항목만 flags.missing과 meta.optional_data의 pending/사유에 넣는다. 미요청과 원천 조건별 no_data를 섞지 않는다. 브랜드 승인 전 meta.franchise_classification은 pending이며 가맹 unknown을 개인으로 만들지 않는다. denominator=null, cohort_size는 폐업 포함, excluded_no_coord는 서울 동일 비공간·T 이전 개업 코호트라 nearby와 다를 수 있다. 출처 R5/R6·D/T/collected_at=null을 보존하며 읽기 전용 일관된 세션·no-store·안전한 오류 응답을 따른다.
+
+상세와 Claude 검토 후 Codex 최종 규칙은 docs/designs/feat60-market-activity-api.md를 따른다. FE 타입·표시·CLAUDE.md는 docs/fe-market-activity-api-request.md로 요청하며 담당자 반영 대기다. BE-21·조건부 수치·BE-22 전체 결합·FE 통합 완료로 표시하지 않는다.
