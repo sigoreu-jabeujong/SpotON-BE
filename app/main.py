@@ -1,4 +1,6 @@
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,8 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import Settings, get_settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.middleware import UnhandledErrorMiddleware
+from app.db.dependencies import DatabaseResources
 from app.routers.geocode import router as geocode_router
 from app.routers.health import router as health_router
+from app.routers.stores import router as stores_router
 
 
 def configure_sensitive_request_logging() -> None:
@@ -19,8 +23,18 @@ def configure_sensitive_request_logging() -> None:
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings if settings is not None else get_settings()
     configure_sensitive_request_logging()
-    application = FastAPI(title="Spot:ON BE", version="0.1.0", debug=False)
+    resources = DatabaseResources(config)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            resources.close()
+
+    application = FastAPI(title="Spot:ON BE", version="0.1.0", debug=False, lifespan=lifespan)
     application.state.settings = config
+    application.state.database = resources
     register_exception_handlers(application)
     # 나중에 추가되는 CORS가 바깥에서 정상 응답과 미처리 오류 응답을 함께 감싼다.
     application.add_middleware(UnhandledErrorMiddleware)
@@ -33,6 +47,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.include_router(health_router, prefix="/api")
     application.include_router(geocode_router, prefix="/api")
+    application.include_router(stores_router, prefix="/api")
     return application
 
 
