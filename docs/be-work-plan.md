@@ -89,7 +89,9 @@
 
 ### 실제 개발 DB 연동의 지연과 큐 중단
 
-실제 개발용 DB 연동은 뒤로 미룬다. BE-06의 CI 임시 DB 검증과 실제 개발 환경의 DB 연결 완료는 별개이며, 현재 개발 DB 연동은 미완료·지연 상태다.
+실제 개발용 DB 연동은 초기에는 지연했으며, 2026-11-11 Docker 로컬 개발 환경에서 연결을 완료했다. BE-06의 CI 임시 DB 검증과 실제 개발 환경의 DB 연결 완료는 별개다. 원천 전체 적재와 데이터 기반 API 검증은 아직 미완료다.
+
+2026-11-11 사용자 요청으로 Docker Desktop·WSL 설치와 Windows 재부팅 후 `spoton_dev` DB를 실행했다. 로컬 `.env`를 사용하는 백엔드의 `spoton_app` 접속, PostGIS 공간 함수, migration `0002`, stores·공간/조회 인덱스 5개와 ORM 조회를 검증했다. 앱 계정은 superuser·DB/role 생성 권한이 없으며 원천 적재 전 점포 수는 0건이다. 상세 상태와 실행 환경 주의점은 [로컬 PostGIS 구성 기록](designs/local-postgis-setup.md)을 따른다.
 
 | 작업 유형 | 실제 개발 DB 미연동 상태의 처리 |
 |---|---|
