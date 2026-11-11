@@ -1,12 +1,13 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from math import isfinite
 
 from pyproj import Transformer, network
 
 from etl.localdata.constants import Source
+from etl.localdata.dates import parse_source_date
 from etl.localdata.dto import LocalDataRow
 
 SOURCE_CRS = "EPSG:5174"
@@ -105,16 +106,11 @@ class CoordinateResult:
 
 
 def _parse_date(value: str | None, flag: str, flags: list[str]) -> date | None:
-    if value is None:
+    if value is None or not value.strip():
         return None
-    try:
-        parsed = datetime.strptime(value, "%Y%m%d").date()
-    except ValueError:
+    parsed = parse_source_date(value)
+    if parsed is None:
         flags.append(flag)
-        return None
-    if parsed.strftime("%Y%m%d") != value:
-        flags.append(flag)
-        return None
     return parsed
 
 

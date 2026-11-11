@@ -99,12 +99,55 @@ uv run --locked --extra dev pytest
 
 ## 지방행정 인허가 ETL
 
+기존 수집·정제 모듈을 연결하는 개발용 실행기를 제공합니다. 아래 명령은 저장소 루트에서
+Python 3.11 환경으로 실행합니다. `DATA_GO_KR_SERVICE_KEY`는 로컬 `.env`에 디코딩한 값을
+설정하며, 키·URL 전체·원문 행은 출력하지 않습니다.
+
+```powershell
+# 기본값은 dry-run: 실제 API를 읽지만 DB에 쓰지 않습니다.
+uv run --locked --extra dev --no-editable python -m etl.localdata --source general_restaurant --save-snapshot
+uv run --locked --extra dev --no-editable python -m etl.localdata --source rest_cafe --save-snapshot
+
+# 기존 API 필드명 CSV와 동봉 검증 보고서를 사용하는 경우 (네트워크·DB 미사용)
+uv run --locked --extra dev --no-editable python -m etl.localdata --source general_restaurant --from-csv C:\data\restaurant_seoul.csv --validation C:\data\restaurant_validation.json --save-snapshot
+
+# 수집이 완료된 datasets/localdata/*.json 파일 경로를 지정합니다.
+uv run --locked --extra dev --no-editable python -m etl.localdata --source general_restaurant --from-snapshot datasets/localdata/<snapshot>.json --write
+```
+
+- source는 `general_restaurant` 또는 `rest_cafe`이며 한 번에 하나씩 처리합니다.
+- 서울 25개 관청의 전체 수집·페이지 검증이 성공해야 정제·snapshot 보관으로 넘어갑니다.
+  결과 수 변화·잘린 페이지·관청 불일치·호출 실패 시 부분 자료를 적재하지 않습니다.
+- `--workers`는 1~4, 기본 1입니다. 실제 요청 시도는 재시도를 포함해 실행당 최대 9,500회로
+  제한합니다. 첫 페이지들로 계산한 예상 수집량이 한도를 넘으면 중단합니다. 이미 소비한
+  일일 할당량은 별도이므로 이 제한이 제공처의 잔여 한도를 보장하지 않습니다.
+- snapshot은 허용 DTO 필드와 관청별 건수·행 해시를 담으며 Git에서 제외됩니다. 실제 자료와
+  키를 이슈·PR에 첨부하지 않습니다. API 입력은 수집 시작 KST 날짜로 판정하고, CSV 입력은
+  동봉 보고서의 검증시각을 KST로 바꿔 판정합니다. 재생도 같은 날짜를 사용합니다.
+- CSV 입력은 UTF-8(API 필드명 헤더)과 PASS/complete 검증 JSON이 필요합니다. 파일 해시,
+  실제 행 수·25개 구 분포·관리번호 중복을 다시 검증하며 불필요한 필드는 버립니다.
+  검증 보고서는 서명된 원천 증명서가 아니며, 검증시각도 실제 원천 기준일을 증명하지 않습니다.
+  `input_kind`·입력/보고서 해시·`as_of_basis`를 snapshot v2에 보관해 이 한계를 구분합니다.
+- `--from-csv --write`는 허용하지 않습니다. CSV dry-run으로 만든 snapshot을 확인한 뒤
+  같은 파일을 `--from-snapshot --write`로 적재합니다. 원본 CSV·보고서는 수정하지 않습니다.
+- `--write`는 localhost의 `spoton_dev`·`spoton_app`만 허용합니다. 연결 후 계정·권한·revision
+  `0002`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 적재합니다.
+- 같은 snapshot으로 다시 실행하면 기존 `(source, license_no)`를 갱신합니다. `affected`는
+  성공적으로 처리한 입력 수이고, 값이 실제로 변경된 행 수를 뜻하지 않습니다.
+- 실제 원천은 성공 코드 `0`, 날짜 `YYYY-MM-DD`, 갱신시각 `YYYY-MM-DD hh:mm:ss`를 사용합니다.
+  기존 `00`·compact 날짜/시각도 허용하며 잘못된 형식은 정상값으로 추정하지 않습니다.
+
+현재 실행·실제 적재 검증 상태는 [작업 34 설계와 검증 기록](docs/designs/feat34-localdata-import.md)을
+확인합니다. 실행기 추가만으로 원천 전체 적재나 점포 이력 API 구현이 완료된 것은 아닙니다.
+
 일반음식점·휴게음식점 공식 API의 페이지 수집, 서울 25개 관청 코드 검증, 중복 제거, 날짜·상태·업종·면적 정제, EPSG:5174 원 좌표 보존과 EPSG:4326 변환, stores 멱등 upsert를 모듈로 제공합니다.
 
 - `DATA_GO_KR_SERVICE_KEY`는 디코딩된 서비스 키를 로컬 `.env` 또는 서버 시크릿에만 설정합니다.
 - 전화번호·홈페이지·대표자와 원천 JSON 전체는 DTO·DB·로그·리포트에 저장하지 않습니다.
-- 실제 원천 전체 수집·개발 DB 적재 CLI는 아직 제공하지 않습니다. repository는 호출자가 명시적으로 전달한 PostgreSQL 연결만 사용합니다.
-- `building_key`, `floor_unit`, 주소·좌표 보완, 삭제 동기화는 후속 작업입니다.
+- 실행기의 실제 전체 적재 완료 여부는 작업 34 검증 기록을 따릅니다. repository는 호출자가
+  명시적으로 전달한 PostgreSQL 연결만 사용합니다.
+- `building_key`·`floor_unit` 정규화는 구현돼 있습니다. 주소·좌표 보완과 삭제 동기화는
+  후속 작업입니다.
 
 상세 계약과 검증 근거는 [작업 5 설계서](docs/designs/feat5-license-etl.md)에서 확인합니다.
 
