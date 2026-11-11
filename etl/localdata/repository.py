@@ -6,7 +6,7 @@ from geoalchemy2.elements import WKTElement
 from sqlalchemy import Connection, func, text
 from sqlalchemy.dialects.postgresql import insert
 
-from app.models import Store
+from app.models import Store, StoreImportBatch
 from etl.localdata.constants import Source
 from etl.localdata.pipeline import StoreRecord
 
@@ -77,6 +77,7 @@ def upsert_records(
     *,
     chunk_size: int = 1000,
     before_write: Callable[[Connection], None] | None = None,
+    batch: StoreImportBatch | None = None,
 ) -> int:
     if connection.in_transaction():
         raise RepositoryContractError("새 트랜잭션을 시작할 수 있는 연결이 필요합니다")
@@ -87,6 +88,10 @@ def upsert_records(
     keys = [(record.source, record.license_no) for record in records]
     if len(keys) != len(set(keys)):
         raise RepositoryContractError("upsert 전에 중복 키를 제거해야 합니다")
+    if batch is not None and (
+        batch.source != source.value or any(record.batch_id != batch.batch_id for record in records)
+    ):
+        raise RepositoryContractError("배치 출처가 적재 레코드와 일치하지 않습니다")
 
     affected = 0
     with connection.begin():
@@ -113,4 +118,14 @@ def upsert_records(
             # psycopg/SQLAlchemy의 ON CONFLICT rowcount는 실행 방식에 따라 0이 될 수 있다.
             # 입력 키는 위에서 유일함을 검증하므로 성공한 payload 수가 처리 행 수다.
             affected += len(payloads)
+        if batch is not None:
+            connection.execute(
+                insert(StoreImportBatch).values(
+                    **{
+                        column.name: getattr(batch, column.name)
+                        for column in StoreImportBatch.__table__.columns
+                        if column.name != "loaded_at"
+                    }
+                )
+            )
     return affected

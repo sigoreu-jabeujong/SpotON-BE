@@ -7,7 +7,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import DataError
 
 from app.core.config import Settings
-from app.models import Store
+from app.models import Store, StoreImportBatch
 from etl.localdata import runner
 from etl.localdata.constants import Source
 from etl.localdata.snapshot import save_snapshot
@@ -50,6 +50,15 @@ def test_runner_replay_is_idempotent(
                 )
     with temporary_database.engine.connect() as connection:
         assert connection.scalar(select(func.count()).select_from(Store)) == 2
+        assert connection.scalar(select(func.count()).select_from(StoreImportBatch)) == 2
+        assert (
+            connection.scalar(
+                select(func.count())
+                .select_from(Store)
+                .where(Store.batch_id.not_in(select(StoreImportBatch.batch_id)))
+            )
+            == 0
+        )
         protected = connection.execute(
             select(Store.brand_id, Store.is_franchise, Store.deleted_at).where(
                 Store.license_no == "synthetic-0"
@@ -71,3 +80,4 @@ def test_runner_invalid_payload_rolls_back_entire_source(
         )
     with temporary_database.engine.connect() as connection:
         assert connection.scalar(select(func.count()).select_from(Store)) == 0
+        assert connection.scalar(select(func.count()).select_from(StoreImportBatch)) == 0

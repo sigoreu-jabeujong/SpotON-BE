@@ -19,6 +19,7 @@ from etl.localdata.client import LocalDataClient, LocalDataError
 from etl.localdata.constants import Source
 from etl.localdata.csv_source import CSVSourceError, load_validated_csv
 from etl.localdata.pipeline import transform_rows
+from etl.localdata.provenance import import_batch
 from etl.localdata.repository import upsert_records
 from etl.localdata.snapshot import SnapshotError, load_snapshot, save_snapshot
 
@@ -52,7 +53,7 @@ def check_local_database(connection: Connection) -> None:
     ).one()
     if tuple(identity) != ("spoton_dev", "spoton_app", False, True):
         raise ImportConfigurationError("import:database_identity")
-    if list(connection.scalars(text("SELECT version_num FROM alembic_version"))) != ["0002"]:
+    if list(connection.scalars(text("SELECT version_num FROM alembic_version"))) != ["0003"]:
         raise ImportConfigurationError("import:migration")
     definition = connection.scalar(
         text(
@@ -128,9 +129,14 @@ def run_import(
         )
         affected = 0
         if engine is not None:
+            batch = import_batch(collection, batch_id)
             with engine.connect() as connection:
                 affected = upsert_records(
-                    connection, source, transformed.records, before_write=check_local_database
+                    connection,
+                    source,
+                    transformed.records,
+                    before_write=check_local_database,
+                    batch=batch,
                 )
         report = asdict(transformed.report)
         update_types: Counter[str] = Counter()

@@ -121,7 +121,7 @@ def test_connected_migration_must_match(revisions: list[str]) -> None:
 def test_connected_unique_constraint_must_match() -> None:
     connection = MagicMock()
     connection.execute.return_value.one.return_value = ("spoton_dev", "spoton_app", False, True)
-    connection.scalars.return_value = ["0002"]
+    connection.scalars.return_value = ["0003"]
     connection.scalar.return_value = "UNIQUE (license_no)"
     with pytest.raises(runner.ImportConfigurationError, match="constraint"):
         runner.check_local_database(connection)
