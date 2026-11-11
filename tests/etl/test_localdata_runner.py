@@ -111,7 +111,18 @@ def test_connected_identity_must_match(identity: tuple[object, ...]) -> None:
 
 @pytest.mark.parametrize(
     "revisions",
-    [[], ["0001"], ["0002"], ["0003"], ["0004"], ["0005"], ["0006"], ["0007"], ["0002", "0002"]],
+    [
+        [],
+        ["0001"],
+        ["0002"],
+        ["0003"],
+        ["0004"],
+        ["0005"],
+        ["0006"],
+        ["0007"],
+        ["0008"],
+        ["0002", "0002"],
+    ],
 )
 def test_connected_migration_must_match(revisions: list[str]) -> None:
     connection = MagicMock()
@@ -124,7 +135,7 @@ def test_connected_migration_must_match(revisions: list[str]) -> None:
 def test_connected_unique_constraint_must_match() -> None:
     connection = MagicMock()
     connection.execute.return_value.one.return_value = ("spoton_dev", "spoton_app", False, True)
-    connection.scalars.return_value = ["0008"]
+    connection.scalars.return_value = ["0009"]
     connection.scalar.return_value = "UNIQUE (license_no)"
     with pytest.raises(runner.ImportConfigurationError, match="constraint"):
         runner.check_local_database(connection)
