@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해·기본 상권 활동·Risk 참고지표 API와 인허가/상권/생활인구 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 점포 689,440건·상권 경계 1,650건·2025년 점포 통계 24,810행·추정매출 14,391행·공식 상권변화 유형 6,600행과 2026-11-07 생활인구 531,922행·공식 250m 격자 10,125개를 적재했습니다. migration `0009`가 현재 head입니다. 원천별 시점을 혼합하지 않으며 브랜드 매핑·공식 지표 연결·조건부 매출/인구 수치와 FE 반영은 후속 작업입니다.
+현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해·기본 상권 활동·Risk 참고지표·검증 후보 기반 AI 해석 API와 인허가/상권/생활인구 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 점포 689,440건·상권 경계 1,650건·2025년 점포 통계 24,810행·추정매출 14,391행·공식 상권변화 유형 6,600행과 2026-11-07 생활인구 531,922행·공식 250m 격자 10,125개를 적재했습니다. migration `0009`가 현재 head입니다. 원천별 시점을 혼합하지 않으며 브랜드 매핑·공식 지표 연결·조건부 매출/인구 수치와 FE 반영은 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -116,7 +116,7 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 
 ## AI LLM client
 
-`app/ai/`는 AI 해석 API(BE-32)가 사용할 공급자 분리 LLM client입니다. 아직 API 경로는 없습니다. `create_llm_client(settings)`가 `LLM_PROVIDER=google`이면 Gemini `generateContent` 어댑터를 만들고, 그 밖의 값은 호출 시 실패하는 client를 돌려줘 설정 오류가 지표 API 시작을 막지 않습니다.
+`app/ai/`는 `POST /api/risk/interpret`가 사용하는 공급자 분리 LLM client입니다. `create_llm_client(settings)`가 `LLM_PROVIDER=google`이면 Gemini `generateContent` 어댑터를 만들고, 그 밖의 값은 호출 시 실패하는 client를 돌려줘 설정 오류가 지표 API 시작을 막지 않습니다.
 
 - 키 `LLM_API_KEY`는 서버 전용이며 `x-goog-api-key` 헤더로만 보냅니다. 기본 모델은 `LLM_MODEL=gemini-3.5-flash-lite`입니다.
 - `LLM_REQUEST_TIMEOUT`(요청 1회)과 `LLM_TIME_BUDGET`(재시도 대기 포함 전체) 안에서 429·500·503·504·네트워크 오류·timeout만 `LLM_MAX_RETRIES`회까지 지터를 준 지수 백오프로 재시도합니다.
@@ -124,7 +124,7 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 - 모든 실패는 기존 `AI_UNAVAILABLE`(503)로 매핑합니다. 프롬프트·생성 결과·키·공급자 오류 본문은 로그와 예외에 남기지 않습니다.
 - 한도 카운터가 client 인스턴스에 있으므로 호출하는 쪽은 앱 수명 동안 하나를 재사용해야 합니다.
 
-자동 검증은 mock transport만 사용하며 실제 Gemini 호출은 확인하지 않았습니다. 상세 계약은 [작업 25 설계서](docs/designs/feat25-llm-client.md)에서 확인합니다.
+자동 검증은 mock transport를 사용합니다. #68에서는 실제 Gemini를 연결한 AI API 2건의 200 응답도 확인했습니다. 공급자 client 자체의 계약은 [작업 25 설계서](docs/designs/feat25-llm-client.md)에서 확인합니다.
 
 ### 프롬프트 버전 관리
 
@@ -132,7 +132,7 @@ AI 해석 프롬프트는 `app/ai/prompts/risk_interpret/`의 `system.md`(시스
 
 - 프롬프트 파일을 바꾸면 `app/ai/prompts/version.py`의 `PROMPT_VERSION`을 올리고 `PROMPT_HISTORY` 끝에 새 지문을 추가해야 합니다. 테스트가 현재 파일의 SHA-256 지문과 대조해 누락을 막습니다. 새 지문은 실패한 테스트 메시지에 표시됩니다.
 - 주소·좌표·`building_key`·`floor_unit`·상호(`name`)·`license_no` 등 `FORBIDDEN_CONTEXT_KEYS`에 있는 키가 집계에 있으면 조립을 거절합니다. 값 내용은 검사하지 않으므로 허용 필드 추출은 BE-28에서 해야 합니다.
-- 시스템 지침은 작업계획의 규칙(입력 숫자만 사용, 공식/참고 구분, pending·no_data, 금지 표현, 참고용 안내)만 담은 초안입니다. 지표 목록과 응답 스키마가 확정되면 보완합니다.
+- 시스템 지침은 공식/참고 구분·pending/no_data·금지 표현·참고용 안내를 유지하며, 현재 API에서는 문장 생성 대신 요청별 서버 후보 ID의 정렬/선택만 허용합니다. 원본/FE 계약 합의 완료와는 구분합니다.
 
 상세 내용은 [작업 27 설계서](docs/designs/feat27-prompt-version.md)에서 확인합니다.
 
@@ -140,7 +140,19 @@ AI 해석 프롬프트는 `app/ai/prompts/risk_interpret/`의 `system.md`(시스
 
 내부 `prepare_risk_interpretation(session,query,settings)`가 서버 Risk를 재계산하고 업종·필터·반경·기준일·지표/분모/출처/상태만 추출합니다. 주소·좌표·점포 식별값·상권 후보·URL·원본 메타/UUID는 프롬프트에 넣지 않습니다. 사유 코드와 숫자/기간도 검증하며, 입력은 중첩 구조까지 불변으로 만들고 context hash와 내부 데이터/프롬프트 버전을 구분합니다.
 
-현재 프롬프트 `risk-interpret-v2`는 안내 전용/미확인 상태·고정 주년 관측·서울 비교 한계를 유지합니다. 공급자 모의 전송까지 검증했으며 실제 LLM 호출·공개 `/api/risk/interpret`·AI 응답 스키마·캐시는 후속입니다. 호출자는 기존 읽기 전용 세션을 제공해야 합니다. [설계·검토·검증](docs/designs/feat66-ai-risk-context.md)을 확인합니다.
+현재 프롬프트 `risk-interpret-v4`는 안내 전용/미확인 상태·고정 주년 관측·서울 비교 한계를 유지하고, 요청별 허용 후보 ID만 선택하도록 제한합니다. 준비 함수 호출자는 기존 읽기 전용 세션을 제공해야 합니다. [집계 준비 설계·검증](docs/designs/feat66-ai-risk-context.md)을 확인합니다.
+
+### AI 해석 API
+
+`POST /api/risk/interpret`는 JSON `{ "query": { "lat": 37.5, "lng": 127.0, "category": "cafe", "radius": 500, "as_of": "2026-11" } }`처럼 원래 Risk 조회 조건만 받습니다. 이 예시는 합성 좌표입니다. Risk 전체 응답·클라이언트 수치·주소·building_key/floor_unit·중복 키·URL query는 422로 거절합니다. 첫 버전은 점포 이력/활동 추가 문맥을 지원하지 않습니다.
+
+- 서버가 Risk를 재계산하고 식별정보 없는 허용 집계와 문장 후보만 모델에 전송합니다. 모델은 모든 유리/불리 비교의 순서와 현장 질문 1~3개를 고릅니다. 숫자·비교 방향·최종 문장은 서버가 만들며, `method=server_sentences_model_ordering`으로 이 역할을 표시합니다. 자유로운 AI 서술이나 성공 가능성 판정이 아닙니다.
+- `official_values`에는 참고 계산도 포함됩니다. 필수 사실·미확인/자료 한계는 전부 보존하고, 소표본·공식/조건부 지표 pending·수집일 null을 임의로 채우지 않습니다. `verification.checked_numbers`는 표시 문장의 숫자 출현 횟수이며 정확도 점수가 아닙니다.
+- 프로세스별 기본 한도는 `INTERPRET_REQUESTS_PER_MINUTE=5`, `INTERPRET_REQUESTS_PER_DAY=50`, `INTERPRET_MAX_CONCURRENT=2`입니다. 공급자 client 한도와 별개이며 다중 worker 전역 한도·프로젝트 quota를 보장하지 않습니다. 캐시는 후속입니다.
+- 대기·DB 준비·생성/검증 후 최대 1회 재생성·조립을 `LLM_TIME_BUDGET`(기본 20초)에 포함합니다. 읽기 전용 DB 세션은 모델 호출 전에 닫습니다. 취소 시 실행 중 동기 SQL은 문장 제한 이후 정리되므로 즉시 강제 중단이나 네트워크 전체 SLA를 보장하지 않습니다.
+- 입력 오류 422, DB/서버 결함 500, 한도·공급자·시간 초과 503 `AI_UNAVAILABLE`, 두 번의 선택 검증 실패 503 `AI_VERIFY_FAILED`입니다. 실패를 기본 문장으로 대체하지 않습니다. 모든 응답은 no-store입니다.
+
+[설계·Claude 검토·실제 검증](docs/designs/feat68-risk-interpret-api.md), [FE 변경 요청](docs/fe-risk-interpret-api-request.md)을 확인합니다. FE 구현·CLAUDE.md 반영은 담당자 대기이며 추가 문맥·캐시·전체 BE-32 통합 완료를 뜻하지 않습니다.
 
 ### AI 결과 검증
 
@@ -152,7 +164,7 @@ AI 해석 프롬프트는 `app/ai/prompts/risk_interpret/`의 `system.md`(시스
 - 전화번호·이메일·도로명/지번 번호·층호·좌표·building_key 패턴과 식별정보 키
 - 분량 상한(기본 2000자)과 같은 문장 반복
 
-`app/ai/verified.py`의 `generate_verified()`는 검증에 실패하면 같은 요청으로 1회 다시 생성하고, 또 실패하면 `AiVerifyFailedError`(→ `AI_VERIFY_FAILED` 503)를 냅니다. 공급자 오류 `LlmError`는 그대로 전달되어 `AI_UNAVAILABLE`과 섞이지 않습니다. 응답 스키마는 아직 확정되지 않아 호출자가 Pydantic 모델을 넘기는 구조만 있습니다. 상세 내용은 [작업 29 설계서](docs/designs/feat29-ai-verifier.md)에서 확인합니다.
+`app/ai/verified.py`의 `generate_verified()`는 검증에 실패하면 같은 요청으로 1회 다시 생성하고, 또 실패하면 `AiVerifyFailedError`(→ `AI_VERIFY_FAILED` 503)를 냅니다. 공급자 오류 `LlmError`는 그대로 전달되어 `AI_UNAVAILABLE`과 섞이지 않습니다. 호출자의 Pydantic 모델과 선택적 의미 검증/남은 예산 검사를 지원하며, AI API는 요청별 enum·전체 비교 후보 포함·중복 검사를 추가합니다. 상세 내용은 [작업 29 설계서](docs/designs/feat29-ai-verifier.md)와 #68 설계를 확인합니다.
 
 ## 공통 오류 응답
 

@@ -1,7 +1,7 @@
 # BE-32 핵심 AI 해석 API (#68)
 
 - 기준 develop `49205fd`, `feat#68-risk-interpret-api`, 2026-11-12
-- 상태: Codex 설계 → Claude 이 MD만 실제 Read/Edit → Codex 최종 점검·구현
+- 상태: Codex 설계 → Claude 이 MD만 실제 Read/Edit → Codex 최종 점검·구현·로컬/실제 모델 검증 완료. CI/CodeQL 후 develop 일반 Squash 병합하며 실제 상태는 #68 연결 PR을 따른다.
 - 범위: query-only POST /api/risk/interpret, 서버 재계산/허용 집계·검증 후보의 LLM 선택·서버 문장 조립. 이력/활동 추가 문맥·캐시·FE 통합은 후속이다.
 
 ## 1. 원본·외부 모델 확인
@@ -14,7 +14,7 @@
 
 요청 `{query: RiskQuery}`만 허용한다. JSON sub_category 배열/문자열은 기존 query 규칙을 따른다. FE가 보낸 indicators/market/flags/context·경계 UUID·주소는422다. **첫 버전은 building_key/floor_unit도422**이며 받았다가 무시하지 않는다. 원본의 선택 이력 문맥은 후속으로 명시한다. query.as_of는 입력 YYYY-MM·radius이며 Risk 응답 echo의 YYYY-MM-DD/radius_m를 그대로 붙여넣는 방식은 지원하지 않는다. 중복 JSON키/NaN/미지원 쿼리·과도한 본문은422로 거절한다.
 
-응답은 공통 외피, data={label,official_values,favorable,unfavorable,missing_data,checklist,verification,model,generated_at}다. 원본 필드명을 유지하고 metadata는 서버가 채운다. label='AI 해석', generated_at=서버UTC, model=실제 공급자 결과의 model이다. verification.passed=true·mismatches=[]·regenerated=생성2회 여부·checked_numbers=문장에 인용된 숫자 출현 횟수(정확도점수 아님)다.
+응답은 공통 외피, data={label,method,official_values,favorable,unfavorable,missing_data,checklist,verification,model,generated_at}다. 원본 필드명을 유지하고 method=server_sentences_model_ordering을 추가해 실제 모델 역할을 밝힌다. metadata는 서버가 채운다. label='AI 해석', generated_at=서버UTC, model=최종 공급자 결과의 model이다. verification.passed=true·mismatches=[]·regenerated=생성2회 여부·checked_numbers=문장에 인용된 숫자 출현 횟수(정확도점수 아님)다.
 
 ## 3. 서버 후보와 필수 표시
 
@@ -22,9 +22,9 @@
 - favorable/unfavorable 후보는 로컬/서울 비교가 모두 준비된 참고 비율에만 만든다. 폐업률은 서울보다 낮으면 favorable·높으면 unfavorable, 고정 주년 생존은 반대다. 같은 값은 어느 방향에도 억지로 넣지 않는다. 이는 과거 인허가 집계 차이이며 사업 성과·공식 위험 판정이 아니다. 동종업체 수에 임의 '많음/적음' 임계값을 만들지 않는다.
 - missing_data는 모델 선택과 무관하게 서버가 미산정 지표/공식 안내·가맹 미확인·수집일/상권 적용 미확인·자료 한계를 빠짐없이 넣는다. 소표본·0분모와 실제0을 구분한다.
 - checklist는 서버의 일반 현장 확인 질문(시간대 유동/보행동선/운영조건/가시성/실제 비교점포 등) 후보 중1~3개를 모델이 고른다. 현장 사실·폐업 원인·사업주 역량을 추정하지 않는다.
-- 모델 선택은 각 배열0~3개(체크리스트1~3개), 중복 없음·해당 section 후보에 속하는 ID만이다. 없는 ID/다른 방향/자유 문장/추가키는 검증 실패다. 필수 사실/미확인 항목을 모델이 삭제하는 옵션은 없다.
+- 모델은 유리/불리 후보를 각 배열에 전부 포함하고 순서만 바꾼다. 현재 비교 지표는 최대3종이며 checklist는1~3개다. 중복 없음·해당 section 후보에 속하는 ID만 허용한다. 없는 ID/누락/다른 방향/자유 문장/추가키는 검증 실패다. 필수 사실/미확인 항목을 모델이 삭제하는 옵션은 없다. 표시 정밀도와 같은1자리 비율로 비교하며 같은 값은 방향이 없다.
 
-후보는 #66의 안전 context에서만 만들며 raw query/주소/상권 후보/URL/배치 UUID를 쓰지 않는다. 프롬프트에는 안전 context+서버 후보 목록만 넣는다. 시스템 프롬프트 v3/지문과 구조화 선택 JSON schema를 갱신한다.
+후보는 #66의 안전 context에서만 만들며 raw query/주소/상권 후보/URL/배치 UUID를 쓰지 않는다. 프롬프트에는 안전 context+서버 후보 목록만 넣는다. 시스템 프롬프트 v4/지문과 요청별 enum·후보 수를 가진 구조화 선택 JSON schema를 적용한다.
 
 ## 4. 생성·검증·수명·전체 예산
 
@@ -32,7 +32,7 @@
 
 최종 문장은 서버 후보 그대로이며 보이는 문장만 묶어 #66 context의 숫자·개인정보·금지표현·길이/반복 검사를 재확인한다. 반복되는 machine reason/id/source 코드는 문장 반복 검사에 넣지 않는다. 지표/출처 연결은 후보 membership과 서버 조립으로 보장한다. metadata(model/시각/verification)는 LLM이 생성하지 않는다.
 
-앱당 create_llm_client 1개를 state에 만들고 프로세스내 한도 카운터를 재사용한다. 실제 설정 값은 바꾸지 않는다. 현재 한도 값이 비어 있으면 앱 자체 RPM/RPD 제한은 없다는 점을 문서에 명시하며 제공자 quota/다중 프로세스 전역 한도를 보장하지 않는다. 실제 캐시는 BE-34 후속이다.
+앱당 create_llm_client 1개를 state에 만들고 프로세스내 한도 카운터를 재사용한다. 실제 .env 값은 바꾸지 않는다. 기존 공급자 한도와 별개로 새 INTERPRET 기본5회/분·50회/일·동시2를 적용한다. 제공자 quota/다중 프로세스 전역 한도는 보장하지 않는다. 실제 캐시는 BE-34 후속이다.
 
 입력 검증 후 준비·생성/재생성·조립 전체를 settings.llm_time_budget(기본20초)의 monotonic deadline으로 감싼다. DB 준비는 asyncio.to_thread의 worker에서 새 READ ONLY REPEATABLE READ 세션을 열고 **LLM 호출 전에 닫는다**. 기존 history_session 내부의 세션 부분을 read_only_session(resources) contextmanager로 추출해 재사용하되 기존 동작/timeout은 보존한다. worker는 deadline/취소 Event를 각 SQL 직전에 검사하는 connection-local listener와 전후 검사로 후속 쿼리를 중단한다. global engine listener를 달지 않는다.
 
@@ -40,7 +40,7 @@ async deadline/취소는 provider await를 취소하고 Event를 설정한다. �
 
 ## 5. 구조·FE 범위
 
-schemas/interpret.py(요청/모델선택/최종응답), ai/interpretation.py(후보/조립), services/risk_interpret.py(비동기 전체흐름), routers/interpret.py, main의client/라우터, db.read_only_session 재사용, verified의선택validator·prompt v3/지문이 대상이다. DB 모델/migration·의존성·원본·Docker/.env·FE 저장소는 변경하지 않는다. FE에는 기존 'Risk 전체 응답 전송' 대신 query-only·상태/오류·제한된해석·선택 이력 미지원에 대한 요청 보고서를 BE에 작성한다.
+schemas/interpret.py(요청/모델선택/최종응답), ai/interpretation.py(후보/조립), services/risk_interpret.py(비동기 전체흐름), routers/interpret.py, main의client/라우터, db.read_only_session 재사용, verified의선택validator·prompt v4/지문이 대상이다. DB 모델/migration·의존성·원본·Docker/.env·FE 저장소는 변경하지 않는다. FE에는 기존 'Risk 전체 응답 전송' 대신 query-only·상태/오류·제한된해석·선택 이력 미지원에 대한 요청 보고서를 BE에 작성한다.
 
 ## 6. 검증·완료
 
@@ -126,3 +126,29 @@ Claude 실제 수정 diff 전체와 JSON(is_error=false,3turns,permission_denial
 비용/자원 제어는 실제 .env를 바꾸지 않고 새 서버 설정의 보수적 기본값으로 처리한다. interpret_requests_per_minute=5, interpret_requests_per_day=50, interpret_max_concurrent=2를 앱당 재사용한다. 이는 운영상 기본값이지 공급자/다중 worker 전역 한도가 아니다. 요청 한도와 semaphore 대기 모두 전체 예산 안에 있고, 기존 LLM client의 한도 설정도 유지한다. 외부 배포는 이번 작업이 아니며 프로젝트/인프라 전역 정책을 완료로 주장하지 않는다.
 
 후보 ID는 위치 식별자 아닌 고정 의미 코드로 유지한다. 불투명 단기 ID의 보안 이점은 없고 검증/재현성은 고정 allowlist가 낫다. 오류 응답에 원문 field값을 추가하지 않고 기존 고정422 메시지를 유지한다. 최종 method=server_sentences_model_ordering을 추가해 문장이 서버 작성·모델이 정렬/체크리스트 선택임을 명시한다. 원본/FE 합의 완료는 아니다. 단순 구조화 실제 생성 probe도200/STOP·JSON형식 일치로 확인했으며 실제 Risk API 생성 검증과는 구분한다.
+
+## 10. 구현·수정·검증 결과
+
+§8은 설계 검토 당시의 권고 기록이며 구현은 §9와 이 절의 최종 결정을 따른다. 본문도 최종 계약에 맞춰 갱신했다. Claude는 MD만 수정했고 실제 코드·테스트·최종 대조는 Codex가 수행했다.
+
+- query-only 요청/응답, 서버 후보·조립, 요청별 선택 Schema, 전체 예산/세마포어/한도, worker 세션 정리와 선택 검증 후1회 재생성을 구현했다. 방향 후보를 하나라도 빼거나 다른 section/임의 ID를 고르면 거절한다. 서버 문장 검증 결함은500이며 기본 AI 응답으로 숨기지 않는다.
+- 기존 숫자 검증기의 문장 분리가 소수점까지 나눠 서로 다른 소수의 뒷자리를 반복 문장으로 오판하는 문제를 수정하고 회귀 테스트를 추가했다. 숫자·사유·방향 검증을 완화하지 않았다.
+- 실제 모델에서 schema 모양은 맞지만 허용하지 않은 ID가 나왔다. 최초 두 API 검증에서 각각2회 생성 후503 AI_VERIFY_FAILED로 차단했다(공급자HTTP200 총4회, 응답 채택0). 후보별 id를 명시하고 **요청별 ID enum·필수 후보 수를 응답 Schema에 포함**하도록 수정했다. 프롬프트 v4/지문 `044aba98cf36072bfb6473049b6007009e92807d33a907e8f85a45d5540d5985`와 테스트도 함께 갱신했다.
+
+### 자동 검사
+
+전체 일반 **1,037개**, 격리 PostGIS **117개**가 실패/오류/skip 없이 통과했다. ruff check·format check, mypy app etl migrations **127 files**를 통과했다. 새 일반19개·통합2개로 후보 전체/잘못된 방향/요청별 enum·수치/출처/필수 결측·0/1회 재생성·위조본문/중복키·한도/공급자/시간503·취소 대기자/동시 제한·예산 부족 재생성 차단·템플릿500·소수점 회귀를 확인했다.
+
+격리 DB는 별도 포트55468의 일회용 PostGIS를 사용했다. 실제 서버 준비와 모의 공급자를 연결해 기본/과거/빈 결과를 확인했고 공급자 호출 전 pool checkout=0을 검사했다. 미준비 원천500은 외부 호출0, 준비 timeout 후 worker 정리·풀 설정(statement_timeout=0/read_only=off) 복원·기존Risk 조회200도 확인했다. 개발 DB에는 파괴적 통합 테스트를 실행하지 않았다. 일반 테스트의 기존 Starlette 경고1건은 유지한다.
+
+### 실제 DB·모델 검증
+
+실제 설정의 Gemini 모델로 최종 API **2건200**을 확인했다. 첫 cafe 요청은3.142초(사실4·유리3·불리0·미확인5·체크리스트3), 두 번째 restaurant/선택항목 요청은2.569초(사실4·유리3·불리0·미확인7·체크리스트1)였다. 둘 다 검증 재생성 없이 checked_numbers=39였다. 실제 전송 transport에서 원본 좌표/건물키/상권 후보/URL/배치UUID가 없는지 대조했다. 진단 실호출은 공급자 내부 재시도0 설정 복사본을 썼으며 실제 .env/서비스 기본값을 바꾸지 않았다.
+
+이번 작업 전체 실제 생성은 **7회**다: 단순 구조화 probe1 + 위에서 거절한4 + 최종 API 성공2. 모델 메타 조회GET200은 별도다. 처음 API 실행에서 **외부 생성 전500이1회** 있었고 뒤의 준비/후보 독립 검사 및 최종 검증은 통과했다. 해당500의 정확한 원인은 확정하지 못했으며 콜드캐시/timeout으로 단정하지 않는다. 위 응답시간은 단일 요청 관측이며 운영/동시부하 SLA나 모델의 일반적 안전성 보장이 아니다. 실제 출력/프롬프트/키는 저장소에 넣지 않았다.
+
+개발 DB head0009·앱 모델 차이0, **14개 테이블 전체 행/geometry hash·건수 보존**을 확인했다. 기존 health/risk/activity 실제 조회도200이다. DB 모델/migration·의존성·Docker/.env·외부 원본·FE 저장소는 변경하지 않았다.
+
+### 반영 범위와 후속
+
+BE README/CLAUDE.md/작업계획과 [FE 요청 보고서](../fe-risk-interpret-api-request.md)를 갱신했다. FE 코드·CLAUDE.md 반영과 원본 계약 합의는 담당자 대기다. 이력/활동 추가문맥·캐시·공식/조건부 수치·브랜드57·분산 한도·전체 통합/브라우저 시연은 완료로 표시하지 않는다. 전체 본문을 미리 읽는 framework 뒤에서16KiB 검사하므로 이를 streaming 업로드 제한으로 주장하지 않는다. 취소된 동기 worker는 즉시 종료되지 않으며 부하 중 풀/executor 공유 한계는 남아 있다.
