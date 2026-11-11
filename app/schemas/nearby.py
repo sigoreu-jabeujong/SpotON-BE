@@ -4,18 +4,14 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.schemas.geocode import Category
+from app.schemas.store_filters import CategoryFilters
 from app.schemas.stores import PeriodReason, StoreSource, StoreStatus, SubCategory
 
 
-class NearbyQuery(BaseModel):
-    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
-
+class NearbyQuery(CategoryFilters):
     lat: float = Field(ge=-90, le=90, allow_inf_nan=False, repr=False)
     lng: float = Field(ge=-180, le=180, allow_inf_nan=False, repr=False)
-    category: Category
     radius: Literal[300, 500, 1000] = 500
-    sub_category: tuple[SubCategory, ...] = ()
     as_of: str | None = None
     area: Literal["all", "lt33", "33to66", "66to99", "gte99"] = "all"
     franchise: Literal["all", "franchise", "independent"] = "all"
@@ -43,11 +39,6 @@ class NearbyQuery(BaseModel):
             raise ValueError("invalid radius")
         return value
 
-    @field_validator("sub_category", mode="before")
-    @classmethod
-    def comma_categories(cls, value: Any) -> Any:
-        return value.split(",") if isinstance(value, str) else value
-
     @field_validator("as_of")
     @classmethod
     def valid_month(cls, value: str | None) -> str | None:
@@ -72,14 +63,6 @@ class NearbyQuery(BaseModel):
 
     @model_validator(mode="after")
     def consistent_filters(self) -> Self:
-        allowed = (
-            {"cafe"} if self.category == "cafe" else {"korean", "chinese", "japanese", "western"}
-        )
-        if (
-            len(self.sub_category) != len(set(self.sub_category))
-            or not set(self.sub_category) <= allowed
-        ):
-            raise ValueError("invalid sub categories")
         if self.include_unknown is not None:
             self.include_unknown_area = self.include_unknown
             self.include_unknown_franchise = self.include_unknown
