@@ -101,7 +101,7 @@ meta는 서울 범위·denominator=null이며 분모를 0으로 대체하지 않
 | src/api/mocks/meta.ts, src/constants/messages.ts | 빈 범위·최신 기준일·오류 합성 사례와 문구 |
 | docs/api-contract.md, docs/decisions.md, CLAUDE.md | 원본 v1.2·구현 계약 반영 |
 
-기존 VITE_API_BASE_URL을 따릅니다. 일부 경로 실연결은 VITE_REAL_API_PATHS에 `/meta/data-range`를 추가하는 방식을 사용해 주세요. **`/stores/snapshot`은 BE-15 후속 구현이며 이번 범위에서 실제 경로로 전환하지 않습니다.** BE 키·DB 설정은 FE에 넣지 않습니다.
+기존 VITE_API_BASE_URL을 따릅니다. 일부 경로 실연결은 VITE_REAL_API_PATHS에 `/meta/data-range`를 추가하는 방식을 사용해 주세요. 후속 BE-15 snapshot도 구현했으며, [snapshot 요청 보고서](fe-store-snapshot-api-request.md)의 타입·표시 반영 및 연결 확인 후 해당 경로를 함께 전환할 수 있습니다. BE 키·DB 설정은 FE에 넣지 않습니다.
 
 - [ ] 같은 category/sub_category로 범위 요청·캐시 갱신
 - [ ] 실제 업종별 최소 월·범위 밖 선택 차단

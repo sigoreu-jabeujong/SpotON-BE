@@ -75,3 +75,36 @@ Claude(2026-11-12, 이 MD 한 파일만 Read/Edit로 검토·직접 수정): 코
 Codex 최종 점검: 실제 Claude diff와 원본·코드를 대조했다. 같은 목록의 Counter 집계와 중복/합계 불변식, 명시적 같은 as_of 비교를 채택한다. 기존 배치 조회는 EXISTS를 사용해 공간 행을 JOIN으로 증식시키지 않는다. 빈 category는 최신 월만 0건, 이전/이후 월은 범위 오류이며 meta.space는 radius_{r}m다. 현재 전역 미처리 예외 경로에는 no-store 보장이 없으므로 snapshot의 응답 모델 검증 실패를 서비스에서 AppError(INTERNAL_ERROR, NO_STORE)로 변환한다. 전역 오류 정책을 변경하지 않고 이 경로의 부분 응답/정보 비노출/헤더를 테스트한다. 문구·자료 완전성의 FE 확인은 보고서로 전달한다.
 
 실제 DB 사전 nearby 요청은 최초 1회 정상 응답이 아니었고 원인 코드는 그 호출에 기록되지 않았다. 오류 값 비노출 진단으로 재조회한 restaurant/cafe×2020-01/2026-10 네 경우는 모두 200이었다(각각 631/590/154/151건). 재진단 SQL은 약 0.6~1160.5ms였으며 초기 실패를 특정 원인으로 단정하지 않는다. DB 연동이 정상임을 재확인한 뒤 진행하고 최종 실데이터 검증에 이 경로를 포함한다. 성능 SLA·차가운 캐시 성공을 보장하지 않는다.
+
+## 7. 구현·검증 결과 (2026-11-12)
+
+공간 조회·기간/출처 meta를 `services/spatial_stores.py`에 추출하고 nearby/snapshot이 같은 typed 결과를 사용한다. 입력 파서·OpenAPI 인자는 routers/spatial_query.py로 공유하며 snapshot의 as_of만 필수로 표시한다. SnapshotQuery/Store/응답·서비스·라우터를 추가했고 같은 목록의 Counter로 상태를 분해한다. 응답 모델은 합계·상태별 집계·식별자 중복을 검증하며 공통 마커/응답 검증 실패도 안전한 AppError 500/no-store로 바꾼다. DB·migration·원본 데이터·환경설정은 변경하지 않았다.
+
+잠긴 의존성의 `uv run --locked --extra dev`로 ruff check·format check, mypy app etl migrations **75 files**, 일반 pytest **718 passed**(integration 47 deselected), 별도 임시 PostgreSQL/PostGIS integration **47 passed**(일반 718 deselected)를 확인했다. 기존 Starlette/httpx 경고 1건이며 실패·skip·xfail은 없다. 기존 nearby·history·data-range와 read-only/timeout 회귀도 통과했다.
+
+입력 오류/필수 as_of·우선순위·정보 비노출·OpenAPI, 상태 open/closed/other/NULL/예상 밖 값, N 불변식/중복 실패의 안전한 500, 폐업/개업 당일·윤년·최신 D·기간 null/0·상호 null, source 충돌, 빈 category/기준일 실패, 반경/시점/면적/가맹/unknown 조합·499/500/500.001/501m·기존 공간 경계를 검증했다. 같은 조건의 nearby와 목록/순서/기간/수·좌표 미확보 수가 일치한다.
+
+### 실제 DB·원자료·HTTP
+
+공개 서울시청 중심점에서 두 업종×3개 월(2020-01/2026-10/2026-11)×3개 반경에 세부 업종/면적 및 가맹 unknown 제외 두 경우를 더한 **20개 조합**을 확인했다. 각 경우 snapshot/nearby 모두 200이며 독립 SQL의 식별자 목록·순서·집계·비공간 좌표 미확보 수와 일치했다. 독립 SQL은 별도의 1m 후보 여유와 엄격 최종 거리로 대조했고 모든 응답 좌표의 WGS84 거리·순서를 `pyproj.Geod`로 재계산했다. 모든 N은 목록 길이·상태 분해 합계와 일치했다.
+
+| 선택 월·반경 | 업종 | N | 최신 기록 영업 | 폐업 | 기타 |
+|---|---|---|---|---|---|
+| 2020-01 / 500m | restaurant | 631 | 432 | 199 | 0 |
+| 2020-01 / 500m | cafe | 154 | 94 | 60 | 0 |
+| 2026-11 / 500m | restaurant | 590 | 590 | 0 | 0 |
+| 2026-11 / 500m | cafe | 150 | 150 | 0 | 0 |
+
+표는 제공된 CSV·공개 중심점의 확인값이며 서비스 전체의 관측 완료나 공식 생존율이 아니다. 과거 월의 실제 T는 월말, 최신 월은 2026-11-08이다. other/NULL/미확인 경로는 합성 통합 자료에서 검증했다.
+
+- 기존 develop의 추출 전 nearby 서비스 코드를 읽어 동일한 READ ONLY REPEATABLE READ 세션에서 신구 전체 JSON을 비교했다. restaurant/cafe 두 경우 필드·조건·순서·기간·meta가 동일했다.
+- CSV 표본 **20건**(최신 기록 open 14·closed 6)의 상호·개업일·폐업일·원본 상태 코드/이름·독립 달력 개월 계산을 대조했다. 원자료·관리번호·주소·접속 정보·키는 출력하거나 커밋하지 않았다.
+- 실제 ORM 공간 SELECT의 EXPLAIN ANALYZE는 1000m·최신 restaurant **2,368행**, geography 인덱스의 반경 Index Cond 사용, 약 **40.372ms**였다. 전체 snapshot 요청 20개 관측은 약 **0.51~0.80초**이며 운영 부하·콜드 캐시·전체 SLA를 검증한 것이 아니다. 초기 사전 nearby 1회 실패는 최종 20개 조합과 추출 전후 비교에서 재현되지 않았으며 원인은 미확정이다.
+- uvicorn --no-access-log의 실제 HTTP health 200·snapshot 200/631건·no-store를 확인하고 해당 검증 서버만 종료했다.
+- 실제 앱 일반 계정 DB는 **0004·689,440건**을 유지했다. 읽기 검증 후 전체 행(식별자·배치·시각 포함)·geometry 해시가 기존 검증과 동일하다. 파괴적 fixture는 별도 임시 DB에서만 실행했다.
+
+### 전달·PR 범위
+
+BE CLAUDE.md·README·작업계획과 [FE snapshot 요청 보고서](../fe-store-snapshot-api-request.md)를 갱신했다. 기존 월 범위/주변 보고서에도 후속 snapshot 구현 상태를 연결한다. FE 저장소는 변경하지 않았고 타입·표/진단서·안내·CLAUDE.md는 담당자 반영 대기다. 실제 비밀값/인코딩 변형·diff 검사를 수행한 뒤 지정 양식 PR·CI·일반 Squash 병합으로 진행하며 GitHub 상태는 이슈 #45 연결 기록을 따른다.
+
+상권 Polygon 적재·분석 API·전체 meta/HTTP 오류 일괄 변경·원천 최신 전체 수집·과거 자료 완전성 보정·FE 통합은 이번 범위에 없다. 다음 BE-16에서는 필요한 상권 원천·기준 시점·권한을 확인하고 자료가 없으면 사용자에게 요청한다.

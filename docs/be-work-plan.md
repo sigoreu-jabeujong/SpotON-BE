@@ -11,12 +11,12 @@
 - 이슈 제목은 어떤 기능인지 알 수 있는 한국어로 짓고, 브랜치는 `feat#{작업 순번}-{영문-kebab-case}` 형식을 사용한다. 첫 작업은 `feat#1-initialize-fastapi`다. GitHub 실제 이슈 번호는 PR과 번호를 공유하므로 작업 순번과 다를 수 있으며 PR에서 실제 이슈를 연결한다. 셸에서는 `#`가 포함된 브랜치명을 따옴표로 감싼다.
 - 기본 절차는 이슈 → 작업 브랜치 → Codex 설계 MD → Claude Code 검토·MD 직접 수정 → Codex 구현·기능별 커밋 → 로컬 테스트·실패 수정·재검증 → 푸시·develop 대상 PR → CI 확인 → Squash 병합이다. 2026-11-12 사용자가 이후 BE PR의 자동 승인·머지를 요청했다. CI·저장소 조건을 만족하면 develop에 자동 병합하며, 본인 승인 제한·보호 규칙을 우회하지 않는다. main 반영·수동 브랜치 삭제·강제 푸시는 별도 요청 없이 하지 않는다.
 - API 명세서 v1.2가 FE↔BE 계약이다. 원본은 저장소에 커밋하지 않는다. 이슈 #36에서 로컬의 API·데이터 활용 v1.2 및 분석 정의 원본을 확보·대조했다. 현행 사용자 결정과 다른 부분은 별도 기록하며 보완안을 외부 문서 수정 완료로 간주하지 않는다. 확인 대기는 9절에서 관리한다.
-- BE-00~13 기반·조회가 develop에 반영됐고 BE-14 데이터 월 범위는 #43에서 구현했다. 전체 API 공통 meta·DataVersion 정리와 BE-15 이후 시점·분석 API는 미완료다. BE-08의 사용자 제공 검증 CSV 적재는 [이슈 #34 설계](designs/feat34-localdata-import.md) 기록을 따르며, 현재 공공 API 최신 전체 수집 완료와 구분한다. 필요한 자료가 없거나 실제 원천 수집이 실패하면 그 지점에서 중단하고 사용자에게 요청한다.
+- BE-00~14 기반·조회가 develop에 반영됐고 BE-15 과거 시점 점포 상태 분해는 #45에서 구현했다. 전체 API 공통 meta·DataVersion 정리와 BE-16 이후 상권 데이터·분석 API는 미완료다. BE-08의 사용자 제공 검증 CSV 적재는 [이슈 #34 설계](designs/feat34-localdata-import.md) 기록을 따르며, 현재 공공 API 최신 전체 수집 완료와 구분한다. 필요한 자료가 없거나 실제 원천 수집이 실패하면 그 지점에서 중단하고 사용자에게 요청한다.
 - 이슈 #34 작업 브랜치에서는 실제 응답 코드·ISO 날짜/시각과 적재 실행기를 보완했다. 사용자 제공 검증 CSV(2026-11-09 검증, 원천 기준일 미확인)로 개발 DB에 일반음식점 541,169건·휴게음식점 148,271건, 합계 689,440건을 적재하고 재적재·20건 원자료 자동 대조를 통과했다. 현재 API의 최신 전체 수집 완료나 BE-12 구현 완료를 뜻하지 않는다. develop 반영은 이슈 #34의 PR 상태를 따른다.
 
 핵심 흐름은 `공공데이터 → ETL → DB → BE 계산 → API → FE 표시 → AI 해석`이다. 주소 검색만 명세에 따라 실시간 외부 호출을 허용한다. 앞 단계를 임시 수치로 우회하지 않는다.
 
-이슈 #34/PR #35의 CSV 적재, [#36/PR #37 BE-12 점포 이력](designs/feat36-store-history-api.md), #38/PR #39·#40 설계 보완, [#41/PR #42 BE-13 주변 조회](designs/feat41-nearby-api.md)는 develop에 병합됐다. 현재 [#43 BE-14 데이터 월 범위](designs/feat43-data-range-api.md)는 `feat#43-data-range-api`에서 구현·검증하고 PR·CI 후 자동 Squash 병합한다. FE 저장소는 수정하지 않으며 이력·주변·월 범위 모두 요청 보고서를 통한 담당자 반영 대기다. 아래 과거 진행 기록과 현재 구현·병합 상태를 구분한다.
+이슈 #34/PR #35의 CSV 적재, #36/PR #37 점포 이력, #38/PR #39·#40 설계, #41/PR #42 주변 조회, #43/PR #44 월 범위는 develop에 병합됐다. 현재 [#45 BE-15 snapshot](designs/feat45-store-snapshot-api.md)은 `feat#45-store-snapshot-api`에서 구현·검증하고 PR·CI 후 자동 Squash 병합한다. FE 저장소는 수정하지 않으며 네 조회 기능은 요청 보고서를 통한 담당자 반영 대기다. 아래 과거 진행 기록과 현재 구현·병합 상태를 구분한다.
 
 ## 2. 서비스 범위
 
@@ -248,6 +248,7 @@ uv run --locked --extra dev pytest
 - 조회 가능 최소 월은 검증된 개업일과 실제 원천 조회 범위로 정한다. 이상 날짜·원천 기본값으로 달력을 확장하지 않는다. 유효 표본이 없으면 날짜를 만들어내지 않는다.
 - #43의 data-range는 nearby와 공통 출처·날짜 cohort를 사용하며 좌표·반경·면적·가맹 조건을 최소 월에 섞지 않는다. 보관된 인허가 날짜 구간을 재구성하며 원천 변경 이력 API의 시작일로 자르거나 과거 전체 현황 관측을 보장하지 않는다. D가 확인된 빈 업종은 min_month=null, max_month/max_date는 실제 D이고 출처 미준비는 500이다. FE nullable·세부 업종·최신 일자는 [FE 요청 보고서](fe-data-range-api-request.md)에 따라 담당자가 반영한다.
 - 시점 T의 영업 조건은 `open_date <= T AND (close_date IS NULL OR close_date > T)`다. snapshot은 항상 `total_at_as_of = still_open + closed_since + other`를 만족해야 한다.
+- #45 snapshot은 nearby와 같은 공간 조회·입력 파서를 쓰고 as_of만 필수다. 같은 목록의 최신 상태를 분해하며 N은 목록 길이와 같다. source+license_no 식별, nullable 상호/기간·기간 상태/사유, 전체 기간 latest_data, 서울 비공간 좌표 미확보 수를 반환한다. 중복/불변식·응답 검증 실패는 안전한 500/no-store이며 FE 반영은 [snapshot 요청 보고서](fe-store-snapshot-api-request.md)를 따른다.
 
 ## 7. 분석·공식 지표 규칙
 
@@ -417,3 +418,13 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - 실제 개발 DB 0004·689,440건, API 읽기 확인 후 전체 행·geometry 해시가 기존 검증과 동일하다. 출처·최소 날짜의 세 SQL 실행은 관측값 약 0.036~376.281ms였으며 전체 요청 SLA 검증은 아니다.
 - [FE 월 범위 요청 보고서](fe-data-range-api-request.md)에 nullable 최소 월·sub_category·max_date·달력/빠른 선택·과거 자료 한계를 요청했다. FE CLAUDE.md와 화면 반영은 대기다.
 - PR 제목은 사용자 예시의 `feat: 조회 가능한 데이터 월 범위 API 구현` 형식으로 작성하고, 본문은 기존 양식을 유지한다. CI·병합 조건 확인 후 develop에 자동 Squash 병합하며 실제 상태는 #43 GitHub 기록을 따른다. 다음 BE 작업은 **BE-15 `GET /api/stores/snapshot`**이다.
+
+## 16. BE-15 과거 시점 점포 상태 분해 (#45)
+
+- 최신 develop `e1af8d2`에서 `feat#45-store-snapshot-api`를 만들었다. [설계·Claude 직접 검토·Codex 최종 점검·검증](designs/feat45-store-snapshot-api.md)을 따른다.
+- `GET /api/stores/snapshot`을 구현했다. nearby의 공간 조회·기간 계산·입력 파서를 추출해 두 API의 같은 집합을 보장한다. N=A+B+C=목록 길이와 source+license_no 중복 없음을 검사하고, 응답 검증 실패는 부분 목록 없는 500/no-store로 처리한다.
+- ruff/format·mypy 75 files, 일반 718개·격리 PostGIS 47개를 통과했다. 필터/시점/반경 조합·기간/결측·거리 경계·최신 상태·합계·같은 관리번호/다른 원천·빈 결과·오류와 기존 조회 회귀를 확인했다.
+- 실제 DB 20개 조합의 목록·순서·집계를 독립 SQL/거리와 대조하고, 추출 전후 nearby 전체 JSON 두 경우·원자료 20건의 날짜/상태/기간·실제 HTTP·공간 인덱스 사용을 확인했다. 기존 사전 nearby 1회 실패는 재진단과 최종 조합에서 재현되지 않았으며 원인을 확정하지 않았다. 콜드 캐시/운영 SLA는 검증 완료로 표시하지 않는다.
+- DB 0004·689,440건은 읽기 검증만 수행한다. 최종 해시 보존 결과는 구현 기록을 따른다. 모델·migration·원본·Docker·환경설정·FE 저장소 변경은 없다.
+- [FE snapshot 요청](fe-store-snapshot-api-request.md)에 복합 식별자·결측·최신 상태/전체 기간·실제 기준일·집계/서울 범위 표시를 전달한다. FE·CLAUDE.md 반영과 문구 합의는 대기다. CI·저장소 조건 통과 후 자동 Squash 병합하며 실제 상태는 #45 GitHub 기록을 따른다.
+- 다음 순서는 **BE-16 상권 경계 Polygon 적재 기반**이다. 필요한 원천·기준 시점·권한이 없으면 자료 요청 지점에서 중단하고 후속 실행 큐를 우회하지 않는다.
