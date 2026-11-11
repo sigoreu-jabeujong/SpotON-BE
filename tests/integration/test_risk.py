@@ -288,3 +288,29 @@ def test_same_day_and_period_end_events_and_past_active_set(db, client):
     past = metrics(payload(client, as_of="2025-01"))
     assert past["closure_rate_12m"]["value"] == 0
     assert past["competitor_count"]["value"] == 10
+
+
+def test_feb29_opening_anniversary_is_feb28_in_nonleap_year(db, client):
+    with Session(db) as s, s.begin():
+        b = batch(s, data_updated_at=date(2025, 3, 31))
+        for i, closed in enumerate(
+            [
+                None,
+                date(2025, 2, 27),
+                date(2025, 2, 28),
+                date(2025, 3, 1),
+                date(2025, 3, 31),
+            ]
+        ):
+            store(
+                s,
+                b,
+                f"leap{i}",
+                open_date=date(2024, 2, 29),
+                close_date=closed,
+                status="closed" if closed else "open",
+            )
+    m = metrics(payload(client))
+    assert m["survival_rate_1y"]["numerator"] == 3
+    assert m["survival_rate_1y"]["denominator"] == 5
+    assert m["survival_rate_1y"]["value"] == 60
