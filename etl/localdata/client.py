@@ -254,7 +254,9 @@ class LocalDataClient:
         retry_after = response.headers.get("Retry-After")
         if retry_after is not None:
             try:
-                return min(max(float(retry_after), 0.0), MAX_RETRY_DELAY_SECONDS)
+                seconds = float(retry_after)
+                if math.isfinite(seconds):
+                    return min(max(seconds, 0.0), MAX_RETRY_DELAY_SECONDS)
             except ValueError:
                 pass
         return min(float(2 ** (attempt - 1)), MAX_RETRY_DELAY_SECONDS)
