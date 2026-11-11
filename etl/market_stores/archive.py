@@ -2,10 +2,8 @@ import csv
 import hashlib
 import io
 import re
-import stat
 import zipfile
 from collections import Counter
-from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -13,6 +11,8 @@ from typing import Any, NoReturn
 from zoneinfo import ZoneInfo
 
 from etl.market_areas.archive import digest
+from etl.market_csv import AnnualArchive as StatsArchive
+from etl.market_csv import read_csv_member
 
 SOURCE_URL = "https://data.seoul.go.kr/dataList/OA-15577/S/1/datasetView.do"
 RULE_VERSION = "market-stores-oa15577-annual-v1"
@@ -72,53 +72,15 @@ def content_digest(rows: list[dict[str, Any]], rule_version: str = RULE_VERSION)
     return digest({"rule_version": rule_version, "rows": normalized})
 
 
-@dataclass(frozen=True, repr=False)
-class StatsArchive:
-    source_year: int
-    source_file_date: date
-    input_sha256: str
-    input_bytes: int
-    member_name: str
-    member_sha256: str
-    member_bytes: int
-    member_modified: str
-    source_encoding: str
-    source_rows: int
-    rows: list[dict[str, Any]]
-    markets: dict[str, dict[str, tuple[str, str]]]
-    quarter_rows: dict[str, int]
-
-
 def _member(path: Path, expected_sha256: str) -> tuple[bytes, zipfile.ZipInfo, bytes]:
-    if path.resolve().is_relative_to(ROOT):
-        fail("repository_input")
-    if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
-        fail("hash")
-    with path.open("rb") as stream:
-        raw = stream.read(MAX_ZIP_BYTES + 1)
-    if len(raw) > MAX_ZIP_BYTES or hashlib.sha256(raw).hexdigest() != expected_sha256:
-        fail("hash_or_size")
-    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-        infos = archive.infolist()
-        if len(infos) != 1:
-            fail("members")
-        info = infos[0]
-        if (
-            not info.filename.lower().endswith(".csv")
-            or any(c in info.filename for c in ("/", "\\", ":"))
-            or any(ord(c) < 32 for c in info.filename)
-            or info.is_dir()
-            or stat.S_IFMT(info.external_attr >> 16) not in (0, stat.S_IFREG)
-            or info.flag_bits & 1
-            or info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)
-            or info.file_size > MAX_CSV_BYTES
-        ):
-            fail("member")
-        with archive.open(info) as stream:
-            data = stream.read(MAX_CSV_BYTES + 1)
-        if len(data) > MAX_CSV_BYTES:
-            fail("expanded_size")
-    return raw, info, data
+    return read_csv_member(
+        path,
+        expected_sha256,
+        root=ROOT,
+        max_zip_bytes=MAX_ZIP_BYTES,
+        max_csv_bytes=MAX_CSV_BYTES,
+        fail=fail,
+    )
 
 
 def _parse(

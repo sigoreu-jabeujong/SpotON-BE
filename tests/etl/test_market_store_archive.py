@@ -207,3 +207,16 @@ def test_canonical_hash_vectors():
         closure_rate=0,
     )
     assert a.content_digest([row]) != a.content_digest([row], "new-rule")
+
+
+def test_pre_refactor_official_store_hashes_remain_identical(tmp_path):
+    path = tmp_path / "synthetic.zip"
+    archive = load(path, make_stats_zip(path))
+    assert (
+        a.content_digest(archive.rows)
+        == "1edd356d6da9572639263e8e058a4c32cb43a6be8a96e09b0db16acd693514bf"
+    )
+    assert (
+        archive.rows[0]["source_row_sha256"]
+        == "f65c6b6d3d4638cec889c2d6548f95c02e9621c534b9d4367817491ea005ec08"
+    )
