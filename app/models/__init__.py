@@ -7,12 +7,15 @@ from app.models.living_population import (
     LivingPopulationVersion,
 )
 from app.models.market_area import MarketArea, MarketAreaVersion
+from app.models.market_change import MarketChange, MarketChangeVersion
 from app.models.market_sale import MarketSale, MarketSaleVersion
 from app.models.market_store import MarketStore, MarketStoreVersion
 from app.models.store import Store
 from app.models.store_import_batch import StoreImportBatch
 
 __all__ = [
+    "MarketChange",
+    "MarketChangeVersion",
     "LivingGrid",
     "LivingGridVersion",
     "LivingPopulationVersion",

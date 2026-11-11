@@ -2,19 +2,29 @@
 
 from collections import Counter
 from collections.abc import Callable
-from typing import Any, NoReturn
+from typing import Any, NoReturn, Protocol
 from uuid import UUID
 
 from sqlalchemy import Connection, func, select
 
 from app.models import MarketArea, MarketAreaVersion
 from etl.market_areas.archive import digest
-from etl.market_csv import AnnualArchive
+
+
+class BoundaryAuditInput(Protocol):
+    @property
+    def rows(self) -> list[dict[str, Any]]: ...
+
+    @property
+    def markets(self) -> dict[str, dict[str, tuple[str, str]]]: ...
+
+    @property
+    def quarter_rows(self) -> dict[str, int]: ...
 
 
 def check_boundary(
     connection: Connection,
-    archive: AnnualArchive,
+    archive: BoundaryAuditInput,
     boundary_id: UUID,
     *,
     fail: Callable[[str], NoReturn],
