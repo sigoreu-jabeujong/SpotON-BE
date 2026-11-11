@@ -62,6 +62,8 @@ def test_official_schema_constraints_downgrade_guard_and_preservation(temporary_
             boundary_compatibility="unverified",
         )
         c.execute(insert(MarketStoreVersion).values(**values))
+        with pytest.raises(IntegrityError), c.begin_nested():
+            c.execute(insert(MarketStoreVersion).values(**{**values, "version_id": uuid4()}))
         row = dict(
             version_id=version,
             market_code="9999999",
@@ -98,20 +100,27 @@ def test_official_schema_constraints_downgrade_guard_and_preservation(temporary_
                 c.execute(
                     insert(MarketStore).values(**{**row, "market_code": "9999998", **changes})
                 )
-        for changes in (
-            {"source_rows": 2},
-            {"excluded_rows": -1},
-            {"row_count": 0},
-            {"source_file_date": date(2025, 12, 31)},
-            {"source_encoding": "utf8"},
-            {"boundary_compatibility": "verified"},
-            {"input_sha256": "x"},
-            {"code_check_boundary_version_id": uuid4()},
+        for index, changes in enumerate(
+            (
+                {"source_rows": 2},
+                {"excluded_rows": -1},
+                {"row_count": 0},
+                {"source_file_date": date(2025, 12, 31)},
+                {"source_encoding": "utf8"},
+                {"boundary_compatibility": "verified"},
+                {"input_sha256": "x"},
+                {"code_check_boundary_version_id": uuid4()},
+            )
         ):
             with pytest.raises(IntegrityError), c.begin_nested():
                 c.execute(
                     insert(MarketStoreVersion).values(
-                        **{**values, "version_id": uuid4(), **changes}
+                        **{
+                            **values,
+                            "version_id": uuid4(),
+                            "input_sha256": f"{index:064x}",
+                            **changes,
+                        }
                     )
                 )
         for model, vid in ((MarketStoreVersion, version), (MarketAreaVersion, boundary)):
