@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from contextlib import contextmanager
 from threading import Lock
 
 from fastapi import Request
@@ -33,8 +34,8 @@ class DatabaseResources:
                 self.engine = None
 
 
-def history_session(request: Request) -> Iterator[Session]:
-    resources: DatabaseResources = request.app.state.database
+@contextmanager
+def read_only_session(resources: DatabaseResources) -> Iterator[Session]:
     try:
         engine = resources.get_engine()
         with Session(engine) as session:
@@ -47,3 +48,8 @@ def history_session(request: Request) -> Iterator[Session]:
             yield session
     except (SQLAlchemyError, DatabaseConfigurationError):
         raise AppError(ErrorCode.INTERNAL_ERROR, headers=NO_STORE) from None
+
+
+def history_session(request: Request) -> Iterator[Session]:
+    with read_only_session(request.app.state.database) as session:
+        yield session

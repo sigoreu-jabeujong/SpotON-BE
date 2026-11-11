@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     llm_max_output_tokens: int = Field(default=2048, ge=1, le=65536)
     llm_requests_per_minute: int | None = Field(default=None, ge=1)
     llm_requests_per_day: int | None = Field(default=None, ge=1)
+    interpret_requests_per_minute: int = Field(default=5, ge=1, le=10000)
+    interpret_requests_per_day: int = Field(default=50, ge=1, le=100000)
+    interpret_max_concurrent: int = Field(default=2, ge=1, le=16)
 
     @field_validator("llm_requests_per_minute", "llm_requests_per_day", mode="before")
     @classmethod

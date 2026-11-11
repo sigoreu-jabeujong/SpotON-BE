@@ -85,7 +85,7 @@ PERSONAL_INFO_PATTERNS = tuple(
     ]
 )
 COORDINATE_PATTERN = re.compile(r"(?<![\d.])\d{2,3}\.\d{4,}(?!\d)")
-SENTENCE_SPLIT = re.compile(r"[.!?。\n]+")
+SENTENCE_SPLIT = re.compile(r"(?<!\d)\.|\.(?!\d)|[!?。\n]+")
 
 
 def _reject_constant(value: str) -> Any:
