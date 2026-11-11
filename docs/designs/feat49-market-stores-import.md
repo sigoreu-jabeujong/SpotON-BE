@@ -95,3 +95,51 @@
 ### Codex 최종 점검
 
 Claude의 실제 파일 diff를 읽고 원천 필드·기존 경계/ETL과 대조했다. member 출처·20조합 완결성·분기 내 라벨 일관성/분기 간 변경 허용·bounded 입력·downgrade 보호·시간 제한을 채택한다. 원본 해제 크기는 31,051,537 bytes로 64MiB 이하다. content digest는 저장 행의 source_row_sha256까지 포함해 원문 이력 훼손도 검출한다. 따라서 비율 12.5/12.500000은 계산용 정규화 값은 같지만 원문 hash 및 전체 content digest는 달라야 한다(위 테스트의 '전체 digest 동일' 제안은 이 기준으로 정정). ASCII만 있는 BOM 없는 UTF-8은 CP949와 바이트상 구분 불가하므로 'BOM 없는 UTF-8 전부 거절'은 보장하지 않고 CP949 strict 디코딩 규칙만 보장한다. ZIP의 같은 CSV 재압축은 ZIP hash가 달라 별도 버전이며 member hash는 원자료 비교 근거다. 출력 이후 실패로 이미 commit된 결과를 되돌릴 수 없다는 한계는 재실행 멱등성으로 처리한다. 경계 적용일/현재 분기/인허가와 통계 모집단 동일성은 계속 미확인이다.
+
+## 6. 구현·검증 결과 (2026-11-12)
+
+market_store_versions/market_stores·migration **0006**, 공식 연간 ZIP 검증·코드 대조·원자적 적재 CLI를 구현했다. 기존 인허가/경계 CLI가 공통으로 사용하는 local DB head guard는 0006으로 갱신했다. 새로운 의존성·환경변수·공개 API·FE 변경은 없다. 원본과 운영 검증 스크립트는 Git 비추적 경로에 보관했다.
+
+### 실제 필드 대응
+
+| 원본 소문자 필드 | 보존/처리 |
+|---|---|
+| stdr_yyqu_cd | quarter (YYYYQ) |
+| trdar_se_cd / trdar_se_cd_nm | market_type_code / market_type_name |
+| trdar_cd / trdar_cd_nm | market_code / market_name |
+| svc_induty_cd / svc_induty_cd_nm | induty_cd / induty_name |
+| similr_induty_stor_co | total_stores |
+| stor_co / frc_stor_co | general_stores / franchise_stores |
+| opbiz_stor_co / clsbiz_stor_co | open_stores / closed_stores |
+| opbiz_rt / clsbiz_rt | opening_rate / closure_rate (원천 퍼센트, nullable) |
+
+헤더 14개를 고정 허용 목록으로 검사하며 다른 필드/원문 전체 JSON은 적재하지 않는다. 원천 행 hash에는 이 14개 문자열만 포함한다.
+
+### 자동 검사
+
+- `ruff check .`, `ruff format --check .`(**180 files**), `mypy app etl migrations`(**88 files**) 통과.
+- 일반 전체 **775 passed**, 격리 통합 62 deselected. 격리 PostgreSQL/PostGIS 전체 **62 passed**, 일반 775 deselected. 기존 Starlette/httpx deprecation 경고 1건이며 skip·xfail·실패는 없다.
+- 신규 일반 32개는 CP949/BOM·순서 변경 헤더·정수/비율/null/100초과·20조합 완결성·미지원 행의 중복/형식/명칭 오류·분기 간 변경 허용·hash·한도·경로/CRC/링크·안전한 CLI 오류 등을 검증한다.
+- 신규 통합 8개는 모델/DB 일치·CHECK/PK/unique/FK·가득 찬 테이블 downgrade 거절/빈 테이블 downgrade 보존·동시 writer·재실행 불변성/새 규칙·manifest/저장 행/경계 훼손 거절·쓰기 후 digest 실패 전체 rollback·코드 불일치 허용/집계·READ ONLY dry-run·lock timeout/안전한 오류를 확인한다. 직접 제약 검사는 unique 위반으로 가려지지 않도록 별도 유효 hash를 사용해 재검증했다. 기존 API·ETL 통합 회귀도 통과했다.
+- Claude 제안의 모든 세부 테스트를 구현했다고 주장하지 않는다. 암호화·선언 크기 위장 등은 입력 코드의 거절/실제 읽기 한도로 처리하며 해당 조작별 독립 fixture는 추가하지 않았다. 위 통과 목록은 실제 실행 범위다.
+
+### 실제 개발 DB
+
+일반 spoton_app의 DB identity·superuser/DB 생성/role 생성 권한 false와 기존 점포 **689,440건**, 경계 **1,650건**을 확인하고 migration **0005→0006**을 적용했다. 원본 ZIP을 사용한 CLI dry-run은 두 신규 테이블을 0행으로 유지했다. write는 버전 **1개/24,810행**을 저장했고 replay는 같은 UUID·loaded_at·content digest를 유지하며 **inserted=0**이었다.
+
+| 항목 | 실제 결과 |
+|---|---|
+| 원본 검증 / 지원 적재 / 미지원 제외 | 304,775 / 24,810 / 279,965 |
+| 20251 / 20252 / 20253 / 20254 | 6,219 / 6,215 / 6,191 / 6,185 |
+| 지원 업종 | 5종 |
+| 전체≠일반+가맹 | 0행 |
+| 폐업률 100 초과 / 실제 0 / null | 24 / 18,090 / 0행 |
+| 분기별 코드 양방향 차이 / 유형 차이 | 모두 0개 |
+| 분기별 경계와 명칭 차이 / 분기 간 명칭·유형 변경 | 1개 / 0개 |
+| 저장 내용 hash / 앱 모델 차이 | 일치 / 0건 |
+
+원자료 **20행**(분기별 5행, 고비율 사례 포함)의 명칭·타입·업종·5개 점포 수·원천 비율·정규화 전 row hash를 독립 CSV 읽기와 대조했다. 실제 원천에 null 비율은 없으며 null/0 구분은 합성 단위·실제 DB 통합 검사에서 확인했다. 기존 health/history/nearby/data-range/snapshot API 모두 **200**이다. 적재 전후 **stores 전체 행·geometry, store_import_batches, market_area_versions, market_areas 전체 hash와 건수는 동일**하고 원본 ZIP hash도 유지됐다. 개발 DB에 파괴적 suite·downgrade는 실행하지 않았다.
+
+### 남은 범위
+
+2025년 공개 연간 파일을 검증·적재한 것이며 현재 최신 분기를 확보한 것은 아니다. 코드/유형 일치와 명칭 차이 1개를 기록하지만 실제 적용 경계는 미확인이라 **boundary_compatibility=unverified**, **boundary_as_of=null**이다. 공식 비율과 인허가 기반 참고 비율을 혼합하거나 지금 지표 API를 활성화하지 않는다. README·작업계획·BE CLAUDE를 갱신하며 FE·Docker·환경설정은 수정하지 않는다. PR·CI·병합 상태는 #49 연결 기록을 따른다. 다음 BE-18 추정매출은 원천·사용 조건·기준 분기·업종/경계 호환을 먼저 확인하고 필요한 자료/권한이 없으면 요청한다.

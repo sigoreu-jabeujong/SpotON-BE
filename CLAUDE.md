@@ -30,4 +30,8 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 
 ## 상권 경계 적재 기준 (BE #47)
 
-현재 migration head는 0005다. `python -m etl.market_areas`는 공식 OA-15560 ZIP의 hash·첨부 수정일을 받아 기본 읽기 전용 dry-run, --write일 때 일반 로컬 앱 계정에서 원자적으로 적재한다. EPSG:5181 원본의 무효 도형만 linework 보정 후 유효 MULTIPOLYGON 4326·GIST로 저장한다. 원본 면적·hole/multipart·타입/5자리 구 코드를 보존하고 버전/데이터 digest를 검증한다. 같은 원본/규칙 재실행은 불변 버전을 재사용하며 기존 버전 수정/삭제·최신 자동 선택은 하지 않는다. source_file_date는 첨부 수정일이고 boundary_as_of는 미확인 null이다. 후속 통계 분기와의 코드/경계 호환 전에는 지표에 자동 적용하지 않는다. 현재 1,650행·6개 보정, 기존 stores 689,440건이다. 상세는 docs/designs/feat47-market-areas-import.md를 따른다. API 응답/FE 변경은 없다.
+현재 migration head는 0006이다. `python -m etl.market_areas`는 공식 OA-15560 ZIP의 hash·첨부 수정일을 받아 기본 읽기 전용 dry-run, --write일 때 일반 로컬 앱 계정에서 원자적으로 적재한다. EPSG:5181 원본의 무효 도형만 linework 보정 후 유효 MULTIPOLYGON 4326·GIST로 저장한다. 원본 면적·hole/multipart·타입/5자리 구 코드를 보존하고 버전/데이터 digest를 검증한다. 같은 원본/규칙 재실행은 불변 버전을 재사용하며 기존 버전 수정/삭제·최신 자동 선택은 하지 않는다. source_file_date는 첨부 수정일이고 boundary_as_of는 미확인 null이다. 후속 통계 분기와의 코드/경계 호환 전에는 지표에 자동 적용하지 않는다. 현재 1,650행·6개 보정, 기존 stores 689,440건이다. 상세는 docs/designs/feat47-market-areas-import.md를 따른다. API 응답/FE 변경은 없다.
+
+## 공식 점포 통계 적재 기준 (BE #49)
+
+`python -m etl.market_stores`는 OA-15577 공식 연간 ZIP을 hash·완료 연도·첨부 수정일·대조 경계 UUID로 검증한다. 전체 행을 검사하고 지원 업종 5종만 적재하며 source_year/quarter와 source_file_date를 구분한다. SIMILR_INDUTY_STOR_CO=전체, STOR_CO=일반, FRC_STOR_CO=가맹이다. 공식 원천 비율은 100% 초과·null·0을 그대로 보존하며 누락 조합을 0으로 채우지 않는다. 기본 READ ONLY dry-run, --write는 연간 원자적 적재·동시 writer 직렬화·저장 내용 hash 재검증을 수행한다. 원본/규칙/대조 경계별 불변 버전을 보존하며 재실행은 같은 버전을 재사용한다. code_check_boundary_version_id는 코드 대조 근거일 뿐이며 boundary_compatibility=unverified다. 현재 2025년 4개 분기 24,810행이고 최신 분기 보장·통계/인허가 모집단 동일성·경계 적용일은 미확인이다. 데이터가 있는 공식 통계 테이블의 downgrade는 실패한다. 상세는 docs/designs/feat49-market-stores-import.md를 따른다. API/FE 변경은 없다.
