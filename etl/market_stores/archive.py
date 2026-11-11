@@ -11,10 +11,10 @@ from typing import Any, NoReturn
 from zoneinfo import ZoneInfo
 
 from etl.market_areas.archive import digest
-from etl.market_csv import AnnualArchive as StatsArchive
-from etl.market_csv import read_csv_member
+from etl.market_csv import AnnualArchive, read_csv_member
 
 SOURCE_URL = "https://data.seoul.go.kr/dataList/OA-15577/S/1/datasetView.do"
+StatsArchive = AnnualArchive
 RULE_VERSION = "market-stores-oa15577-annual-v1"
 MAX_ZIP_BYTES = 16 * 1024 * 1024
 MAX_CSV_BYTES = 64 * 1024 * 1024
