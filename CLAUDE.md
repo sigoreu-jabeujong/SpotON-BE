@@ -46,6 +46,10 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 
 2026-11-12 사용자 지시에 따라 유사한 데이터/설계 선택은 Claude Code의 실제 MD 검토와 Codex 최종 점검 후 적절한 안을 선택하고 근거를 남긴다. 동일한 통상 선택을 사용자에게 반복 확인하지 않는다. 필수 자료·키·권한이 없으면 기존대로 요청한다.
 
+## 시스템 점검 보완 기준 (BE #58)
+
+LLM 전체 await(재시도 대기 포함)와 개별 요청은 asyncio timeout으로 취소하고, 늦은 정상 응답도 monotonic deadline으로 거절한다. 바깥 취소는 전파하며 TimeoutError를 처리한 except 밖에서 안전한 LlmError를 발생시켜 원문 context를 남기지 않는다. Retry-After의 비유한 값은 제한된 기존 backoff로 처리한다. 카카오 지번 숫자는 앞0을 뗀 유효4자리 범위만 int로 변환하며 부적합 값은 기존 주소 오류 경로를 따른다. 상권변화 CSV의 분기 상한은 실행일이 아닌 retrieved_at의 Seoul 분기다. 확정 미사용이 아닌 ORM/프레임워크 등록·후속 AI 모듈·의도된 예외 타입은 정적 참조만으로 삭제하지 않는다. 점검·Claude 실제 검토·수정 근거는 docs/designs/feat58-system-audit-cleanup.md를 따른다.
+
 ## 공식 상권변화 유형 적재 기준 (BE #55)
 
 `python -m etl.market_changes --csv PATH --expected-sha256 HEX --source-year YYYY --retrieved-at ISO_WITH_ZONE --code-check-boundary-version UUID [--write]`는 OA-15576 전체 CSV를 검사하고 선택 완료 연도만 적재한다. 업종 필드가 없으며 원천 LL/LH/HL/HH와 공식 명칭·평균 정수개월4개를 그대로 보존한다. 빈 셀null·실제0·행누락을 구분하며 평균으로 유형을 재계산하거나 점수/자체 판정을 만들지 않는다. 기본 REPEATABLE READ READ ONLY, write는 격자 등 다른 원천 없이 독립 연간 트랜잭션·advisory lock20·재조회 hash 검증을 수행한다. 같은 bytes/연도/규칙/경계는 불변 버전을 재사용하며 수집 시각 등 provenance 충돌/저장 훼손은 거절한다. source_file_date=null·retrieved_at은 최초 다운로드시각, boundary_compatibility=unverified다. 실제 2025년6,600행이고 2026년 자료나 전체 기간 백필·market_change API/FE는 후속이다. 상세는 docs/designs/feat55-market-change-import.md를 따른다.

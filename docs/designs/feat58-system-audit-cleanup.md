@@ -1,6 +1,7 @@
 # 전체 시스템 점검·오류 수정·코드 정리 (#58)
 
 - 기준: develop `70ea94b`, 브랜치 feat#58-system-audit-cleanup, 2026-11-12
+- 상태: Claude 검토 후 수정·전체 로컬 재검증·실제 데이터 보존 확인 완료, PR/CI 후 develop 일반 Squash 병합. 실제 상태는 이슈 #58 연결 기록을 따른다.
 - 요청: 구현 시스템 전체 점검/테스트, 문제·미사용 코드·주석은 Claude Code 논의 후 정리, 오류 수정·재검증.
 - BE-21 공정위 인증 대기는 #57로 유지한다. 이번 점검은 새 기능 개발이나 원천 적재를 진행하지 않는다.
 
@@ -102,3 +103,23 @@ FE는 build/lint가 통과해도 `HistoryStore.open_date/name/operating_months`�
 Claude의 실제 diff 전부와 JSON(is_error=false·10turns·permission_denials0)을 확인했다. 제안4건·중복 조건/잘못된 설명 정리를 채택한다. 한 가지 표현은 바로잡는다: `raise ... from None`만으로 __context__가 없어지는 것은 아니므로 TimeoutError를 잡은 except **밖에서** LlmError를 발생시킨다. 안쪽 timeout은 expired()로 자체 만료/다른 TimeoutError를 구분하며 바깥 취소(CancelledError)는 그대로 전파한다. 늦은503의 내부 UPSTREAM/TIMEOUT은 모두 client.to_app_error에서 같은 AI_UNAVAILABLE로 변환되는 것을 실제 코드에서 확인했다.
 
 카카오10,000과 긴 지번은 기존 건물키 숫자 범위에 따른 서울 주소 부적합404 경로를 유지한다. 정상 앞0은 제거한 숫자만 int 변환해 호환을 유지한다. 다른 연간 점포/매출 ETL은 지정 연도와 파일 수정일을 검사하고 생활인구는 관측일≤file_date를 검사하므로 이번 CSV의 retrieved_at/선택 밖 분기와 같은 구조는 없다. 실제 순서·hash·저장 버전 변경 없이 입력 검증만 강화한다.
+
+## 7. 수정·검증 결과 (2026-11-12)
+
+- 새 회귀23개와 기존 늦은503 기대값으로 **수정 전15 failed·91 passed**를 확인한 뒤 수정했다. 수정 후 관련4개 테스트 파일 **106 passed**, 전체 일반 **893 passed**(integration92 deselected), 격리 PostGIS **92 passed**(일반893 deselected)다. XML 총985개 실제 실행·skip/xfail/실패0, 기존 Starlette/httpx 경고1건을 확인했다.
+- `ruff check .`·format221files·`mypy app etl migrations`113files 통과. 직접 의존성14개는 설치/uv.lock/pyproject 버전이 일치한다. 변경 파일의 실제 `.env` 비밀값/인코딩 변형 검사·git diff check를 통과했다.
+- F1은 generate 전체 budget과 _post 개별 timeout을 중첩 적용하고, late200/503은 응답 직후 deadline으로 거절한다. Event 기반 실제 취소·attempt 재시도·retry sleep 취소·caller cancellation·오류 context 없음이 통과했다. 유료/실외 LLM을 호출한 검사는 아니다.
+- F2의 NaN/Infinity/1e400/garbage fallback·유한값 clamp, F3의 기존10,000과5,000자리 main/sub 모두 공통404·no-store/CORS·앞0 호환, F4의 수집 이후 분기 거절·Seoul 분기 경계 허용을 확인했다. 저장 변환/hash/rule_version v1은 유지한다.
+- 법정동의 같은 결과 조건2줄을 제거하고 ETL/AI package 설명2개를 실제 구현에 맞췄다. 작은 정리 자체를 따라 쓰는 테스트를 추가하지 않고 이미 baseline에서 통과한 주소42개 회귀를 제거 후 다시 확인했다. 현재 작업계획의 BE-20 PR56 병합·BE-21 인증 대기 상태와 이력 요청서의 실제 BE PR37 병합 상태도 바로잡았다.
+
+### 실제 연결과 FE
+
+일반 spoton_app의 superuser/DB생성/role생성 false·head0009·PostGIS3.7·앱 관리 모델차이0을 확인했다. 실제 개발 DB 조회 API5개와 외부 카카오 주소 검색은 수정 전/후 모두200이며 시청 공개 주소 검색의 building_key→이력 연결도200이다. 정상 외피/CORS·snapshot N분해·주변 count/거리, 오류 입력3개422·preflight200을 확인했다. health는 프로세스 상태 확인이며 DB readiness 보장으로 표현하지 않는다.
+
+FE의 npm lint/build/format:check와 npm ls는 통과했다. FE 구현/설정/문서는 변경하지 않았다. 현재 HistoryStore nullable/source·날짜 정렬/복합key 문제가 남아 있어 기존 FE 요청 보고서4개로 연결하며 실제 화면 통합 완료를 주장하지 않는다. 전체 브라우저 시연·후속 분석/AI API·유료 LLM 공급자의 실서비스 응답은 범위 밖이다.
+
+### 실제 원본 dry-run과 보존
+
+기존 저장소 밖 원본으로 **7개 CLI**를 write 옵션 없이 재실행했다. 경계1,650개·점포 통계24,810행·매출14,391행·변화유형6,600행·생활인구531,922행을 검증했고 매출/변화유형/생활인구의 would_reuse=true·삽입0을 확인했다. 일반음식점·휴게음식점도 각각 검증 CSV+validation의 dry-run이 정상 종료했고 affected=0이었다. 인허가의 이번 실행 기록은 CLI 성공/무쓰기를 확인한 것이며 출력 통계 전부를 별도로 보관한 것은 아니다. 원천 건수/DB 전체 행 보존은 아래 전후 비교로 확인했다.
+
+개발 DB **14개 테이블 전체 행·geometry hash/건수**가 사전 baseline과 일치했다. 점포689,440·경계1,650·공식 점포24,810·매출14,391·변화유형6,600·생활인구531,922·격자10,125 및 배치/버전을 모두 보존했다. migration/적재/write/업데이트/파괴적 통합 suite를 개발 DB에서 실행하지 않았다. 임시 DB만 통합 테스트에 사용했다. 실제 설정·비밀값·원본/ignored 조사 도구는 커밋하지 않는다.
