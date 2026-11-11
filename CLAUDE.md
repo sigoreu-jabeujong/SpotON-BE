@@ -20,6 +20,10 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 
 ## 조회 가능 월 범위 API 계약 (BE #43)
 
-`GET /api/meta/data-range`는 category 필수·sub_category 선택이며 다른 조회 인자는 받지 않는다. nearby와 같은 출처·날짜 후보로 최소 개업 월을 계산하고 좌표·반경·면적·가맹 조건을 섞지 않는다. 응답은 min_month(유효 표본이 없으면 null), max_month(전역 원천 갱신일의 월), max_date/data_updated_at(전역 갱신일), collected_at(현재 null)이다. 원천/기준일 미준비는 500, 검증된 D가 있는 빈 category는 정상 응답의 min_month=null로 구분한다. meta.space=seoul, denominator=null, data_version.rule_version=store-data-range-valid-license-v1이다. FE는 docs/fe-data-range-api-request.md에 따라 담당자가 반영하며 snapshot API는 후속 BE-15다.
+`GET /api/meta/data-range`는 category 필수·sub_category 선택이며 다른 조회 인자는 받지 않는다. nearby와 같은 출처·날짜 후보로 최소 개업 월을 계산하고 좌표·반경·면적·가맹 조건을 섞지 않는다. 응답은 min_month(유효 표본이 없으면 null), max_month(전역 원천 갱신일의 월), max_date/data_updated_at(전역 갱신일), collected_at(현재 null)이다. 원천/기준일 미준비는 500, 검증된 D가 있는 빈 category는 정상 응답의 min_month=null로 구분한다. meta.space=seoul, denominator=null, data_version.rule_version=store-data-range-valid-license-v1이다. FE는 docs/fe-data-range-api-request.md에 따라 담당자가 반영하며 snapshot 계약은 아래 BE #45 절을 따른다.
 
 2026-11-12 최신 PR 제목 요청은 `feat: 조회 가능한 데이터 월 범위 API 구현`처럼 `타입: 한국어 작업 설명` 형식을 따른다. 커밋의 `타입(영역): 한국어 요약` 기준은 유지한다.
+
+## 과거 시점 점포 조회 계약 (BE #45)
+
+`GET /api/stores/snapshot`은 nearby와 같은 입력·집합·순서·기간을 사용하되 as_of=YYYY-MM이 필수다. N=total_at_as_of=still_open+closed_since+other=stores.length이며 같은 목록에서 최신 기록 open/closed/other를 집계한다. source+license_no 식별, nullable 상호·기간 및 기간 상태/사유를 제공한다. 기간은 T까지가 아닌 최신 데이터 기준 전체 기간이고 요약은 실제 T와 최신 데이터 기준 상태를 사용한다. excluded_no_coord는 서울 동일 비공간 조건의 좌표 미확보 수로 N과 합산하지 않는다. 중복·응답 불변식/모델 검증 실패는 부분 응답 없는 안전한 500·no-store다. 상세는 docs/designs/feat45-store-snapshot-api.md, FE 변경은 docs/fe-store-snapshot-api-request.md를 따른다.

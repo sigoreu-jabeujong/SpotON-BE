@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 health·서울 주소 검색·건물별 점포 이력·주변 점포 조회·업종별 조회 가능 월 범위 API, 공통 응답·오류 처리, PostgreSQL/PostGIS·stores, 인허가 수집·정제·멱등 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 사용자 제공 검증 CSV 689,440건을 적재했으며 migration `0003`부터 배치 출처를 저장하고 `0004`에서 거리 조회용 geography 인덱스를 추가합니다. 현재 원천의 최신 전체 수집, snapshot·분석·AI 해석 API와 FE 반영은 후속 작업입니다.
+현재는 health·서울 주소 검색·건물별 점포 이력·주변 점포 조회·업종별 조회 가능 월 범위·과거 시점 점포 상태 분해 API, 공통 응답·오류 처리, PostgreSQL/PostGIS·stores, 인허가 수집·정제·멱등 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 사용자 제공 검증 CSV 689,440건을 적재했으며 migration `0003`부터 배치 출처를 저장하고 `0004`에서 거리 조회용 geography 인덱스를 추가합니다. 현재 원천의 최신 전체 수집, 상권 데이터·분석·AI 해석 API와 FE 반영은 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -71,7 +71,18 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 - 검증된 D가 있지만 해당 업종의 유효 후보가 없으면 `min_month=null`입니다. FE에는 과거 월·빠른 선택을 비활성화하도록 요청합니다. 출처·기준일 미준비는 500으로 구분하며 최소 월을 임의로 채우지 않습니다.
 - 현재 `collected_at=null`을 유지합니다. 모든 응답은 no-store이고 기존 읽기 전용 일관된 세션·안전한 오류 처리를 사용합니다.
 
-[설계·검증](docs/designs/feat43-data-range-api.md), [FE 수정 요청 보고서](docs/fe-data-range-api-request.md)를 확인합니다. `/api/stores/snapshot`은 BE-15에서 후속 구현합니다.
+[설계·검증](docs/designs/feat43-data-range-api.md), [FE 수정 요청 보고서](docs/fe-data-range-api-request.md)를 확인합니다. 과거 시점 점포 상태 분해는 아래 snapshot API를 사용합니다.
+
+## 과거 시점 점포 상태 분해
+
+`GET /api/stores/snapshot`은 nearby와 같은 파라미터를 받으며 `as_of=YYYY-MM`은 필수입니다. 같은 시점·조건·배치의 nearby 점포 목록을 그대로 사용하고 최신 기록 상태에 따라 `still_open`, `closed_since`, `other`로 나눕니다. `total_at_as_of = still_open + closed_since + other = stores.length`를 보장하고 요약 문장도 서버에서 만듭니다.
+
+- stores는 source+license_no로 식별하며 상호·기간은 nullable입니다. 기간은 최신 데이터 기준 전체 기간이고 과거 T까지로 자르지 않습니다. 상태도 D의 기록이며 실시간 확인값은 아닙니다.
+- 최신 월은 D, 과거 월은 월말을 적용합니다. 폐업 당일은 제외하고 유효한 open/closed/other의 날짜 구간으로 과거 집합을 재구성합니다. 빈 결과는 200과 0 집계·빈 목록·요약입니다.
+- `excluded_no_coord`는 서울 동일 비공간 조건의 좌표 미확보 수이며 전체 N과 합산하지 않습니다. 날짜 결측·원천 수집 전 누락으로 과거 자료는 불완전할 수 있습니다.
+- 동일 목록의 서버 집계와 응답 모델로 합계·상태 분류·식별자 중복을 검사합니다. 위반 시 부분 응답 없이 500·no-store를 반환합니다. 기존 read-only 세션·문장 timeout·안전한 오류 처리를 사용합니다.
+
+[설계·검증](docs/designs/feat45-store-snapshot-api.md), [FE 연동 요청 보고서](docs/fe-store-snapshot-api-request.md)를 확인합니다. FE 타입·표·진단서·CLAUDE.md 반영은 담당자 대기입니다.
 
 ## AI LLM client
 
