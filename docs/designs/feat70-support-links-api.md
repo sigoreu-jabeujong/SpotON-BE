@@ -2,7 +2,7 @@
 
 - 작성일: 2026-11-12
 - 기준: develop `49205fd`, `feat#70-support-links-api`
-- 상태: Codex 설계 → Claude 이 MD만 Read/Edit → Codex 최종 점검·구현·검증
+- 상태: Codex 설계 → Claude 이 MD만 Read/Edit → Codex 최종 점검·공통 목록 구현/로컬 검증 완료. CI/CodeQL·병합은 연결 PR의 실제 상태를 따른다.
 - PR69 AI API는 CodeQL 시작 전 GitHub 내부 오류·Backend CI queued로 보류 중이다. 이 작업은 최신 develop의 독립 기능이며 PR69 코드/계약을 가져오거나 미검증 병합하지 않는다.
 
 ## 1. 원본과 공식 링크 확인
@@ -91,3 +91,15 @@ Claude의 실제 MD 수정 diff 전체와 결과(JSON is_error=false,5turns,perm
 실제 ApiMeta는 dict[str,JsonValue]라 새 meta키를 허용하며 data_updated_at은 ISO date 문자열로 보낸다. 기존25구 상수의 고유구명25개, FE의8필드/id/type/region을 직접 대조했다. 두 입력 모두 잘못된 경우INVALID_PARAM이다. 구명/업종은 자동 strip/Unicode 정규화하지 않는다. 공식 호스트는 소문자 정확 일치·ASCII로 검사하며 suffix 일치나 HttpUrl의 출력 정규화에 기대지 않는다.
 
 현재 목록에 구/업종별 후보가 없으므로 미래용 가짜 매칭/정렬·불필요한 내부 필드는 만들지 않는다. 원본의 맞춤 우선순위 요구 부분은 미구현임을 PR/작업계획/FE 보고서에 남긴다. CORS preflight는 기존 정책을 유지한다. 날짜가 고정 설정이므로 현재 시각을 바꾼 뒤에도 고정값이 유지되는 경계 테스트는 하되 별도 시계 의존성을 제품 코드에 추가하지 않는다. PR69의 미병합 AI 모듈을 참조하지 않으며 현재 develop에서 독립 검증한다.
+
+## 9. 구현·로컬 검증 결과
+
+§4의 모델/불변 카탈로그/서비스/라우터를 구현하고 main에는 router등록2줄만 추가했다. URL은 str+HTTPS/공식 ASCII 호스트·포트/사용자정보/query/fragment/공백/제어문자 거절 검증을 적용해 원문을 유지한다. 반환 list/meta는 매 요청 새로 만들고 frozen 항목을 쓴다. 카탈로그 버전은 support-links-v1, 확인일은2026-11-12다. Claude는 이 MD만 수정했고 코드/테스트는 Codex가 작성·검토했다.
+
+새 일반 **34개**와 전체 일반 **1,052 passed**, 통합 **115 deselected**를 확인했다. ruff check·format check **252 files**, mypy app etl migrations **127 files** 통과다. 최초 ruff의 긴 조건문1건은 format으로 수정한 뒤 전체 check를 통과했다. 기존 Starlette testclient deprecation 경고1건은 유지한다.
+
+단위/회귀 검증은4기관·8필드/출처/정확URL·25구×두업종/생략 **78조합**·16개 불량/중복 입력·11개 불량 URL·frozen/응답변조 격리·2040년 today에서도 고정 확인일·서비스/serialization500의 원문 비노출/no-store·OpenAPI/CORS를 포함한다. DB 엔진/동기·비동기 HTTP transport를 실패하도록 막은 상태에서200·호출0·DB engine 미생성을 확인했다. 테스트는 외부 네트워크를 쓰지 않는다.
+
+별도 로컬 uvicorn 프로세스에 실제 HTTP **10개** 요청(기본/두업종·오류3·health/docs/OpenAPI·CORS)을 보내 정상 동작을 확인하고 그 프로세스만 종료했다. 원본4사이트 직접 확인은 별도 HTTP GET·리다이렉트/페이지 제목 검증이며 자동 테스트나 런타임 사이트 호출과 구분한다. 센터는 검색 도구에서는 timeout이었으나 직접 GET에서는200이었다. SQL/DB 모델 변경이 없어 PostGIS 통합 suite는 이번에 재실행하지 않았고 실제 DB 적재/원천 변경도 없다.
+
+BE README/CLAUDE.md/작업계획과 [FE 요청 보고서](../fe-support-links-api-request.md)를 작성했다. FE의 기존 client가 null/undefined/빈 문자열을 생략하고 외부 링크에 rel 속성을 쓰는 것도 직접 확인했으므로 재사용을 요청했다. FE 저장소는 수정하지 않았으며 원본 맞춤 정렬/구별센터·업종공고 수집/FE 화면 연결·CLAUDE.md 반영은 완료로 표시하지 않는다. 실제 .env·Docker·의존성·migration·원본 PDF는 커밋하지 않는다. 원격 CI/CodeQL 및 최종 병합 상태는 연결 PR 기록을 따른다.

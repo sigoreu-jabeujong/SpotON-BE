@@ -81,3 +81,11 @@ LLM 전체 await(재시도 대기 포함)와 개별 요청은 asyncio timeout으
 `prepare_risk_interpretation(session,RiskQuery,settings)`는 클라이언트 지표를 받지 않고 서버 Risk를 재계산한다. 위치/상권 후보·UUID/raw meta·URL/link/copy_text 없이 업종/면적/가맹 필터·반경·T/D·지표/분모/출처/상태·고정 방법론만 typed allowlist로 구성한다. 사유/출처도 enum으로 제한하고 기간·비율·metadata 의미·조회조건을 대조한다. 소표본은 기존 Risk의 null/실제분모를 유지하며 불명확한 입력을 정제해 통과시키지 않는다.
 
 입력은 nested frozen/tuple이며 JSON 복사본·정렬 직렬화의 context_hash와 내부 데이터/프롬프트 hash를 구분한다. 원문은 repr/로그/오류에 남기지 않는다. 호출자가 기존 읽기 전용 세션을 제공하며 준비 함수는 공급자/외부 API를 호출하지 않는다. 프롬프트는 risk-interpret-v2·지문 이력을 따르고 verifier는 link_only/unverified 값 생성도 차단한다. 지표 간 숫자 바꿔치기·자유문장 의미 검증 전체나 실제 모델 안전성을 완료로 주장하지 않는다. 상세는 docs/designs/feat66-ai-risk-context.md이며 공개 AI API/응답 스키마/이력 추가 문맥/캐시는 후속이다.
+
+## 공식 상담·지원기관 공통 링크 (BE #70)
+
+`GET /api/support-links`는 원본 API v1.2 §4-9/D-08의 공식4기관을 서버 설정 불변 tuple에서 반환한다. 선택 sigungu는 기존 서울25개 정확한 구명, category는 cafe/restaurant이며 생략만 기본값이다. 잘못된/빈/중복/미지원 입력은422 INVALID_PARAM이다. 현재 일반 안내만 있어 지역/업종별 우선 정렬은 미적용이며 네 곳 전체·고정 순서를 유지하고 meta.prioritization={status:not_applied,reason:general_links_only}로 표시한다. 원본의 맞춤 정렬까지 완료로 주장하지 않는다.
+
+항목8필드/id/type/region은 기존 FE mock과 맞춘다. URL은 정확한 공식 HTTPS 호스트와 원문 문자열을 보존하며 임의 URL/입력을 이어붙이거나 호출하지 않는다. last_checked=실제 수동 확인 KST 날짜(현재2026-11-12), data_updated_at=확인일 최대값이다. 오늘/배포일/공고 공표일로 바꾸지 않는다. 설정/확인일 변경 시 카탈로그 버전을 올리고 분기1회 수동 점검한다. 당시 HTTP200은 이후 접속/자격/신청 성공 보장이 아니다.
+
+요청 중 DB/LLM/외부 HTTP 미사용·인증키 불필요, R17/is_demo=false·no-store·안전한422/500을 따른다. DB 모델/migration·의존성·Docker/.env·FE 저장소는 바꾸지 않는다. 설계/Claude 검토/검증은 docs/designs/feat70-support-links-api.md, FE 코드/CLAUDE.md 연결 요청은 docs/fe-support-links-api-request.md를 따른다. FE 반영은 담당자 대기다. 미병합 AI PR69와 독립적으로 최신 develop에서 구현하며 PR69를 우회 완료로 표시하지 않는다.

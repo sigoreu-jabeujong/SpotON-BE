@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해·기본 상권 활동·Risk 참고지표 API와 인허가/상권/생활인구 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 점포 689,440건·상권 경계 1,650건·2025년 점포 통계 24,810행·추정매출 14,391행·공식 상권변화 유형 6,600행과 2026-11-07 생활인구 531,922행·공식 250m 격자 10,125개를 적재했습니다. migration `0009`가 현재 head입니다. 원천별 시점을 혼합하지 않으며 브랜드 매핑·공식 지표 연결·조건부 매출/인구 수치와 FE 반영은 후속 작업입니다.
+현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해·기본 상권 활동·Risk 참고지표·상담/지원기관 공통 링크 API와 인허가/상권/생활인구 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 점포 689,440건·상권 경계 1,650건·2025년 점포 통계 24,810행·추정매출 14,391행·공식 상권변화 유형 6,600행과 2026-11-07 생활인구 531,922행·공식 250m 격자 10,125개를 적재했습니다. migration `0009`가 현재 head입니다. 원천별 시점을 혼합하지 않으며 브랜드 매핑·공식 지표 연결·조건부 매출/인구 수치와 FE 반영은 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -114,7 +114,18 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 
 [설계·검증](docs/designs/feat64-risk-reference-api.md), [FE 변경 요청](docs/fe-risk-reference-api-request.md)을 확인합니다. FE 구현·계산 문구 합의·CLAUDE.md 반영은 담당자 대기입니다.
 
+## 상담·지원기관 링크
+
+`GET /api/support-links`는 서울시 자영업지원센터·소상공인아카데미·서울시 소상공인 지원사업 안내·소상공인24의 공식 시작 주소를 반환합니다. DB나 인증키 없이 동작하며 요청 중 외부 사이트를 호출하지 않습니다. 선택 sigungu는 서울25개 구의 정확한 구명, category는 cafe/restaurant입니다. 생략은 허용하며 빈 값·중복·미지원 인자는422 INVALID_PARAM입니다.
+
+- 현재 네 기관은 공통 안내로 항상 같은 순서/전체 목록을 반환합니다. 지역·업종별 우선 정렬은 후속이며 `meta.prioritization.status=not_applied`입니다. 맞춤 선정이나 현재 지원 자격/모집 상태로 해석하지 않습니다.
+- 항목은 id/org_name/title/description/url/type/region/last_checked입니다. last_checked는 KST 수동 확인일(현재2026-11-12)이며 요청 날짜로 바꾸지 않습니다. data_updated_at도 목록 확인일 기준이며 개별 공고 공표일·마감일이 아닙니다.
+- 서버 설정 목록은 분기1회 수동 점검합니다. 확인 당시 네 곳의 HTTP200·페이지 제목을 대조했지만 이후 접속/신청 성공을 보장하지 않습니다. 실제 모집/자격은 공식 사이트에서 확인합니다.
+- 출처는 R17, is_demo=false이며 정상/422/서버500은 공통 외피·no-store입니다. [설계·Claude 검토·검증](docs/designs/feat70-support-links-api.md), [FE 연결 요청](docs/fe-support-links-api-request.md)을 확인합니다. FE 코드/CLAUDE.md 반영은 담당자 대기입니다.
+
 ## AI LLM client
+
+AI 해석 API 구현은 별도 [PR69](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/69)에서 로컬 검증을 마쳤으나 GitHub CodeQL 시작 오류/Backend CI 대기로 병합 보류 중입니다. 아래는 이 브랜치의 develop 기반 LLM client 범위이며 PR69를 포함하지 않습니다.
 
 `app/ai/`는 AI 해석 API(BE-32)가 사용할 공급자 분리 LLM client입니다. 아직 API 경로는 없습니다. `create_llm_client(settings)`가 `LLM_PROVIDER=google`이면 Gemini `generateContent` 어댑터를 만들고, 그 밖의 값은 호출 시 실패하는 client를 돌려줘 설정 오류가 지표 API 시작을 막지 않습니다.
 
