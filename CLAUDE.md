@@ -80,15 +80,15 @@ LLM 전체 await(재시도 대기 포함)와 개별 요청은 asyncio timeout으
 
 `prepare_risk_interpretation(session,RiskQuery,settings)`는 클라이언트 지표를 받지 않고 서버 Risk를 재계산한다. 위치/상권 후보·UUID/raw meta·URL/link/copy_text 없이 업종/면적/가맹 필터·반경·T/D·지표/분모/출처/상태·고정 방법론만 typed allowlist로 구성한다. 사유/출처도 enum으로 제한하고 기간·비율·metadata 의미·조회조건을 대조한다. 소표본은 기존 Risk의 null/실제분모를 유지하며 불명확한 입력을 정제해 통과시키지 않는다.
 
-입력은 nested frozen/tuple이며 JSON 복사본·정렬 직렬화의 context_hash와 내부 데이터/프롬프트 hash를 구분한다. 원문은 repr/로그/오류에 남기지 않는다. 호출자가 기존 읽기 전용 세션을 제공하며 준비 함수는 공급자/외부 API를 호출하지 않는다. #66 당시 프롬프트는 v2였으며 현재는 아래 #68의 v4·지문 이력을 따른다. verifier는 link_only/unverified 값 생성도 차단한다. 지표 간 숫자 바꿔치기·자유문장 의미 검증 전체나 실제 모델 안전성을 완료로 주장하지 않는다. 상세는 docs/designs/feat66-ai-risk-context.md이며 공개 AI API는 아래, 이력 추가 문맥/캐시는 후속이다.
+입력은 nested frozen/tuple이며 JSON 복사본·정렬 직렬화의 context_hash와 내부 데이터/프롬프트 hash를 구분한다. 원문은 repr/로그/오류에 남기지 않는다. 호출자가 기존 읽기 전용 세션을 제공하며 준비 함수는 공급자/외부 API를 호출하지 않는다. #66 당시 프롬프트는 v2였으며 현재는 아래 #68의 v4·지문 이력을 따른다. verifier는 link_only/unverified 값 생성도 차단한다. 지표 간 숫자 바꿔치기·자유문장 의미 검증 전체나 실제 모델 안전성을 완료로 주장하지 않는다. 상세는 docs/designs/feat66-ai-risk-context.md이며 공개 AI API·캐시는 아래, 이력 추가 문맥은 후속이다.
 
 ## 검증 후보 기반 AI 해석 API (BE #68)
 
 `POST /api/risk/interpret`는 `{query: RiskQuery}`만 받는다. 클라이언트 Risk 응답/집계·주소·building_key/floor_unit·중복 JSON키·NaN·URL query는422다. 서버가 Risk를 재계산하고 #66 허용 집계와 서버 후보만 보낸다. 모델은 모든 favorable/unfavorable 후보의 순서와 일반 checklist 1~3개만 고르고, 최종 문장은 서버 후보로 조립한다. method=server_sentences_model_ordering이며 자유문장 AI나 사업 성공/위험 판정으로 설명하지 않는다. 표시1자리 비율끼리 비교하고 같으면 방향 후보가 없다. 동종업체 수에 임의 임계값을 붙이지 않는다.
 
-프롬프트 risk-interpret-v4와 요청별 후보 enum·후보 전체 포함·중복/방향 검증을 적용한다. 공식/참고·실제0/null·소표본·가맹 미확인·공식/조건부 pending·수집일null·인허가 한계를 유지한다. official_values에는 참고 계산도 있으며 verification은 정확도점수가 아니다. generated_at/model은 서버/최종 공급자 결과다.
+프롬프트 risk-interpret-v4와 요청별 후보 enum·후보 전체 포함·중복/방향 검증을 적용한다. 공식/참고·실제0/null·소표본·가맹 미확인·공식/조건부 pending·수집일null·인허가 한계를 유지한다. official_values에는 참고 계산도 있으며 verification은 정확도점수가 아니다. generated_at은 현재 응답의 서버 문장 조립 시각, model은 채택 선택을 생성한 모델이다. 새 모델 호출 시각을 뜻하지 않는다.
 
-프로세스별 기본5회/분·50회/일·동시2의 새 INTERPRET 설정을 적용하고 기존 LLM 공급자 한도도 유지한다. 대기/읽기 전용 준비/생성/최대1회 재생성/조립 모두 LLM_TIME_BUDGET(기본20초) 안에 둔다. DB 세션은 공급자 호출 전에 닫고 worker취소는 Event/SQL직전 검사와 기존 문장제한으로 정리한다. 즉시 동기SQL 강제중단·전역quota·운영SLA는 보장하지 않는다. 입력422, DB/서버결함500, 한도/공급자/시간503 AI_UNAVAILABLE, 두 번의 선택검증 실패503 AI_VERIFY_FAILED이며 no-store다. 기본문장 대체/캐시는 없다.
+프로세스별 기본5회/분·50회/일·동시2의 새 INTERPRET 설정을 적용하고 기존 LLM 공급자 한도도 유지한다. 대기/읽기 전용 준비/생성/최대1회 재생성/조립 모두 LLM_TIME_BUDGET(기본20초) 안에 둔다. DB 세션은 공급자 호출 전에 닫고 worker취소는 Event/SQL직전 검사와 기존 문장제한으로 정리한다. 즉시 동기SQL 강제중단·전역quota·운영SLA는 보장하지 않는다. 입력422, DB/서버결함500, 한도/공급자/시간503 AI_UNAVAILABLE, 두 번의 선택검증 실패503 AI_VERIFY_FAILED이며 no-store다. 기본문장 대체는 없으며 서버 캐시는 아래 #74 기준을 따른다.
 
 설계·Claude 실제 검토·수정/실검증은 docs/designs/feat68-risk-interpret-api.md를 따른다. FE 코드·이슈·PR·CLAUDE.md는 직접 수정하지 않고 docs/fe-risk-interpret-api-request.md로 담당자에게 요청한다. FE 반영·원본 합의·이력/활동 추가문맥·전체 BE-32 통합은 후속이다.
 
@@ -109,3 +109,13 @@ LLM 이벤트는 실제 client.post 시도1·HTTP200 관측 여부다. 앱 재�
 항목8필드/id/type/region은 기존 FE mock과 맞춘다. URL은 정확한 공식 HTTPS 호스트와 원문 문자열을 보존하며 임의 URL/입력을 이어붙이거나 호출하지 않는다. last_checked=실제 수동 확인 KST 날짜(현재2026-11-12), data_updated_at=확인일 최대값이다. 오늘/배포일/공고 공표일로 바꾸지 않는다. 설정/확인일 변경 시 카탈로그 버전을 올리고 분기1회 수동 점검한다. 당시 HTTP200은 이후 접속/자격/신청 성공 보장이 아니다.
 
 요청 중 DB/LLM/외부 HTTP 미사용·인증키 불필요, R17/is_demo=false·no-store·안전한422/500을 따른다. DB 모델/migration·의존성·Docker/.env·FE 저장소는 바꾸지 않는다. 설계/Claude 검토/검증은 docs/designs/feat70-support-links-api.md, FE 코드/CLAUDE.md 연결 요청은 docs/fe-support-links-api-request.md를 따른다. FE 반영은 담당자 대기다. 상담 기능은 AI PR69와 별개로 개발해 PR71로 병합했다. 두 API의 등록과 계약을 함께 유지한다.
+
+## Risk·AI 메모리 캐시 (BE #74)
+
+앱마다 Risk/AI bytes LRU를 분리한다. CACHE_ENABLED=true, 각 TTL 기본300초/상한7일, CACHE_MAX_ENTRIES 기본256/상한4096, CACHE_MAX_BYTES 각4MiB/상한64MiB다. Python 객체/키 overhead와 worker별 합산은 별도다. 앱 수명 난수 HMAC key에 정확한 float guard+6자리 좌표·정규화한 조건/요청 월·규칙/경계를 넣으며 Risk 값에서 query echo를 제외하고 현재 요청으로 재구성한다. 원문 query/위치/지문을 로그·repr·응답의 cache 메타로 공개하지 않는다.
+
+primary READ ONLY REPEATABLE READ의 snapshot/DB/role/시작시각/GUC 지문으로 같은 배치·updated_at 불변 DML도 다른 namespace로 분리한다. old snapshot은 새 결과를 덮지 않는다. GET warm은 metadata1SQL, AI 준비는 같은 세션에서 최대2SQL이다. 적중에도 DB가 필요하며 SQL 오류500·원천 오류를 과거 결과로 숨기지 않는다. 무관한 쓰기/rollback은 보수적 miss이며 TRUNCATE/rewrite/복구는 요청 drain→cache 종료→변경→재시작 범위다. 일반 동시 ETL은 INSERT/UPSERT다.
+
+AI 값은 현재 허용 후보와 검증한 선택 ID와 모델명뿐이다. snapshot/데이터/context/prompt/provider/model/max tokens/후보/schema/검증규칙을 key에 포함한다. 생성시각·이전 재생성 이력·문장/프롬프트는 저장하지 않는다. generated_at은 현재 응답 문장 조립 시각, regenerated는 현재 요청의 재생성 여부이며 hit=false다. 같은 key 생성만 single-flight로 합치고 key 대기는 semaphore 밖, 준비/공급자 실행만 gate 안이다. 전체 예산·hit의 앱 한도·miss의 공급자 한도·서버문장 실패500·no-store는 유지한다. 키 미설정/실패는 cache로 숨기지 않는다.
+
+TTL은 hit로 늘리지 않고 만료 경계부터 miss다. lifespan의1초 sweep으로 유휴 만료 참조도 정리하며 close→task cancel/await→DB close, 늦은 저장 차단·외부 취소 전파를 지킨다. 정지/이벤트루프 지연/시계 오류의 정확한 물리 삭제·덤프/스왑 secure erase를 보장하지 않는다. 공유 캐시의 시간 차이로 최근 동일 조건 조회가 추론될 수 있어 완전 익명성도 주장하지 않는다. 설계·세 차례 Claude MD 검토와 최종 결정은 docs/designs/feat74-risk-ai-cache.md, FE에는 기존 docs/fe-risk-interpret-api-request.md로 필드 의미를 전달한다. 응답 schema는 그대로이며 FE 저장소/CLAUDE.md 반영은 담당자 대기다.

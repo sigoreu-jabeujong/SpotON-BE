@@ -18,7 +18,7 @@
 
 - CACHE_ENABLED=true, RISK_CACHE_TTL_SECONDS=300, AI_CACHE_TTL_SECONDS=300. 공유 cache의 타이밍 노출 창을 줄이기 위해 후속 검토 뒤 AI 기본값도5분으로 정했다. TTL은1~604800초(7일)만 허용한다.
 - CACHE_MAX_ENTRIES=256, CACHE_MAX_BYTES=4194304를 각 Risk/AI cache에 적용한다. 양쪽 합계 payload 최대8MiB이고 Python 객체/lock/key overhead까지 RSS 상한이라고 주장하지 않는다.
-- thread-safe bounded LRU에 immutable bytes만 저장한다. TTL은 삽입 시점의 monotonic 기준이며 hit로 연장하지 않는다. 초과 payload는 저장하지 않고 entry/bytes 한도에서 LRU 축출한다. 출력은 매번 decode·모델 검증·새 객체다.
+- thread-safe bounded LRU에 immutable bytes만 저장한다. TTL은 삽입 시점의 monotonic 기준이며 hit로 연장하지 않는다. 초과 payload는 저장하지 않고 entry/bytes 한도에서 LRU 축출한다. 출력은 매번 decode·모델 검증·새 객체다. lifespan의1초 sweep으로 유휴 앱도 만료 참조를 정리하며 정지/지연·secure erase의 한계는 §12~14를 따른다.
 - in-memory cache/codec/난수 생성 실패는 miss·저장 생략으로 처리한다. 실제 DB 실패·입력/원천 오류·모델 오류는 기존422/500/503을 유지하고 stale 성공으로 대체하지 않는다. 정상 AI hit는 공급자를 호출하거나 현재 공급자 가용성을 확인하지 않는다.
 - 정상 hit도 DB 세션/가시성 확인을 거친다. cache가 있어도 DB 장애에서 오프라인 성공을 제공하지 않는다. CACHE_ENABLED=false면 snapshot 쿼리·cache read/write 없이 기존 경로를 쓴다.
 
@@ -56,11 +56,11 @@ AI 값은 최종 검증에 성공한 CandidateSelection의 ID 배열·최종 mod
 
 core/cache.py(범용 bytes LRU/TTL·HMAC 자원), services/risk_cache.py(snapshot/codec/key), config/db resource/main 종료, Risk router/service, AI context/interpret 서비스·기존 render 의미 유지, 관련 테스트·BE 문서/기존 FE AI 요청서 안내를 다룬다. API schema/DB 모델/migration·의존성·실제 .env/Docker·FE 저장소는 바꾸지 않는다.
 
-단위: TTL 경계/LRU/bytes/oversize/종료/비활성/난수·cache 오류 우회, key 필터/6자리 경계 exact guard/순서 정규화·원문/repr 비노출·값 복사/손상 복구, AI snapshot/데이터/프롬프트/모델/후보 분리·원래 생성시각·0/1회 재생성/오류 미저장·hit limiter·동시 miss1회/대기자·owner 취소/20초/lock 정리·기존 API/프롬프트·운영 로그 회귀.
+단위: TTL 경계/LRU/bytes/oversize/종료/비활성/난수·cache 오류 우회, key 필터/6자리 경계 exact guard/순서 정규화·원문/repr 비노출·값 복사/손상 복구, AI snapshot/데이터/프롬프트/모델/후보 분리·현재 문장 조립시각·현재 요청 기준0/1회 재생성/오류 미저장·hit limiter·동시 miss1회/대기자·owner 취소/20초/lock 정리·기존 API/프롬프트·운영 로그 회귀.
 
 격리 PostGIS: 실제 READ ONLY REPEATABLE READ snapshot hit·SQL 생략, 동일 배치/updated_at 변경 없는 UPDATE·INSERT/DELETE·원천meta 변경·진행/commit/rollback의 무효화, 늦은 옛 snapshot과 새 snapshot 격리, READ COMMITTED/read-write 우회·DB/source 오류는 캐시로 숨기지 않음, 같은6자리 좌표지만 반경 경계가 다른 실제 결과, 실제 서버 재계산+mock transport의 AI hit/miss·세션 정리. 개발 DB는 읽기만 하며 warm/cold·cache stats/모의 공급자 호출 수·14테이블 hash/head0009/모델차이를 확인한다. 실제 모델 호출은 필요하지 않으며 하지 않는다.
 
-전체 일반/격리PostGIS·ruff/format/mypy·실제 .env 비밀값 검사·FE 변경0·지정PR·CI/CodeQL 후 develop 일반 Squash 병합한다. 기존 BE의 FE 보고서는 HTTP no-store/서버 내부cache·원래 생성시각 안내만 갱신하며 FE 코드는 바꾸지 않는다. 분산cache/전체 의미 검증·운영 hit율/SLA는 완료로 주장하지 않는다.
+전체 일반/격리PostGIS·ruff/format/mypy·실제 .env 비밀값 검사·FE 변경0·지정PR·CI/CodeQL 후 develop 일반 Squash 병합한다. 기존 BE의 FE 보고서는 HTTP no-store/서버 내부cache·현재 조립시각/요청별 재생성 안내만 갱신하며 FE 코드는 바꾸지 않는다. 분산cache/전체 의미 검증·운영 hit율/SLA는 완료로 주장하지 않는다.
 
 ## 7. Claude 검토 요청
 
@@ -222,3 +222,71 @@ Claude 추가 요청: 이 MD만 Read/Edit로 §9 수정안의 정직성/생성�
 비MVCC TRUNCATE/rewrite/복구는 지원되는 동시 runtime 갱신이 아니다. 실제 ETL에는 없음을 확인했고 운영 요청 drain·cache 폐기·변경·재시작 정책과 격리 검증으로 경계를 남긴다. 일반 DML commit/rollback·진행 writer·옛 snapshot/새 snapshot은 실제 PostGIS에서 별도 확인한다. hit율이 낮아 실제 공급자 호출 절감이 안 되거나 TRUNCATE/다중 writer 운영 요구가 생기면 별도 revision 트리거 설계로 전환한다. 기본 운영 로그는 stderr만 쓰므로 조회마다 DB XID를 만들지 않는다.
 
 provider 전에 DB 세션을 닫는 기존 _prepare 구조를 유지하고, 동일 key 대기는 semaphore 밖에서 한다. 입출력/캐시 decode/ID membership 실패는 entry 폐기 후 같은 요청의 miss로 가지만 서버 템플릿 문장 검증 실패는 기존500이며 공급자 재호출로 숨기지 않는다. AI key에 cache/검증 규칙 버전·후보/Schema·prompt 지문을 넣는다. 응답 header/오류/로그에 cache hit·키/스냅샷을 공개하지 않는다. app 종료 후 늦은 저장도 무시한다.
+
+## 12. 최종 보관 점검·Claude 추가 검토 요청
+
+구현 후 점검에서 get/put 시에만 만료 제거하면 유휴 앱에 expired bytes가 장시간 남을 수 있음을 발견했다. TTL은 삽입 때 monotonic 기준, hit 시 연장 없음이다. 최대7일 보관 의도를 위해 앱 lifespan에 종료 가능한 비동기 정리 task를 추가한다. 1초마다 두 cache에서 만료 항목을 제거하고, 종료 시 task cancel/await 후 cache.close로 전부 비운다. thread lock 아래 최대4096항목/각 cache를 순회하고 payload/key/개인정보를 로그로 남기지 않는다. 비활성 앱은 task를 실행하지 않는다. prune/시계 오류는 요청 결과를 바꾸지 않는다.
+
+이 작업은 만료 후 다음 요청 없이도 참조를 정리하는 best-effort 앱 메모리 정책이다. 프로세스 정지/OS suspend/이벤트루프 지연/시계 오류 때 정리의 정확한 벽시계 시한·메모리 덤프/스왑/GC의 secure erase를 보장하지 않는다. 정상 작동 시 TTL 경계부터 재사용하지 않고 다음 sweep(통상1초 내)에 cache 참조를 제거한다. 최대7일은 사용 가능한 entry TTL의 상한이며 법적/물리적 완전삭제 SLA는 주장하지 않는다.
+
+Claude는 **이 MD만 Read/Edit**하고 §13에 이 보완의 적절성, lifespan 취소/cleanup·실패 처리·테스트 누락만 검토한다. 코드/DB/.env/외부/다른파일/Git 도구 접근은 금지한다. 구현은 Codex가 §13 검토 후 수행한다.
+
+## 13. Claude 최종 보관 점검 검토 (2026-11-12)
+
+### 13.0 범위·한계
+
+- 이 MD만 읽고 §13만 추가했다. §1~§12는 수정하지 않았다. 실제 코드(core/cache.py, lifespan/main, config), 테스트, Python/asyncio 문서는 읽지 않았고 실행이나 측정도 하지 않았다. 아래 판단은 §2·§11·§12의 설명이 실제 구현과 같다는 전제에서만 성립한다.
+
+### 13.1 적절성·TTL
+
+1. **[동의] 보완이 필요하고 방향도 맞다.** get/put 때만 정리하면 유휴 앱에서 만료 bytes가 다음 접근까지 무기한 남는다. 이 상태는 "사용 가능한 TTL 상한 7일"과 별개로 보관 의도와 어긋난다. TTL 경계부터 재사용을 막는 것(get 판정)과 참조 제거(sweep)를 구분한 §12의 설명은 정직하다.
+2. **[중간] 만료 판정 경계를 하나로 통일한다.** get과 prune이 같은 함수(예: `now >= inserted + ttl`이면 만료)를 써야 한다. 그렇지 않으면 경계 시점에 get은 miss인데 prune은 남기거나, 그 반대가 생긴다.
+3. **[중간] "최대4096항목"과 §2의 CACHE_MAX_ENTRIES=256의 관계를 명시한다.** 4096이 설정 상한이라면 config 검증 상한과 같은 값임을 적고, 순회 비용 근거로 쓴다. 다른 의미라면 수치를 정정한다.
+4. **[낮음] 순회 비용.** 1초마다 최대 수천 항목을 thread lock 아래 순회하는 것은 μs~ms 수준이라 허용 가능하다. 단 이 작업은 이벤트 루프 스레드에서 실행되므로 lock 안에서는 만료 키 수집·삭제·bytes/count 갱신만 한다(§8.4-5). LRU 순서가 hit로 바뀌어도 TTL이 cache별 고정값이면 삽입 순서가 곧 만료 순서다. 따라서 삽입 순서 보조 구조를 두면 앞에서부터 만료분만 pop할 수 있다. 다만 현재 규모에서는 선택 사항이다.
+5. **[낮음] monotonic 시계의 한계.** OS suspend 동안 monotonic이 진행하지 않는 플랫폼에서는 벽시계 기준 보관이 TTL보다 길어질 수 있다. §12에서 이미 보장하지 않는다고 적었으므로 충분하다. 벽시계를 함께 쓰면 시계 변경 위험이 새로 생기므로 추가하지 않는 것을 권장한다.
+
+### 13.2 lifespan 취소·cleanup
+
+1. **[높음] 종료 순서를 고정한다.** ① cache를 closed로 표시해 늦은 put을 무시한다(§11). ② sweep task를 cancel한다. ③ task를 await하되, 그 task의 CancelledError만 흡수하고 lifespan 자체가 취소된 경우에는 다시 raise한다(3.11+에서는 `current_task().cancelling()` 확인). ④ `cache.close()`로 전부 비운다. ⑤ close는 idempotent하게 만든다. ④는 ③이 예외로 끝나도 반드시 실행되도록 `finally`에 둔다.
+2. **[높음] 시작 실패 경로를 처리한다.** task를 만든 뒤 lifespan의 나머지 시작 단계(DB 자원 등)가 실패해도 task가 cancel되고 cache가 닫혀야 한다. task 생성 직후부터 try/finally 범위에 포함한다.
+3. **[중간] task 참조를 보관한다.** `create_task` 결과를 app state나 자원 객체에 강참조로 보관해 GC로 사라지지 않게 한다. 이름(예: `cache-sweeper`)을 붙이면 진단이 쉽다.
+4. **[낮음] await 시간 상한.** sweep 본문에 블로킹 I/O가 없으므로 cancel 후 await는 즉시 끝나야 한다. 방어적으로 `wait_for(…, 짧은 timeout)`를 둘 수 있지만, timeout이 나도 close는 진행한다.
+5. **[낮음] 멀티 워커.** 워커마다 task 1개와 cache 2개가 생기며 각자 정리한다. 별도 조정은 필요 없다.
+
+### 13.3 실패 처리
+
+1. **[높음] 반복 단위로 예외를 격리한다.** 루프 안에서 각 prune 호출을 `except Exception`으로 감싸야 한다. 그렇지 않으면 1회 오류(시계, 회계 불일치 등)로 task가 조용히 죽고, 그 뒤로는 정리가 영구히 멈춘다. CancelledError/BaseException은 잡지 않는다. 한 cache의 실패가 다른 cache의 prune을 막지 않도록 cache별로 감싼다.
+2. **[중간] 예상 밖의 종료를 감지한다.** done callback에서 취소가 아닌 종료를 예외 클래스명만으로 기록한다. 연속 실패 로그는 rate-limit한다. payload·key·좌표·snapshot은 로그에 남기지 않는다(§12 유지).
+3. **[중간] 회계 일관성.** prune과 get/put이 같은 lock 아래에서 entry 삭제와 bytes/count 감소를 함께 처리해야 한다. 그래야 LRU 한도 판정이 실제 보관량과 어긋나지 않는다.
+4. **[낮음] 참조 잔존.** dict에서 제거해도 진행 중인 hit의 decode가 같은 bytes를 잡고 있으면 그 요청이 끝날 때까지 남는다. §12의 "secure erase 미보장" 범위에 포함되므로 문서화로 충분하다.
+
+### 13.4 테스트 권고
+
+1. 시계와 sweep 간격을 주입하고 `prune_once()`를 직접 호출해 실제 1초 sleep 없이 결정적으로 테스트한다.
+2. TTL 경계(직전/정확히/직후)에서 get과 prune의 판정이 일치하는지 확인한다.
+3. prune 후 남은 항목의 LRU 순서, bytes/count 회계, 다음 put의 축출 동작이 맞는지 확인한다.
+4. CACHE_ENABLED=false면 task가 생성되지 않는지 확인한다.
+5. 정상 종료 시 task가 done 상태이고, 두 cache가 비어 있으며, 늦은 put이 무시되는지 확인한다. close를 두 번 호출해도 문제가 없는지 확인한다.
+6. lifespan 시작이 중간에 실패해도 task가 cancel되고 cache가 닫히는지 확인한다.
+7. prune에서 강제 예외가 나도 다음 반복이 실행되고, 다른 cache는 정리되며, 요청 결과는 바뀌지 않는지 확인한다. 로그에는 예외 클래스명만 남는지도 확인한다.
+8. 외부 취소(lifespan 취소)가 흡수되지 않고 전파되는지 확인한다.
+9. 여러 스레드가 get/put하는 동안 prune을 반복하는 stress 테스트로 회계 불변식(bytes ≥ 0, count ≤ max)을 확인한다.
+10. 선택 사항으로, 최대 항목 수에서 prune 1회의 소요 시간이 이벤트 루프를 눈에 띄게 막지 않는지 측정한다.
+
+### 13.5 결론
+
+§12 보완은 **채택을 권장한다**. 구현 전에 반영할 항목은 다음 세 가지다. (1) 종료·시작 실패 경로의 cancel→await→close 순서와 외부 취소 전파(§13.2-1·2). (2) 반복 단위 예외 격리로 task가 조용히 죽지 않게 하는 처리(§13.3-1). (3) get/prune 만료 판정의 통일과 4096/256 수치 정합(§13.1-2·3). 나머지는 구현·테스트 단계에서 반영하면 된다.
+
+## 14. Codex 최종 구현·검증
+
+세 번째 실제 Claude MD diff/JSON도 확인했다(is_error=false,3turns,permission_denials=[]). §12~13의 주기 정리를 채택했다. 실제 구현은 cache.close를 먼저 실행해 closed/전량 제거로 늦은 put을 차단한 다음 task cancel/await하고 바깥 finally에서 DB 자원을 닫는다. task는 cache 객체와 context 지역변수의 강참조로 유지하고 비활성 때 생성하지 않는다. 별도의 시작 단계는 없으며 생성부터 yield/종료를 try/finally로 감쌌다. 외부 취소는 current_task.cancelling으로 구분해 전파한다. get/put/prune의 <=now 경계·lock/bytes 회계를 통일했다.
+
+각 cache의 prune 오류를 격리하고 반복을 계속한다. 기본256/설정상한4096항목의 참조 정리만 수행하며, 새로운 예외/정리 로그와 rate-limit 관측기는 이번 범위에 추가하지 않았다. 정리 실패의 물리 삭제 SLA는 주장하지 않으며 재사용은 get에서 만료/시계 오류일 때 차단한다. 중첩 비활성·정상/시작실패/외부취소 종료·idle sweep·독립 cache 실패·다중 스레드 회계를 결정적 테스트로 확인했다.
+
+- 일반 **1,166 passed**, 격리 PostGIS **124 passed**, ruff/format **273 files**, mypy app/etl/migrations **135 files** 통과. 새 일반52·통합7이다. 기존 Starlette 경고1건은 그대로다. 전체 통합에서 기존 세션 검사 wrapper의 신규 cache keyword 미수용을 수정했고, 해시의 우연한2글자 일치를 정보 유출로 보던 테스트도 긴 canary로 바로잡았다. 실패를 무시하거나 검사 대상을 줄이지 않았다.
+- 실제 PG17 격리 DB에서 cold/warm JSON일치·warm 집계SQL0, 같은batch/updated_at불변 area/geometry UPDATE·INSERT/DELETE·batch meta 변경, 진행/commit/rollback·옛RR/새RR분리, readwrite/READ COMMITTED 우회·GUC분리·snapshotSQL실패500·원천오류500, 같은6자리/정확좌표 다른500m경계, AI 서버준비+모의공급자1회·세션닫힘, TRUNCATE drain/restart를 검증했다. 개발 DB에 파괴적 suite를 실행하지 않았다.
+- 실제 개발 DB 카페/음식점 각각 uncached 결과와 JSON일치. cold **0.6195/0.6367초·9 SQL**, warm **0.0099/0.0080초·3 SQL**이다. 단일 개발 환경 관측이며 성능 SLA가 아니다. AI2요청은 모의 공급자1회·실모델0회였고 현재조립시각/요청별regenerated=false를 확인했다. sweep 추가 전 측정이며 캐시 계산 경로는 동일하다.
+- 개발 DB는 READ ONLY로 head0009·모델차이0·14테이블 전체 행/geometry hash·건수 보존을 확인했다. 전체 hash 검사만 검증용 세션 제한을120초로 높여 완료했으며 실제 .env/설정 파일은 바꾸지 않았다. 유휴 개발 DB 61개/300.375초 샘플에서 가시성 snapshot은1종이었다. 운영 쓰기 부하의 hit율 근거로 확대하지 않는다.
+- 공개 API schema·프롬프트·모델/migration·의존성·실제 .env/Docker·FE 저장소 변경은 없다. 기존 BE의 FE AI 요청서에 서버cache·현재 generated_at/요청별 regenerated 의미만 보완했다. FE 코드/CLAUDE.md/계약·실제 화면은 담당자 대기다. 브랜드 #57 승인, 공식/조건부 수치·AI 추가문맥·지원 맞춤 정렬·로그30일 보관/삭제·전체 통합은 완료로 표시하지 않는다.
+
+비밀값 검사·지정 PR·CI/CodeQL 후 일반 Squash 병합하며 실제 PR 상태는 이슈74 연결 기록을 따른다. 로컬 원본/집계 evidence·검증 helper는 ignored datasets에만 보관하며 커밋하지 않는다.
