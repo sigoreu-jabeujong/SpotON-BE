@@ -72,7 +72,7 @@ async def interpret_risk(
                     "candidates": catalog.candidates(),
                 }
                 request = build_interpret_request(
-                    payload, response_json_schema=CandidateSelection.model_json_schema()
+                    payload, response_json_schema=catalog.selection_schema()
                 )
 
                 def before(generation: int) -> None:

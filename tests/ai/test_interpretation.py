@@ -85,6 +85,9 @@ def test_all_comparisons_required_and_server_rendering(prepared):
     catalog = build_catalog(prepared)
     selected = choice(prepared)
     assert len(catalog.favorable) == 2 and len(catalog.unfavorable) == 1
+    schema = catalog.selection_schema()
+    assert set(schema["properties"]["favorable"]["items"]["enum"]) == set(catalog.favorable)
+    assert schema["properties"]["favorable"]["minItems"] == 2
     assert not catalog.selection_valid({**selected, "favorable": []})
     assert not catalog.selection_valid({**selected, "unfavorable": selected["favorable"]})
     output = render_interpretation(
@@ -155,6 +158,35 @@ def test_provider_errors_do_not_regenerate(monkeypatch, prepared, kind):
         and r.json()["error"]["code"] == "AI_UNAVAILABLE"
         and provider.calls == 1
     )
+
+
+def test_concurrency_gate_and_waiter_cancellation(monkeypatch, prepared):
+    async def scenario():
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        class Blocking(Client):
+            async def generate(self, request):
+                entered.set()
+                await release.wait()
+                return await super().generate(request)
+
+        provider = Blocking(choice(prepared))
+        app = app_with(monkeypatch, prepared, provider, interpret_max_concurrent=1)
+        resources = app.state.interpretation
+        first = asyncio.create_task(service.interpret_risk(resources, query()))
+        await entered.wait()
+        second = asyncio.create_task(service.interpret_risk(resources, query()))
+        await asyncio.sleep(0.01)
+        second.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await second
+        release.set()
+        result = await first
+        assert result.data.verification.passed and provider.calls == 1
+        assert not resources.gate.locked()
+
+    asyncio.run(scenario())
 
 
 def test_deadline_and_app_request_limit(monkeypatch, prepared):

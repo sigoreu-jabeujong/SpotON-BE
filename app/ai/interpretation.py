@@ -66,10 +66,28 @@ class InterpretationCatalog:
 
     def candidates(self) -> dict[str, JsonValue]:
         return {
-            "favorable": {k: v.model_dump(mode="json") for k, v in self.favorable.items()},
-            "unfavorable": {k: v.model_dump(mode="json") for k, v in self.unfavorable.items()},
-            "checklist": {k: v.model_dump(mode="json") for k, v in CHECKLIST.items()},
+            "favorable": {
+                k: {"id": k, **v.model_dump(mode="json")} for k, v in self.favorable.items()
+            },
+            "unfavorable": {
+                k: {"id": k, **v.model_dump(mode="json")} for k, v in self.unfavorable.items()
+            },
+            "checklist": {k: {"id": k, **v.model_dump(mode="json")} for k, v in CHECKLIST.items()},
         }
+
+    def selection_schema(self) -> dict[str, JsonValue]:
+        schema = CandidateSelection.model_json_schema()
+        for group, options in (
+            ("favorable", self.favorable),
+            ("unfavorable", self.unfavorable),
+            ("checklist", CHECKLIST),
+        ):
+            rule = schema["properties"][group]
+            if options:
+                rule["items"] = {"type": "string", "enum": list(options)}
+            if group != "checklist":
+                rule["minItems"] = rule["maxItems"] = len(options)
+        return schema
 
 
 def build_catalog(prepared: PreparedRiskInterpretation) -> InterpretationCatalog:
