@@ -175,6 +175,22 @@ AI 해석 프롬프트는 `app/ai/prompts/risk_interpret/`의 `system.md`(시스
 
 `app/ai/verified.py`의 `generate_verified()`는 검증에 실패하면 같은 요청으로 1회 다시 생성하고, 또 실패하면 `AiVerifyFailedError`(→ `AI_VERIFY_FAILED` 503)를 냅니다. 공급자 오류 `LlmError`는 그대로 전달되어 `AI_UNAVAILABLE`과 섞이지 않습니다. 호출자의 Pydantic 모델과 선택적 의미 검증/남은 예산 검사를 지원하며, AI API는 요청별 enum·전체 비교 후보 포함·중복 검사를 추가합니다. 상세 내용은 [작업 29 설계서](docs/designs/feat29-ai-verifier.md)와 #68 설계를 확인합니다.
 
+## 개인정보 없는 운영 로그
+
+API·ETL·LLM의 추가 운영 이벤트는 한 줄 JSON으로 **stderr**에 기록합니다. 기존 ETL stdout 결과와 API 본문·헤더는 유지합니다. 원문을 마스킹해 저장하는 방식 대신 고정 필드·허용 건수만 선택하며 주소·좌표·건물/층호·헤더/IP·원자료·프롬프트/출력·키를 기록하지 않습니다.
+
+| event | 의미 |
+|---|---|
+| api_request | UTC 시각·고정 경로·실제 전송 상태·처리시간·서버 UUID·ASGI 응답 완료 여부 |
+| etl_run / etl_stage | 6개 실행기의 독립 run_id·단계 시작/완료/실패·시간, 완료 결과의 허용 건수/품질 집계·실제 batch/version UUID |
+| llm_http_attempt | 애플리케이션의 client.post 시도1건과 HTTP200 관측 여부. 파싱/최종 AI 검증 성공률과 다름 |
+
+- 모르는 경로는 `unmatched`이며 원문 URL/query를 복사하지 않습니다. 헤더 관측 전 실패/취소는 status_code=null, 전송 중 중단은 response_complete=false입니다. 완료는 ASGI 전송 기준이며 사용자의 다운로드 완료 보장이 아닙니다. request_id는 입력 헤더를 무시하고 새로 만들며 응답 헤더에 추가하지 않습니다.
+- ETL은 실제 commit context 종료 후 persist 완료를 기록하고 원래 오류·취소를 전파합니다. run_id와 DB batch_id/version_id를 구분하며 없는 건수를0으로 채우지 않습니다. quality_flags는 겹칠 수 있으므로 합산해 최종 제외 수로 표시하지 않습니다. 인허가 CLI의 잘못된 인자는 입력을 echo하지 않는 고정 메시지·exit2입니다.
+- 쓰기/직렬화/ID 생성 실패는 주 작업을 바꾸지 않으며 로그 오류를 다시 출력하지 않습니다. 한 줄은 최대4096 UTF-8 bytes이고 프로세스 내 thread 쓰기를 묶습니다. 느린 stderr의 지연이나 여러 프로세스 간 원자성은 보장하지 않습니다. 기존 서버 시작/오류 메시지는 같은 stderr에 있을 수 있으므로 수집기는 event가 있는 JSON을 구분합니다.
+- 기본 앱에서 uvicorn.access를 비활성화하고 기존 `--no-access-log` 실행 안내도 유지합니다. 별도 로그 재설정·reload/gunicorn·프록시/제3자 DEBUG 전체의 개인정보 처리를 대신하지 않습니다.
+- **원본의30일 보관·삭제 요구는 아직 미충족**입니다. 앱에 파일/DB 저장을 추가하지 않았으며 실제 배포 로그 수집기의 보관 설정·삭제 검증이 후속입니다. [설계·Claude 검토·검증](docs/designs/feat72-private-operation-logs.md)을 확인합니다. FE 응답 계약은 바뀌지 않습니다.
+
 ## 공통 오류 응답
 
 요청 검증 실패는 422, 없는 경로는 404, 허용되지 않은 메서드는 405 상태를 유지하면서 공통 외피로 반환합니다. 404/405에는 새 코드를 추가하지 않고 기존 `INVALID_PARAM`을 사용합니다. 주소 조회 실패용 `ADDRESS_NOT_FOUND`와는 구분합니다. 405의 `Allow` 및 HTTP 예외의 인증·재시도 프로토콜 헤더는 유지하고 임의 디버그 헤더는 제거합니다.

@@ -2,7 +2,7 @@
 
 - 작성일: 2026-11-12, 초기 기준 develop `981d17f`(상담 PR71 병합)
 - 브랜치: feat#72-private-operation-logs
-- 상태: Codex 설계 → Claude 이 MD만 실제 Read/Edit → Codex 최종 점검·구현
+- 상태: Codex 설계 → Claude 이 MD만 실제 Read/Edit → Codex 최종 점검·기록 기반 구현/로컬 검증 완료. CI/CodeQL·병합은 연결 PR 실제 상태를 따른다.
 - AI PR69는 충돌을 해결한 c81b493의 CI를 재확인 중이다. 구현 전 최신 develop을 가져오며 공개 API/계산/DB/FE 계약을 바꾸지 않는다. BE-34 캐시는 별도다.
 
 ## 1. 원본·현재 상태·범위
@@ -47,7 +47,7 @@ event=etl_run 또는 etl_stage, time, source, run_id, stage, status(started/comp
 
 ## 5. LLM 시도 이벤트
 
-GeminiClient._post의 실제 client.post 시도를 finally로 관측한다. event=llm_http_attempt, time, count=1, success(HTTP200을 관측했는지)만 쓴다. timeout/네트워크/취소도 시도1건·성공false이며 원래 예외/취소를 전파한다. 키 미설정/요청 한도에서 post 전에 중단되면0건이다. 공급자 내부 재시도는 각각1건으로 집계한다. HTTP200이어도 파싱/최종 AI 검증은 실패할 수 있으므로 이를 AI 해석 최종 성공률로 표시하지 않는다. 최종 공개 API 결과는 API 상태 로그와 구분한다. 실제 모델/키/URL/프롬프트/출력/token/오류 원문은 기록하지 않는다.
+GeminiClient._post의 실제 client.post 시도를 finally로 관측한다. event=llm_http_attempt, time, count=1, success(HTTP200을 관측했는지)만 쓴다. timeout/네트워크/취소도 시도1건·성공false이며 원래 예외/취소를 전파한다. 키 미설정/요청 한도에서 post 전에 중단되면0건이다. 애플리케이션 재시도는 각각1건으로 집계하며 transport 내부 재시도는 미구분이다. HTTP200이어도 파싱/최종 AI 검증은 실패할 수 있으므로 이를 AI 해석 최종 성공률로 표시하지 않는다. 최종 공개 API 결과는 API 상태 로그와 구분한다. 실제 모델/키/URL/프롬프트/출력/token/오류 원문은 기록하지 않는다.
 
 ## 6. 대상·검증
 
@@ -143,3 +143,17 @@ Claude 실제 수정 diff 전체와 JSON(is_error=false,5turns,permission_denial
 ETL 단계는 현재 coordinator의 순차 함수에만 두므로 LocalDataClient의 내부 ThreadPoolExecutor에 context를 전달할 필요가 없다. worker 내부 단계/요청별 로그는 이번 범위가 아니며 미래 thread 계측에는 copy_context 등이 필요하다. 중첩 import는 새run_id를 발급하고 종료 시 부모를 복원한다. JSON은 최대4096 UTF-8 bytes·개행 포함 단일 write+flush·프로세스내 lock이며 프로세스 간 원자성은 보장하지 않는다. logging.Handler 대신 직접 stderr를 쓰고 I/O/직렬화 오류는 재출력하지 않는다. 로거 재설정/프록시 등 제3자 전체 로그·보관30일은 범위 밖이다.
 
 batch/version UUID는 파싱·정규화 후 유효할 때만 넣고 타입/키/건수를 모두 제한한다. 없는 값/비유한값/범위 밖 정수는 버리거나 미확인null로 두며 사실처럼0으로 채우지 않는다. localdata에 subparser는 없고 고정error·help/exit 동작을 보존한다. LLM 집계는 애플리케이션 client.post 시도 기준이며 transport 내부 재시도/실제 공급자 도달·최종 AI 검증은 미구분이다. 이 범위를 문서와 테스트에 고정한다. 추가 실모델 호출·개발 DB 쓰기는 하지 않는다.
+
+## 10. 구현·검증 결과
+
+core/operations.py의 고정 필드 선택·JSON stderr 기록·크기/숫자/UUID 검증, 순수 ASGI middleware, 기본 access logger 억제, ETL6개 decorator/순차 단계, 인허가 safe parser, Gemini post-finally 관측을 구현했다. 로그는 파일/DB에 저장하지 않고 수신본문을 읽거나 버퍼링하지 않는다. Claude는 이 MD만 수정했고 실제 코드·테스트·최종 대조는 Codex가 수행했다.
+
+새 일반 **43개**와 전체 일반 **1,114 passed**, 별도 포트55472의 일회용 PostGIS **117 passed**를 확인했다. ruff check·format check **267 files**, mypy app etl migrations **133 files** 통과다. 초기 mypy의 nullable 시간 타입2건은 명시적None 검사로 수정했고 테스트 표현/포맷 경고도 정리한 뒤 전체 검사를 통과했다. 기존 Starlette testclient 경고1건은 유지한다.
+
+API 검증은 정상/422/404/안전한500/CORS와 경로 변형·본문/주소/좌표/헤더 canary 비노출, 사용자ID 무시·20개 동시서버ID 격리, 헤더/본문 send 실패·헤더 전/후/최종본문 후 예외·바깥취소·lifespan/WebSocket 통과·HEAD/204·stderr없음/닫힘/BrokenPipe·UUID 생성 실패를 포함한다. 관측한 실제500과 응답전 raw ASGI 오류의null을 구분했다.
+
+ETL은 실제 합성 인허가 snapshot dry-run/기존 stdout 일치·나머지5개 실제 read_source 실패·고정 타입/키 선택·음수/bool/비유한/거대 int/비UUID 배제·8개 threaded 중첩run(16개 독립ID) 복원·commit 후 persist 완료와 save/dispose 실패를 확인했다. `quality_flags`는 개별 허용 사유 건수이며 합산 제외율을 생성하지 않는다. Gemini는 mock transport로HTTP200·429후성공·503재시도소진·timeout/connect 실패·200후파싱실패·키/한도0시도·취소의 실제시도수를 대조했다.
+
+실제 기본 uvicorn 프로세스에 HTTP10개 요청을 보내 JSON API 이벤트10개·기존 응답/CORS를 확인했다. 요청의 합성 canary/좌표가 stderr에 없었고 기본 INFO access stdout도 비어 있었다(--no-access-log 없이 확인). 합성 snapshot 별도 subprocess dry-run은ETL이벤트6개·transformed2/affected0·원래 stdout을 확인했고 임시 자료/프로세스를 정리했다. 실제 모델 호출0이며 개발 DB 쓰기/원천 적재 없이 격리 DB만 통합검증에 썼다.
+
+BE README/CLAUDE.md/작업계획을 반영했다. 공개API/응답·모델/migration·의존성·실제 .env/Docker·FE·외부 원본 변경은 없다. FE 계약 변경이 없어 새 FE 요청서를 만들지 않았다. 원본30일 보관/삭제·외부수집기·임의 재설정/프록시/제3자 전체로그·reload/gunicorn은 구현/검증 완료가 아니며 느린sink·프로세스간 원자성 한계도 유지한다. 실제 비밀값 검사·git diff와 원격 CI/CodeQL 후 일반 Squash 병합하며 실제 상태는 #72 연결 PR을 따른다.
