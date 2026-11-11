@@ -146,6 +146,18 @@ def test_pending_indicator_with_value_fails(indicator_id: str) -> None:
     assert VerifyFailure.PENDING_AS_VALUE in failures(output)
 
 
+@pytest.mark.parametrize("status", ["link_only", "unverified"])
+def test_unavailable_values_rejected_even_if_number_is_known(status):
+    context = {
+        "radius_m": 500,
+        "indicators": [{"id": "official_risk", "status": status, "value": None}],
+    }
+    verdict = verify_output(
+        json.dumps({"indicators": [{"id": "official_risk", "value": 500}]}), context=context
+    )
+    assert VerifyFailure.PENDING_AS_VALUE in verdict.failures
+
+
 def test_pending_indicator_with_null_value_and_ok_indicator_pass() -> None:
     output = {
         "summary": "요약",

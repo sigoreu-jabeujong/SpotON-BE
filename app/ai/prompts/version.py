@@ -10,7 +10,8 @@ from types import MappingProxyType
 PROMPT_HISTORY: Mapping[str, str] = MappingProxyType(
     {
         "risk-interpret-v1": "9eb92e6eaf572cd2c94a80570c411a78c6f8a163fb055c9a4c2ad0f0050054e2",
+        "risk-interpret-v2": "f4ee42541b2c5529fc677af03b0a9a4f68439efadf09c50c98b4be9889210b71",
     }
 )
-PROMPT_VERSION = "risk-interpret-v1"
+PROMPT_VERSION = "risk-interpret-v2"
 PROMPT_SHA256 = PROMPT_HISTORY[PROMPT_VERSION]
