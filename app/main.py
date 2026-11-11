@@ -13,6 +13,7 @@ from app.routers.geocode import router as geocode_router
 from app.routers.health import router as health_router
 from app.routers.meta import router as meta_router
 from app.routers.nearby import router as nearby_router
+from app.routers.snapshot import router as snapshot_router
 from app.routers.stores import router as stores_router
 
 
@@ -51,6 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(geocode_router, prefix="/api")
     application.include_router(stores_router, prefix="/api")
     application.include_router(nearby_router, prefix="/api")
+    application.include_router(snapshot_router, prefix="/api")
     application.include_router(meta_router, prefix="/api")
     return application
 
