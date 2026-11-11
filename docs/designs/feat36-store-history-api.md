@@ -5,7 +5,7 @@
 - 이슈: [#36 점포 이력 API 및 날짜·위치 판정 구현](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/36)
 - 브랜치: `feat#36-store-history-api`, 대상: `develop`
 - 기준 커밋: `1e7a2a6` — 인허가 적재 PR #35 병합본
-- 작업: BE-12 / F-02. 현재는 설계·계약 확인 단계이며 API 구현·migration·DB 변경은 하지 않았다.
+- 작업: BE-12 / F-02. 설계·Claude 검토·Codex 점검 후 구현·로컬 검증을 마쳤다. 최종 결과는 아래 검증 기록을 따른다. develop 반영과 CI는 연결 PR 상태로 확인한다.
 - 순서: Codex 설계 → Claude Code 이 MD 직접 검토·수정 → Codex 실제 diff 점검 → 필요한 사용자 답변 → 구현·테스트·수정 → PR·CI.
 - 사용자가 필요한 자료·키가 없으면 중단하도록 지시했다. 아래 미확정 응답 계약과 계산 기준을 임의 확정하지 않는다.
 
@@ -245,3 +245,18 @@ Claude 실행 결과 `is_error=false`, Read/Edit 한정 실제 MD 수정 및 위
 ### 재적재 성능 점검
 
 출처 연결 재적재 중 chunk별 다중 values SQL 생성 비용을 확인했다. 개발 DB와 분리한 임시 PostGIS DB의 동일한 합성 5,000건에서 기존 방식 6.401초, 같은 ON CONFLICT 규칙의 psycopg 매개변수 묶음 실행 1.073초였다. 보호 필드·원천별 advisory lock·트랜잭션·입력 건수 집계는 유지하고 SQL 실행 방식만 바꾼다. 실제 데이터의 동일한 속도 배수를 보장하는 수치는 아니며 격리 통합 검사를 다시 실행한다.
+
+## 9. 구현·검증 결과
+
+- Windows·Python 3.11에서 ruff check/format 통과, mypy app etl migrations 61개 파일 통과.
+- 기본 pytest 626 passed, integration 18 deselected. 별도 일회용 PostGIS 컨테이너에서 통합 18 passed, skip 없음. 기존 Starlette testclient deprecation 경고 1건.
+- 통합 검사는 실제 조회·타 지원 업종 유지·복합 식별자·위치·결측·정렬·읽기 전용 쓰기 차단·SQL timeout·migration 왕복·배치와 점포의 원자성·보호 필드 보존을 검증했다. 개발 DB에 파괴적 fixture를 실행하지 않았다. 일회용 컨테이너는 검사 후 제거했고 기존 개발 DB는 healthy다.
+- 실제 개발 DB migration `0003` 적용, 앱 소유 stores/store_import_batches 두 테이블의 compare_metadata 차이 0. PostGIS 내부 테이블은 이 비교 범위에서 제외했다.
+- 검증된 기존 스냅샷을 재생해 일반음식점 541,169건·휴게음식점 148,271건에 출처 배치를 연결했다. 원천 API 호출 0회, 거절·중복 입력 0건. 실제 CSV 689,440행의 DAT_UPDT_PNT가 모두 파싱되며 일반 최대 2026-11-08 22:17:39, 휴게 최대 2026-11-07 22:47:51이다. API data_updated_at은 정의에 따라 2026-11-08이다. 이를 CSV 다운로드 시점 또는 원천 전체의 현황 관측일이라고 주장하지 않는다.
+- 재적재 전후 batch_id/updated_at/id를 제외한 내용·geometry 해시가 원천별로 동일하다. 전체 689,440건, 중복 0건, 잘못된 geometry 0건, 기존 brand/deleted 수 보존. 기존 ETL 표본 20건의 원자료·정제·DB 대조도 다시 통과했다.
+- 별도로 실제 HTTP 이력 API의 원자료 20건(원천별 10건, 각각 open 4/closed 6)을 대조했다. 일반음식점의 폐업일 결측 2건을 포함해 상태·개폐업일·상호·기간·층호수·프랜차이즈 미확인을 검증했다. 실제 같은 건물의 다른 층이 same_building임도 확인했다. 표본 HTTP 최대 0.408초이며 전체 요청 SLA 측정 결과는 아니다.
+- 실제 로컬 서버에서 서울시청 공개 주소 검색 → 이력 HTTP 200 → FE 5건 표시를 확인했다. headless Chrome에서 합성 응답으로 null 날짜/기간·실제 0개월·같은 관리번호의 다른 원천 2건·진단서·빈 결과를 검사했고 페이지 오류는 0건이었다. 합성 화면 이미지는 FE PR에 첨부했다.
+- FE 이슈 #26, 브랜치 feat#26-store-history-contract, [PR #27](https://github.com/sigoreu-jabeujong/SpotON-FE/pull/27). npm build/lint·변경 소스 format·회귀 3개 통과, Frontend CI와 CodeQL도 통과했다. 두 저장소 CLAUDE.md에 같은 계약을 기록했다.
+- 실제 .env 비밀값 및 URL 인코딩 변형이 변경 파일에 없는지 검사했고 .env는 미추적이다. 원본 PDF·CSV·snapshot·검증 로컬 스크립트·Docker 설정은 커밋하지 않았다. git diff --check 통과.
+
+남은 범위는 현재 공공 API 최신 전체 재수집, 실제 수집 완료일 확보, 원본 v1.2의 공통 meta/geocode/오류 전체 동기화, BE-13 이후 API다. 지표나 추가 업종을 임의로 구현하지 않았다. PR의 CI와 develop 병합은 실제 GitHub 상태를 따른다.

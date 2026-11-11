@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 FastAPI·health API·공통 응답·오류 처리, PostgreSQL/PostGIS 기반, stores 모델과 지방행정 인허가 데이터 수집·정제·멱등 upsert, 카카오 로컬 API 기반 서울 주소 지오코딩, AI 해석용 공급자 분리 LLM client를 제공합니다. Docker 로컬 개발 DB 연결과 migration `0002` 적용을 확인했으며, 원천 전체 적재·분석·AI 해석 API는 후속 작업입니다.
+현재는 health·서울 주소 검색·건물별 점포 이력 API, 공통 응답·오류 처리, PostgreSQL/PostGIS·stores, 인허가 수집·정제·멱등 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 사용자 제공 검증 CSV 689,440건을 적재했으며 migration `0003`부터 배치 출처를 저장합니다. 현재 API의 최신 전체 수집과 주변·시점·분석·AI 해석 API는 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -35,6 +35,19 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 `GET /api/geocode?query={주소}&category={cafe|restaurant}`는 카카오 로컬 API에서 검증한 서울 주소 후보를 반환합니다. 결과는 도로명·지번 주소, WGS84 좌표, `building_key`, 입력에서 명시적으로 읽은 `floor_unit`을 포함합니다. 복수 후보는 최대 5개를 `candidates`에 반환하며, 서울 외는 `OUT_OF_SEOUL`, 검색 실패는 `ADDRESS_NOT_FOUND`로 응답합니다.
 
 실행에는 서버 전용 `KAKAO_REST_API_KEY`가 필요합니다. 키·주소·좌표는 로그에 남기지 않으며, 응답은 `Cache-Control: no-store`로 전송합니다. 키 없이 실행하면 이 경로는 `UPSTREAM_ERROR`를 반환합니다.
+
+## 점포 이력 조회
+
+`GET /api/stores/history?building_key={건물 키}&floor_unit={선택 상세 위치}&category={선택 진단 업종}`은 같은 건물의 지원 업종 이력을 반환합니다. 키는 `/api/geocode` 결과를 사용합니다. category를 지정해도 다른 지원 업종은 제거하지 않습니다. 삭제·검토 대기·미지원 업종은 제외하고, 개업일 오름차순·날짜 미확인 마지막으로 정렬합니다. 0건은 안내 메시지가 있는 정상 응답입니다.
+
+- 실행 전 `alembic upgrade head`와 검증 snapshot 적재가 필요합니다. 기존 `0002` 데이터는 재적재하기 전 배치 출처가 없을 수 있어 영업 중 점포의 기간이 미산정됩니다.
+- 식별자는 `source + license_no`입니다. 날짜·상호·기간은 null을 허용하며 기간은 `operating_period_status`·`operating_period_reason`을 함께 확인합니다. 실제 0개월과 결측을 구분합니다.
+- 기간은 달력상 완료 개월 수입니다. 폐업은 확인된 폐업일, 영업 중은 DB에 연결된 검증 배치의 DAT_UPDT_PNT 최대 날짜를 종료점으로 사용합니다. 오늘·DB 적재일로 대체하지 않습니다. 동일한 층만 확인되면 같은 자리라고 표시하지 않습니다.
+- `meta.collected_at`은 실제 수집 완료일이 확인되지 않으면 null입니다. CSV 검증 시각과 원천 갱신일·적재일을 구분합니다.
+- health·geocode는 DB 없이 동작합니다. 이력 요청은 지연 생성한 DB 엔진과 요청별 읽기 전용 트랜잭션을 사용하고 종료 시 정리합니다. `DATABASE_STATEMENT_TIMEOUT_MS`는 SQL 문장별 제한이며 전체 요청 SLA가 아닙니다. DB 실패·timeout은 원문 없는 500 INTERNAL_ERROR입니다.
+- FE는 [연동 PR #27](https://github.com/sigoreu-jabeujong/SpotON-FE/pull/27)의 nullable 기간·복합 식별자를 함께 적용합니다. 후속 API 개발 중에는 FE의 기존 `VITE_USE_MOCK=true`, `VITE_REAL_API_PATHS=/geocode,/stores/history`로 두 API만 실제 연결할 수 있습니다.
+
+설계·원본 계약 차이·검증 기록은 [이슈 36 설계](docs/designs/feat36-store-history-api.md)를 확인합니다. 원본 v1.2 전체 계약의 일괄 동기화 완료를 뜻하지 않습니다.
 
 ## AI LLM client
 
@@ -84,7 +97,7 @@ AI 해석 프롬프트는 `app/ai/prompts/risk_interpret/`의 `system.md`(시스
 
 내부 예외는 500 `INTERNAL_ERROR`와 고정 문구로 응답합니다. 응답 시작 전 애플리케이션 예외는 CORS 안쪽에서 처리해 허용된 origin의 FE도 오류 본문을 읽을 수 있습니다. 요청값·예외 원문·traceback을 응답에 넣지 않고 애플리케이션 로그에는 예외 클래스 이름만 남깁니다. 실행 안내의 `--no-access-log`는 쿼리 등 요청 정보가 Uvicorn 접근 로그에 남는 것을 막습니다.
 
-CORS preflight·문서·리다이렉트·204/304는 프로토콜 응답으로 유지합니다. 응답 시작 후 스트리밍·background task 오류와 서버/인프라 자체 로그 정책은 후속 BE-35 범위입니다. 상세 meta·DataVersion은 원본 API 명세 확인 전까지 확정하지 않습니다.
+CORS preflight·문서·리다이렉트·204/304는 프로토콜 응답으로 유지합니다. 응답 시작 후 스트리밍·background task 오류와 서버/인프라 자체 로그 정책은 후속 BE-35 범위입니다. 점포 이력은 배치 출처와 데이터 버전을 제공하며, 전체 API 공통 meta·DataVersion의 원본 v1.2 일괄 동기화는 별도 작업입니다.
 
 ## 검증
 
@@ -131,7 +144,7 @@ uv run --locked --extra dev --no-editable python -m etl.localdata --source gener
 - `--from-csv --write`는 허용하지 않습니다. CSV dry-run으로 만든 snapshot을 확인한 뒤
   같은 파일을 `--from-snapshot --write`로 적재합니다. 원본 CSV·보고서는 수정하지 않습니다.
 - `--write`는 localhost의 `spoton_dev`·`spoton_app`만 허용합니다. 연결 후 계정·권한·revision
-  `0002`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 적재합니다.
+  `0003`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
 - 같은 snapshot으로 다시 실행하면 기존 `(source, license_no)`를 갱신합니다. `affected`는
   성공적으로 처리한 입력 수이고, 값이 실제로 변경된 행 수를 뜻하지 않습니다.
 - 실제 원천은 성공 코드 `0`, 날짜 `YYYY-MM-DD`, 갱신시각 `YYYY-MM-DD hh:mm:ss`를 사용합니다.
