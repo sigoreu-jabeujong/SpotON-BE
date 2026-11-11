@@ -29,7 +29,7 @@
 
 ## 3. 실행기와 DB 보호
 
-- `python -m etl.localdata --source general_restaurant|rest_cafe`는 기본 dry-run이다. `--write`를 명시해야 쓰며 `--dry-run`과 동시 사용은 거절한다. `--workers`는 argparse에서 1~4 정수만 허용하고 기본 1이다. 한 실행은 하나의 source만 처리한다. 입력은 API 수집(기본) 또는 `--from-snapshot PATH` 중 하나이며 `--save-snapshot`은 API 수집에서만 허용한다.
+- `python -m etl.localdata --source general_restaurant|rest_cafe`는 기본 dry-run이다. `--write`를 명시해야 쓰며 `--dry-run`과 동시 사용은 거절한다. `--workers`는 argparse에서 1~4 정수만 허용하고 기본 1이다. 한 실행은 하나의 source만 처리한다. 입력은 API 수집(기본) 또는 `--from-snapshot PATH` 중 하나이며 `--save-snapshot`은 API 수집에서만 허용한다. CSV 입력과 그에 따른 인자 조합은 7.2절이 이 문장을 보완·대체한다.
 - **dry-run 보장**: 공통 Settings로 API 키를 읽되 DATABASE_URL 속성을 사용·검증하지 않고 엔진·세션을 생성하지 않는다. 테스트에서 엔진 생성 함수를 호출 시 실패하도록 대체해 검증한다. dry-run에서 허용되는 부수효과는 `--save-snapshot`의 로컬 파일 쓰기뿐이다.
 - **write 대상 보호(수집 전 정적 검사)**: SQLAlchemy `make_url`로 DATABASE_URL을 파싱해 드라이버가 기존 PostgreSQL 드라이버이고, host가 정확히 `localhost`/`127.0.0.1`/`::1`, database가 `spoton_dev`, username이 `spoton_app`일 때만 허용한다. libpq가 연결 대상을 바꿀 수 있는 query 인자(`host`, `hostaddr`, `service`, `dbname`, `user`, `options`, `target_session_attrs` 등)가 있으면 거절한다(query 허용 목록 방식). 거절 메시지는 위반 항목 이름만 출력하고 URL·비밀번호는 출력하지 않는다.
 - **write 대상 보호(수집 전 연결 preflight)**: API 할당량을 쓰기 전에 읽기 전용 트랜잭션으로 `current_database() = 'spoton_dev'`, `current_user = 'spoton_app'`, 해당 role의 `rolsuper = false`, `alembic_version`이 정확히 `0002` 한 행, PostGIS 확장 존재, stores의 source+license_no 유일 제약(실제 이름은 migration 기준) 존재를 확인한다. 하나라도 다르면 수집하지 않고 고정 오류로 종료한다.
@@ -41,7 +41,7 @@
 ## 4. 로컬 원천 보관과 재실행
 
 - 25개 관청 수집과 페이지 검증을 모두 통과한 경우에만 허용 DTO 필드를 Git에서 제외된 `datasets/localdata/`에 보관한다. 같은 커밋에서 `.gitignore`에 해당 경로가 포함됐는지 확인한다. 키·요청 URL·응답 전체·전화번호·대표자 필드는 저장하지 않으며 저장 필드는 허용 목록으로 직렬화한다(DTO 전체 `asdict` 후 제외 방식 금지).
-- snapshot 내용: `format_version`, `source`, `collected_at`(수집 시작 시각, 초 단위 naive KST로 명시), 관청별 `{gu_code, total_count, page_count, row_count}`, `row_count` 합계, rows, rows의 정규 JSON(정렬 키·UTF-8·`ensure_ascii=False`·구분자 고정) SHA-256. 관청별 row_count는 total_count와 같아야 한다.
+- snapshot 내용: `format_version`, `source`, `collected_at`(수집 시작 시각, 초 단위 naive KST로 명시), 관청별 `{gu_code, total_count, page_count, row_count}`, `row_count` 합계, rows, rows의 정규 JSON(정렬 키·UTF-8·`ensure_ascii=False`·구분자 고정) SHA-256. 관청별 row_count는 total_count와 같아야 한다. 입력 구분·provenance 필드와 CSV snapshot의 collected_at 의미는 7.6절을 따른다.
 - **원자적 기록**: 같은 디렉터리의 임시 파일에 쓰고 flush·fsync 후 최종 이름으로 바꾼다. 최종 이름은 source·수집시각·batch_id로 유일하게 만들고, 이미 존재하면 덮어쓰지 않고 실패한다(`os.replace`의 덮어쓰기 대신 존재 검사 후 이동하거나 배타적 생성 사용). 임시 파일 접미사는 로더가 절대 읽지 않으며, 실패 시 임시 파일을 삭제한다.
 - `--from-snapshot`으로 같은 수집 결과를 재생해 재적재 검증에 API 할당량을 다시 쓰지 않는다. 로더는 `json.load`의 NaN/Infinity를 거절하고 다음을 모두 검증한다: 알려진 format_version, 요청 source와 일치, 관청 코드 집합이 기대 25개와 정확히 일치·중복 없음, 관청별 row_count = total_count, 행의 관청 코드 분포가 관청별 row_count와 일치, 전체 행 수, SHA-256 일치, 각 행의 키 집합이 허용 DTO 키와 정확히 일치, 값은 `str` 또는 `None`만 허용. 하나라도 실패하면 정제·DB 단계 전에 거절한다.
 - **재생 결정성**: 재생 시 미래 개업일 등 기준일 의존 판정은 실행 당일이 아니라 snapshot의 `collected_at` 날짜를 기준일로 사용한다. 따라서 같은 snapshot의 두 번 정제 결과는 batch_id·updated_at을 제외하고 동일해야 한다. API 수집 직후 정제도 같은 `collected_at` 기준을 사용한다.
@@ -131,3 +131,82 @@
 - `.gitignore`의 datasets/ 제외를 확인했다. 실제 표본은 해당 로컬 경로에만 보관했으며 Git에 포함하지 않는다.
 - live 응답 0·ISO 날짜·ISO 갱신시각은 두 원천에서 확인했다. 회귀 검사는 합성 값으로 작성한다. 문자열 00의 기존 호환은 유지한다.
 - 전체 수집·적재·20건 대조·최종 CI는 아직 실행 전이며 완료로 표시하지 않는다.
+
+## 7. 검증된 기존 CSV 입력 추가 (사용자 자료 확인 후)
+
+- API 전체 수집은 원천 ReadTimeout으로 실패했고 DB는 0건으로 유지됐다. 사용자가 최근 내려받은 일반·휴게 CSV가 기존 ax 폴더(저장소 밖)에 있다고 확인했다. 이 절대 경로·파일명은 README·PR·로그에 쓰지 않고 실행 인자로만 받는다.
+- 두 파일은 API 필드명을 가진 UTF-8 BOM CSV다. 동봉된 validation JSON은 PASS/complete이고, CSV SHA-256이 보고서 source_sha256과 실제로 일치했다. 검증일은 2026-11-09 UTC이며 일반 541,169행, 휴게 148,271행이다. 현재 API와 같은 시점의 자료로 주장하지 않는다.
+
+### 7.1 출처·신뢰 한계
+
+- 보고서는 서명되지 않은 동봉 파일이다. 해시 일치는 "이 CSV가 보고서가 가리킨 파일과 같다"는 뜻일 뿐 보고서 내용의 진위·원천 완전성을 증명하지 않는다. 따라서 보고서의 수치는 **사전 조건**으로만 쓰고, 행 수·구별 분포·관리번호 중복·헤더는 CSV에서 직접 다시 계산해 보고서와 일치할 때만 통과시킨다. "원본 좌표/필드 불변"처럼 CSV만으로 재계산할 수 없는 보고서 항목은 존재·값만 확인하며 독립 검증된 것으로 기록하지 않는다.
+- 보고서 검증시각은 자료의 다운로드·원천 기준 시점이 아니라 그 이후의 검증 시점이다. 실제 원천 기준일은 미확인으로 남기며, README·결과 기록에는 "기준일 미확인, 검증시각 2026-11-09 UTC 기준으로 날짜 판정"으로 적는다. 검증시각이 실행 시각보다 미래이면 거절한다.
+
+### 7.2 입력 인자
+
+- `--from-csv PATH --validation PATH`를 추가한다. API 수집·`--from-snapshot`·`--from-csv`는 서로 배타적이고, `--validation`은 `--from-csv`와 함께일 때만 허용(그 외 거절)한다. `--save-snapshot`은 API·CSV 입력에서 허용하고 `--from-snapshot`에서는 거절한다(3절의 "API 수집에서만"을 이 절이 대체).
+- **`--from-csv --write`는 거절한다.** CSV는 dry-run+`--save-snapshot`으로만 변환하고, DB 쓰기는 그 snapshot의 `--from-snapshot --write`로만 한다. 검토한 dry-run 집계와 DB 입력이 같은 자료임을 보장하고 쓰기 경로를 하나로 유지하기 위함이다.
+- CSV dry-run은 API 키·네트워크·DATABASE_URL·엔진 없이 성공해야 하며 3절의 엔진 차단 테스트를 CSV 경로에도 적용한다. 허용 부수효과는 snapshot 로컬 파일 쓰기뿐이고 원본 CSV·보고서는 읽기 전용으로 열며 복사·수정·이동하지 않는다.
+
+### 7.3 보고서 검증(CSV를 읽기 전)
+
+- JSON은 엄격 로드한다: NaN/Infinity 거절, 중복 키 거절(`object_pairs_hook`), 최상위 dict.
+- 타입까지 정확히 비교한다: 상태는 문자열 `"PASS"`, complete는 `True`(bool, `"true"`·`1` 거절), 건수는 bool이 아닌 0 이상 정수, 해시는 소문자 64자리 hex, 검증시각은 timezone 정보가 있는 ISO 8601(naive 거절).
+- 실제 동봉 보고서에는 원천/서비스 식별 필드가 없다. 사용자가 지정한 일반·휴게 파일의 역할과 명시적인 `--source`를 사용하며 이것을 원천 신원 인증으로 주장하지 않는다. 추후 보고서에 source 필드가 있으면 알려진 source 대응표와 일치해야 하고 미지 값은 거절한다. 파일·보고서 SHA-256을 함께 보관해 입력 쌍을 추적한다.
+- 전체 expected/raw/csv 건수 일치, 페이지 complete, 중복 관리번호 0을 확인한다.
+- **관청 집합**: 보고서 관청 항목에서 `6110000`(서울시 본청)은 raw_rows가 정수 0일 때만 제거하고, 남은 관청 코드 집합이 기대 25개와 정확히 같아야 한다(누락·중복·추가 거절). 본청 항목이 없어도 통과, 양수이면 거절한다. 스냅샷·결과에는 25개 관청만 남긴다.
+
+### 7.4 CSV 파싱
+
+- 인코딩은 `utf-8-sig` + `errors="strict"`, `newline=""`, `csv` 모듈 `strict=True`, 쉼표·큰따옴표 고정 dialect를 쓴다. 자동 dialect 추정은 쓰지 않는다. 디코딩 실패·NUL 문자·필드 크기 한도 초과는 거절한다.
+- 헤더: 빈 이름·중복 이름 거절. MNG_NO·OPN_ATMY_GRP_CD와 정제에 쓰는 DTO 필드의 헤더를 모두 요구한다(이름 정확 일치, 공백 보정 없음). 허용 목록 밖 헤더(전화번호·대표자 등)는 존재해도 되나 **행을 읽는 즉시** 허용 목록 필드만 추출하고 나머지 값은 DTO·snapshot·오류 메시지·로그 어디에도 담지 않는다.
+- 행: 필드 수가 헤더와 다르면(잘림·초과) 거절, 빈 레코드 거절. 레코드 수는 줄 수가 아닌 csv 레코드 기준으로 센다(따옴표 안 줄바꿈 대비). 값은 `str`로 받고 빈 값 처리는 API 경로와 같은 기존 정규화 규칙을 따른다.
+- 모든 행의 OPN_ATMY_GRP_CD가 25개 관청 중 하나여야 한다(본청·기타 코드 1행이라도 있으면 거절). CSV에서 다시 센 전체 행 수·관청별 행 수·관리번호 중복 0이 보고서와 일치해야 한다. 중복을 발견하면 dedupe로 흡수하지 않고 보고서 불일치로 거절한다.
+- 오류 출력은 고정 코드·행 번호·헤더 이름까지만 허용하고 셀 값은 출력하지 않는다.
+
+### 7.5 파일 일관성
+
+- SHA-256은 **파싱에 실제로 사용한 바이트 스트림 자체**에서 계산한다(같은 파일 핸들을 해시 래퍼로 감싸 끝까지 소비). 별도 사전 해시 후 다시 여는 방식만으로는 그 사이 파일이 바뀌는 경우를 막지 못한다. 파싱 종료 후 해시가 보고서 source_sha256과 다르면 거절한다.
+- 보조로 시작·종료 시 파일 크기·mtime이 같은지 확인한다. 검증 파일도 바이트를 한 번 읽어 해시(validation_sha256)를 구한 뒤 그 바이트로 JSON을 파싱한다.
+- 위 검사가 모두 끝나기 전에는 transform·snapshot 기록을 시작하지 않는다.
+
+### 7.6 snapshot provenance와 재생
+
+- format_version을 올리고 이전 버전은 거절한다(외부 사용 snapshot 없음, 이전 API 전체 수집은 실패해 저장본 없음). 추가 필드: `input_kind`(`api`/`validated_csv`, 그 외 거절), `input_sha256`(api는 null, csv는 CSV 해시), `validation_sha256`(csv만), `as_of_basis`(`api_fetch_start`/`validation_checked_at`).
+- CSV snapshot의 `collected_at`은 보고서 검증시각을 KST로 바꾼 초 단위 naive 값이고 `as_of_basis = validation_checked_at`이다. 이 필드명은 기존 형식 호환을 위해 유지하되 "수집 시각"으로 해석·표시하지 않는다. 날짜 판정 기준일은 4절과 같이 이 값의 날짜다.
+- 관청 집계는 total_count = 보고서 raw_rows, row_count = CSV 재계산 값, page_count는 null(`validated_csv`에서만 허용). 로더는 input_kind별로 필드 조합을 검증한다.
+- rows 순서는 CSV 레코드 순서를 그대로 쓴다. 같은 CSV·보고서를 두 번 변환하면 파일명(batch_id)은 달라도 rows SHA-256·관청 집계·provenance 필드는 같아야 하며, 각 snapshot의 두 번 정제 결과는 batch_id·updated_at 외 동일해야 한다.
+- 결과 출력에 input_kind·input_sha256 앞 12자·as_of_basis를 집계와 함께 표시해 적재 기록이 어떤 입력에서 왔는지 남긴다. DB 스키마에는 이번 작업에서 provenance 컬럼을 추가하지 않는다(batch_id와 결과 기록으로 연결).
+
+### 7.7 쓰기·검증
+
+- 쓰기는 `--from-snapshot --write`만 사용하므로 3절의 정적 검사·preflight·트랜잭션 내 재확인·전체 rollback·멱등 upsert가 그대로 적용된다. CSV 경로는 DB 보호 규칙을 새로 만들지 않는다.
+- 합성 fixture 회귀: 입력 인자 조합(배타·`--from-csv --write` 거절·`--validation` 단독 거절), 보고서 타입 엄격성(`"true"`·bool 건수·naive 시각·미래 시각·중복 키), source 대응 불일치, 본청 0행 통과·양수 거절·25개 누락/추가, BOM 유무·잘린 행·초과 필드·중복 헤더·필수 헤더 누락·비UTF-8, 25개 밖 관청 행, CSV 재계산 건수/중복 불일치, 해시 불일치, 파싱 중 파일 변경 시뮬레이션, 전화번호·대표자 마커가 snapshot·출력·예외에 없음, 반복 변환 rows 해시 동일과 엔진 차단 상태의 CSV dry-run 성공.
+- 실제 절차는 5절 실제 개발 DB 검증 1~6을 따르되 2단계의 API 수집을 source별 CSV dry-run+`--save-snapshot`으로 대체한다. 기록은 집계만 남기며 원천 기준일 미확인 사실을 함께 적는다.
+
+### Claude Code 추가 검토 (2026-11-11)
+
+Claude Code는 이 파일만 Read·Edit했고 코드·CSV·보고서·다른 파일·Git·셸·네트워크는 사용하지 않았다. 아래는 설계 수정이며 구현·테스트·적재가 수행됐다는 뜻이 아니다.
+
+**수정 내용과 이유**
+1. 서명 없는 보고서를 신뢰 근거로 쓰던 문구를 사전 조건으로 낮추고 CSV 재계산 일치를 요구했다. 해시 일치는 파일 동일성만 증명한다.
+2. 검증시각은 원천 기준일이 아니므로 기준일 미확인을 명시하고 `as_of_basis`로 snapshot에 남기게 했다. 미래 검증시각은 거절한다.
+3. `--from-csv --write`를 막아 쓰기 경로를 snapshot 하나로 통일했다. 5절의 "dry-run 결과와 DB 입력이 같은 자료" 원칙을 CSV에도 적용하기 위함이다. 3절의 `--save-snapshot` 제한과의 충돌도 정리했다.
+4. 6110000 처리를 "제거 후 25개 정확 일치"와 "CSV 행에는 본청 0건"의 두 조건으로 분리했다. 보고서만 0이고 CSV에 본청 행이 있는 경우를 막는다.
+5. 파일 변경 검사를 "전후 해시 또는 일관성 검사"에서 파싱 스트림 자체 해시로 구체화했다(TOCTOU 방지).
+6. 불필요 개인정보 필드는 "DTO 변환 직후"가 아니라 행 읽기 즉시 허용 목록 추출로 바꾸고, 오류 메시지에 셀 값을 넣지 않게 했다.
+7. 보고서 타입 엄격성·source 대응·CSV dialect·레코드 계수 기준을 1절 수준으로 맞췄다.
+
+**Codex가 코드에서 확인할 사항**
+- 실제 보고서의 키 이름(상태·complete·관청별 raw_rows·source 식별·검증시각)과 타입. 7.3과 다르면 임의 완화하지 말고 이 절을 먼저 갱신한다. source 식별 필드가 없으면 사용자에게 확인한다.
+- 실제 CSV 헤더가 DTO 허용 필드를 모두 포함하는지, 날짜·갱신시각 값이 1절 허용 형식인지(아니면 기존 날짜 오류 플래그로 집계되는지). 형식 오류 비율이 크면 적재 전에 보고한다.
+- 이미 구현된 CSV 경로가 있다면 `--from-csv --write` 허용 여부, 해시 계산 위치, 개인 필드 폐기 시점, snapshot 필드명이 이 절과 일치하는지.
+- 54만 행 처리의 메모리: transform 입력은 전체 리스트가 필요하므로 허용 필드만 보관하는지 확인한다.
+- `csv.field_size_limit` 기본값으로 실제 파일이 통과하는지. 실패 시 한도 상향은 근거와 함께 이 절에 기록한다.
+- 2026-11-09 이후 실제 원천 변경분은 이 CSV에 없다. 최신성 보완(API 증분 등)은 이번 범위 밖이며 완료로 표시하지 않는다.
+
+### Codex 추가 최종 점검
+
+- 두 실제 보고서의 source 식별 필드 부재를 확인했다. 사용자가 일반·휴게 CSV를 제공했고 파일 역할을 확인한 상태이므로 이를 다시 요청하지 않고 7.3을 실제 형식에 맞췄다. 선택한 source는 운영자 선언이며 보고서가 인증한 값으로 표현하지 않는다.
+- 실제 CSV SHA-256과 보고서 해시는 모두 일치했고 25개 구에 데이터가 있으며 본청 항목만 0행이다. CSV 행 수·구별 분포·중복은 실행기가 독립 재계산한다.
+- `--from-csv --write` 거절, snapshot provenance 및 스트림 해시 검증을 채택한다. 원본 두 파일과 보고서는 수정하지 않는다.
