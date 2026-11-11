@@ -91,3 +91,11 @@ LLM 전체 await(재시도 대기 포함)와 개별 요청은 asyncio timeout으
 프로세스별 기본5회/분·50회/일·동시2의 새 INTERPRET 설정을 적용하고 기존 LLM 공급자 한도도 유지한다. 대기/읽기 전용 준비/생성/최대1회 재생성/조립 모두 LLM_TIME_BUDGET(기본20초) 안에 둔다. DB 세션은 공급자 호출 전에 닫고 worker취소는 Event/SQL직전 검사와 기존 문장제한으로 정리한다. 즉시 동기SQL 강제중단·전역quota·운영SLA는 보장하지 않는다. 입력422, DB/서버결함500, 한도/공급자/시간503 AI_UNAVAILABLE, 두 번의 선택검증 실패503 AI_VERIFY_FAILED이며 no-store다. 기본문장 대체/캐시는 없다.
 
 설계·Claude 실제 검토·수정/실검증은 docs/designs/feat68-risk-interpret-api.md를 따른다. FE 코드·이슈·PR·CLAUDE.md는 직접 수정하지 않고 docs/fe-risk-interpret-api-request.md로 담당자에게 요청한다. FE 반영·원본 합의·이력/활동 추가문맥·전체 BE-32 통합은 후속이다.
+
+## 공식 상담·지원기관 공통 링크 (BE #70)
+
+`GET /api/support-links`는 원본 API v1.2 §4-9/D-08의 공식4기관을 서버 설정 불변 tuple에서 반환한다. 선택 sigungu는 기존 서울25개 정확한 구명, category는 cafe/restaurant이며 생략만 기본값이다. 잘못된/빈/중복/미지원 입력은422 INVALID_PARAM이다. 현재 일반 안내만 있어 지역/업종별 우선 정렬은 미적용이며 네 곳 전체·고정 순서를 유지하고 meta.prioritization={status:not_applied,reason:general_links_only}로 표시한다. 원본의 맞춤 정렬까지 완료로 주장하지 않는다.
+
+항목8필드/id/type/region은 기존 FE mock과 맞춘다. URL은 정확한 공식 HTTPS 호스트와 원문 문자열을 보존하며 임의 URL/입력을 이어붙이거나 호출하지 않는다. last_checked=실제 수동 확인 KST 날짜(현재2026-11-12), data_updated_at=확인일 최대값이다. 오늘/배포일/공고 공표일로 바꾸지 않는다. 설정/확인일 변경 시 카탈로그 버전을 올리고 분기1회 수동 점검한다. 당시 HTTP200은 이후 접속/자격/신청 성공 보장이 아니다.
+
+요청 중 DB/LLM/외부 HTTP 미사용·인증키 불필요, R17/is_demo=false·no-store·안전한422/500을 따른다. DB 모델/migration·의존성·Docker/.env·FE 저장소는 바꾸지 않는다. 설계/Claude 검토/검증은 docs/designs/feat70-support-links-api.md, FE 코드/CLAUDE.md 연결 요청은 docs/fe-support-links-api-request.md를 따른다. FE 반영은 담당자 대기다. 상담 기능은 AI PR69와 별개로 개발해 PR71로 병합했다. 두 API의 등록과 계약을 함께 유지한다.

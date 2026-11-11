@@ -19,6 +19,7 @@ from app.routers.nearby import router as nearby_router
 from app.routers.risk import router as risk_router
 from app.routers.snapshot import router as snapshot_router
 from app.routers.stores import router as stores_router
+from app.routers.support import router as support_router
 from app.services.risk_interpret import InterpretationResources
 
 
@@ -63,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(market_router, prefix="/api")
     application.include_router(risk_router, prefix="/api")
     application.include_router(interpret_router, prefix="/api")
+    application.include_router(support_router, prefix="/api")
     return application
 
 
