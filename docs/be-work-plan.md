@@ -379,3 +379,14 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - [호출 한도](https://ai.google.dev/gemini-api/docs/rate-limits)
 - [모델 종료 일정](https://ai.google.dev/gemini-api/docs/deprecations)
 - [요금·무료 범위](https://ai.google.dev/gemini-api/docs/pricing)
+
+## 13. BE-13 주변 점포 설계 진행
+
+2026-11-12 사용자 지시에 따라 설계는 BE 범위로 작성하고 FE 영향은 요청 보고서로 전달한다. FE 코드·설정·문서·이슈·PR을 직접 수정하거나 생성하지 않는다.
+
+- [이슈 #38](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/38), 브랜치 `feat#38-nearby-api-design`, 최신 develop `1e7a2a6`에서 분리한 설계 전용 작업이다.
+- [BE 설계](designs/feat38-nearby-api-design.md)와 [FE 변경 검토 요청](fe-nearby-api-request.md)을 작성한다. Codex 설계 → Claude MD 직접 수정 → Codex 최종 점검 → 문서 PR·CI 순서다.
+- 선행 [PR #37](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/37)의 배치 출처·DB 요청 세션·기간 계산이 develop에 반영되기 전이다. 기존 작업 폴더를 유지한 별도 worktree를 사용하며 병합을 자동 수행하지 않는다.
+- 현재 작업은 설계만 진행한다. 주변 조회 API·migration·인덱스·DB 데이터 변경과 FE 구현은 완료로 표시하지 않는다. 구현은 선행 PR 반영과 계약 검토 후 별도 진행한다.
+- 좌표 누락 건수는 반경 소속을 알 수 없어 서울 비공간 조건 기준 수와 집계 범위 meta를 제안한다. FE 표시 계약 확인 전 확정하지 않는다. 공간 후보 검색의 수치 경계 문제와 검증 계획은 설계 문서에 기록한다.
+- 추가 읽기 전용 확인에서 지원 업종의 면적 0㎡가 6,316건이었다. 사용자는 0㎡를 정보 없음으로 처리하도록 확정했다. 설계는 DB 원본 0 보존·응답 area_m2=null·정보 없음 토글 동일 제어이며, 0을 확인된 33㎡ 미만으로 분류하지 않는다. 이번 문서 작업에서 실제 DB 값이나 코드는 변경하지 않는다.
