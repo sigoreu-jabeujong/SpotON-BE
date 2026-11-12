@@ -492,3 +492,25 @@ VACUUM (ANALYZE) public.stores;
 VACUUM은 ETL·migration의 트랜잭션 블록 안에서 실행할 수 없습니다. ETL 커밋과 원자적이지 않으며, 실패해도 이미 적재한 데이터가 롤백되지는 않습니다. 완료 전에는 조회500이 발생할 수 있어 조회 중지를 유지하고 원인을 확인합니다. migration과 동시에 실행하지 않습니다. 자동 VACUUM이나 자동 조회 차단 기능을 추가한 것은 아니며 운영자가 수행하는 절차입니다.
 
 합성 전체 재적재 직후에는 이 인덱스에서도 배치조회가3초를 초과했습니다. 현재 정적 데이터의 읽기 개선과 이 제한을 구분하며, 비용·회귀·실제 검증은 [설계 및 Claude 검토](docs/designs/feat82-store-provenance-index.md)를 확인합니다.
+
+## 생활인구 원자료 상태 진단
+
+내부 진단 CLI는 명시한 관측 버전의 원천별·시간별 **행과 격자 개수**를 확인합니다. 먼저 읽기 전용 조회로 사용할 버전 UUID와 관측일을 확인합니다. 자동 최신 버전 선택이나 다른 날짜 대체는 하지 않습니다.
+
+```sql
+SELECT version_id, observation_date, grid_version_id
+FROM living_population_versions
+ORDER BY observation_date, version_id;
+```
+
+저장소 루트에서 `.env`의 로컬 개발 DB 설정을 사용해 실행합니다. 아래 UUID는 실제 조회한 값으로 바꿉니다. `--radius`는300/500/1000m이며 기본500m입니다.
+
+```powershell
+uv run --locked --extra dev python -m etl.living_pop.quality --population-version <UUID> --lat 37.5665 --lng 126.9780 --radius 500
+```
+
+기존 로컬 `spoton_dev`·앱 계정·head0010 검사를 통과한 DB만 READ ONLY REPEATABLE READ로 조회합니다. SQL별3초 제한을 유지하며 데이터나 결과 파일을 쓰지 않습니다. 성공은 stdout JSON 한 건/종료코드0, 실패는 `living_pop_quality:arguments|version|counts|configuration|database|operation_failed` 중 고정 오류 코드/종료코드1입니다. 입력 좌표·격자/행정동 코드·인구 값·DB URL은 출력하지 않습니다.
+
+원천 중심점 속성(EPSG5179)을 기준으로 타원체 거리≤반경인 격자를 선택합니다. 72개 원천·시각 칸에서 `observed_zero`, `observed_nonzero`, `suppressed`, `missing` 행과 행이 있는/없는 격자를 구분합니다. 미좌표 행은 버전 전체 통계로만 별도 표시합니다. 저장 건수와 metadata를 대조하지만 content hash를 재검증하는 도구는 아닙니다.
+
+**행 없음은0명이 아닙니다.** 복수행정동 행의 합산 의미·행정동 구성 완전성·격자의 관측일 적용 여부가 미확인이므로 인구 합계·완전성·제공률로 해석하지 않습니다. 공개 activity/Risk의 인구 pending 상태도 유지합니다. [설계·Claude 검토·실행 결과](docs/designs/feat84-population-quality-diagnostic.md)를 확인합니다.
