@@ -1,11 +1,20 @@
 """Synthetic server-shaped Risk, never source rows or credentials."""
 
+import copy
 from datetime import date
+from unittest.mock import Mock
 from uuid import UUID
 
 from app.schemas.common import ApiResponse
+from app.schemas.market_activity import (
+    ActivityFlags,
+    MarketActivity,
+    RecentActivity,
+    SubCategoryActivity,
+)
 from app.schemas.risk import ReferenceCounts, Risk, RiskFlags, RiskMarket, RiskQuery, RiskQueryEcho
-from app.services.risk import pending_indicator, reference_indicators
+from app.services.market_activity import year_cutoff
+from app.services.risk import pending_indicator, period, reference_indicators
 
 DATE = date(2026, 11, 8)
 
@@ -85,6 +94,7 @@ def response(q=None, local=None, seoul=None):
         "collected_at": None,
         "collection_reason": "source_completion_time_not_recorded",
         "denominator": None,
+        "cohort_size": local.cohort_size,
         "event_basis": "validated_license_dates",
         "coordinate_basis": "located_only",
         "closure_sample_basis": "period_denominator",
@@ -109,3 +119,62 @@ def response(q=None, local=None, seoul=None):
         },
     }
     return ApiResponse(data=data, meta=meta)
+
+
+RESTAURANT = ("korean", "chinese", "japanese", "western")
+
+
+def activity_response(risk, q=None, *, opened=3, months=41):
+    """Activity derived from a Risk response so the design §4 invariants hold.
+
+    All active records go to the first selected sub-category; the rest are zero groups.
+    """
+    q = q or query()
+    rows = {r.id: r for r in risk.data.indicators}
+    active = rows["competitor_count"].value
+    closed = rows["closure_rate_12m"].denominator - active
+    ordered = ("cafe",) if q.category == "cafe" else RESTAURANT
+    selected = [c for c in ordered if not q.sub_category or c in q.sub_category]
+    data = MarketActivity(
+        recent_12m=RecentActivity(
+            period=period(year_cutoff(DATE, DATE.year - 1), DATE), opened=opened, closed=closed
+        ),
+        yearly_trend=[],
+        by_sub_category=[
+            SubCategoryActivity(
+                sub_category=c,
+                open_count=active if i == 0 else 0,
+                avg_operating_months=months if i == 0 and active else None,
+            )
+            for i, c in enumerate(selected)
+        ],
+        sales=None,
+        living_pop=None,
+        flags=ActivityFlags(missing=[]),
+    )
+    version = copy.deepcopy(risk.meta["data_version"])
+    version["rule_version"] = "market-activity-license-ytd-v1"
+    meta = {
+        "source": ["R5", "R6"],
+        "data_updated_at": risk.meta["data_updated_at"],
+        "collected_at": None,
+        "collection_reason": "source_completion_time_not_recorded",
+        "is_demo": False,
+        "data_version": version,
+        "as_of": risk.meta["as_of"],
+        "space": f"radius_{q.radius}m",
+        "denominator": None,
+        "cohort_size": risk.meta.get("cohort_size"),
+        "franchise_classification": copy.deepcopy(risk.meta["franchise_classification"]),
+    }
+    return ApiResponse(data=data, meta=meta)
+
+
+def use_risk(monkeypatch, module, result, q=None, **activity):
+    """Patch both server recalculations of the AI context module; returns the two mocks."""
+    risk = result if isinstance(result, Mock) else Mock(return_value=result)
+    source = risk.return_value if isinstance(result, Mock) else result
+    server = Mock(return_value=activity_response(source, q, **activity))
+    monkeypatch.setattr(module, "get_risk", risk)
+    monkeypatch.setattr(module, "get_activity", server)
+    return risk, server

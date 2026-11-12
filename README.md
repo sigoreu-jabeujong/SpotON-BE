@@ -154,7 +154,7 @@ AI 해석 프롬프트는 `app/ai/prompts/risk_interpret/`의 `system.md`(시스
 
 ### AI 해석 API
 
-`POST /api/risk/interpret`는 JSON `{ "query": { "lat": 37.5, "lng": 127.0, "category": "cafe", "radius": 500, "as_of": "2026-11" } }`처럼 원래 Risk 조회 조건만 받습니다. 이 예시는 합성 좌표입니다. Risk 전체 응답·클라이언트 수치·주소·building_key/floor_unit·중복 키·URL query는 422로 거절합니다. 첫 버전은 점포 이력/활동 추가 문맥을 지원하지 않습니다.
+`POST /api/risk/interpret`는 JSON `{ "query": { "lat": 37.5, "lng": 127.0, "category": "cafe", "radius": 500, "as_of": "2026-11" } }`처럼 원래 Risk 조회 조건만 받습니다. 이 예시는 합성 좌표입니다. Risk 전체 응답·클라이언트 수치·주소·building_key/floor_unit·중복 키·URL query는 422로 거절합니다. 점포 이력 문맥은 지원하지 않습니다. 서버는 같은 조건으로 상권 활동 집계(최근 구간 개폐업 수·세부 업종별 영업 수와 평균 경과 개월)를 재계산해 Risk와 교차 검증한 뒤 AI 입력과 `official_values` 참고 계산 문장에 추가합니다(#96, prompt risk-interpret-v6). 활동 문장의 `indicator_ids`는 `recent_open_close`·`avg_operating_months`이며 여러 항목에 반복될 수 있습니다.
 
 - 서버가 Risk를 재계산하고 식별정보 없는 허용 집계와 문장 후보만 모델에 전송합니다. 모델은 모든 유리/불리 비교의 순서와 현장 질문 1~3개를 고릅니다. 숫자·비교 방향·최종 문장은 서버가 만들며, `method=server_sentences_model_ordering`으로 이 역할을 표시합니다. 자유로운 AI 서술이나 성공 가능성 판정이 아닙니다.
 - `official_values`에는 참고 계산도 포함됩니다. 필수 사실·미확인/자료 한계는 전부 보존하고, 소표본·공식/조건부 지표 pending·수집일 null을 임의로 채우지 않습니다. `verification.checked_numbers`는 표시 문장의 숫자 출현 횟수이며 정확도 점수가 아닙니다.

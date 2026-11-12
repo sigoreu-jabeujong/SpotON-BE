@@ -159,3 +159,12 @@ def test_invalid_dollar_usage_fails(tmp_path: Path, field: str, text: str, reaso
     message = prompt_error(write_prompts(tmp_path, **{field: text}))
     assert reason in message
     assert text not in message
+
+
+def test_activity_rule_keeps_average_and_counts_as_reference_only():
+    system = load_prompt_bundle().system_instruction
+    rule = next(line for line in system.splitlines() if line.startswith("14. "))
+    assert "analysis.activity" in rule
+    assert "점포 수명·생존 기간·영업 성과로 바꾸지 않고" in rule
+    assert "성장·쇠퇴를 판정하지 않습니다" in rule
+    assert system.index("14. ") < system.index("## 답변 형식")

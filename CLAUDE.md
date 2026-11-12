@@ -90,7 +90,7 @@ LLM 전체 await(재시도 대기 포함)와 개별 요청은 asyncio timeout으
 
 프로세스별 기본5회/분·50회/일·동시2의 새 INTERPRET 설정을 적용하고 기존 LLM 공급자 한도도 유지한다. 대기/읽기 전용 준비/생성/최대1회 재생성/조립 모두 LLM_TIME_BUDGET(기본20초) 안에 둔다. DB 세션은 공급자 호출 전에 닫고 worker취소는 Event/SQL직전 검사와 기존 문장제한으로 정리한다. 즉시 동기SQL 강제중단·전역quota·운영SLA는 보장하지 않는다. 입력422, DB/서버결함500, 한도/공급자/시간503 AI_UNAVAILABLE, 두 번의 선택검증 실패503 AI_VERIFY_FAILED이며 no-store다. 기본문장 대체는 없으며 서버 캐시는 아래 #74 기준을 따른다.
 
-설계·Claude 실제 검토·수정/실검증은 docs/designs/feat68-risk-interpret-api.md를 따른다. FE 코드·이슈·PR·CLAUDE.md는 직접 수정하지 않고 docs/fe-risk-interpret-api-request.md로 담당자에게 요청한다. FE 반영·원본 합의·이력/활동 추가문맥·전체 BE-32 통합은 후속이다.
+설계·Claude 실제 검토·수정/실검증은 docs/designs/feat68-risk-interpret-api.md를 따른다. FE 코드·이슈·PR·CLAUDE.md는 직접 수정하지 않고 docs/fe-risk-interpret-api-request.md로 담당자에게 요청한다. FE 반영·원본 합의·이력 추가문맥·전체 BE-32 통합은 후속이다. 활동 추가문맥은 아래 #96을 따른다.
 
 ## 개인정보 없는 운영 로그 기반 (BE #72)
 
@@ -116,7 +116,7 @@ meta.link_catalog_version=support-links-v2는 생략/지정 모두 적용한다.
 
 앱마다 Risk/AI bytes LRU를 분리한다. CACHE_ENABLED=true, 각 TTL 기본300초/상한7일, CACHE_MAX_ENTRIES 기본256/상한4096, CACHE_MAX_BYTES 각4MiB/상한64MiB다. Python 객체/키 overhead와 worker별 합산은 별도다. 앱 수명 난수 HMAC key에 정확한 float guard+6자리 좌표·정규화한 조건/요청 월·규칙/경계를 넣으며 Risk 값에서 query echo를 제외하고 현재 요청으로 재구성한다. 원문 query/위치/지문을 로그·repr·응답의 cache 메타로 공개하지 않는다.
 
-primary READ ONLY REPEATABLE READ의 snapshot/DB/role/시작시각/GUC 지문으로 같은 배치·updated_at 불변 DML도 다른 namespace로 분리한다. old snapshot은 새 결과를 덮지 않는다. GET warm은 metadata1SQL, AI 준비는 같은 세션에서 최대2SQL이다. 적중에도 DB가 필요하며 SQL 오류500·원천 오류를 과거 결과로 숨기지 않는다. 무관한 쓰기/rollback은 보수적 miss이며 TRUNCATE/rewrite/복구는 요청 drain→cache 종료→변경→재시작 범위다. 일반 동시 ETL은 INSERT/UPSERT다.
+primary READ ONLY REPEATABLE READ의 snapshot/DB/role/시작시각/GUC 지문으로 같은 배치·updated_at 불변 DML도 다른 namespace로 분리한다. old snapshot은 새 결과를 덮지 않는다. GET warm은 metadata1SQL, AI 준비는 같은 세션에서 Risk warm2SQL+활동 재계산6SQL(#96)이다. 적중에도 DB가 필요하며 SQL 오류500·원천 오류를 과거 결과로 숨기지 않는다. 무관한 쓰기/rollback은 보수적 miss이며 TRUNCATE/rewrite/복구는 요청 drain→cache 종료→변경→재시작 범위다. 일반 동시 ETL은 INSERT/UPSERT다.
 
 AI 값은 현재 허용 후보와 검증한 선택 ID와 모델명뿐이다. snapshot/데이터/context/prompt/provider/model/max tokens/후보/schema/검증규칙을 key에 포함한다. 생성시각·이전 재생성 이력·문장/프롬프트는 저장하지 않는다. generated_at은 현재 응답 문장 조립 시각, regenerated는 현재 요청의 재생성 여부이며 hit=false다. 같은 key 생성만 single-flight로 합치고 key 대기는 semaphore 밖, 준비/공급자 실행만 gate 안이다. 전체 예산·hit의 앱 한도·miss의 공급자 한도·서버문장 실패500·no-store는 유지한다. 키 미설정/실패는 cache로 숨기지 않는다.
 
@@ -180,4 +180,14 @@ brands 로그의 save_snapshot은파일저장완료이고 DBpersist와다르다.
 
 history/nearby/snapshot 행에 franchise_basis·franchise_reference_year를 추가하고 snapshot에는 franchise도 추가한다. history/nearby/snapshot/activity/risk의 meta.franchise_classification은 적용 전 pending, 적용 후 estimate·reference_year=2025·coverage=partial이다. 계약·과거 가맹·공식 업종 대응은 검증된 것으로 표시하지 않는다. 프랜차이즈 전용 조회는 franchise=franchise와 include_unknown_franchise=false를 함께 전달한다. 기존 인허가 collected_at=null·공식 미확인 수치 pending을 유지한다.
 
-Risk/AI는 동일 근거/버전과 추정 한계를 사용한다. prompt는 risk-interpret-v5이며 내부 UUID/hash는 LLM에 보내지 않는다. cache는 매핑 규칙과 catalog/run/input 지문을 구분한다. 상세는 [최종 설계 9절](docs/designs/feat57-franchise-classification.md), FE 담당자 요청은 [브랜드 분류 연동 보고서](docs/fe-franchise-classification-api-request.md)를 따른다. FE CLAUDE.md·타입·화면 반영은 담당자 대기이며 직접 변경하지 않는다.
+Risk/AI는 동일 근거/버전과 추정 한계를 사용한다. #57 당시 prompt는 risk-interpret-v5였으며 현재는 #96의 v6이다. 내부 UUID/hash는 LLM에 보내지 않는다. cache는 매핑 규칙과 catalog/run/input 지문을 구분한다. 상세는 [최종 설계 9절](docs/designs/feat57-franchise-classification.md), FE 담당자 요청은 [브랜드 분류 연동 보고서](docs/fe-franchise-classification-api-request.md)를 따른다. FE CLAUDE.md·타입·화면 반영은 담당자 대기이며 직접 변경하지 않는다.
+
+## AI 해석 상권 활동 문맥 (BE #96)
+
+`POST /api/risk/interpret` 요청은 `{query: RiskQuery}` 그대로다. 서버는 같은 READ ONLY 세션에서 Risk 다음 `get_activity`(include 없음, legacy include_unknown 제외)를 재계산하고 최근 구간 개폐업 수·T 시점 세부 업종별 영업 수/평균 경과 개월(버림)·고정 방법론만 `context.activity`에 넣는다. 연도별 추이·cohort_size·배치 UUID·매출/생활인구는 넣지 않는다. 평균 경과 개월은 영업 중 기록의 개업 후 경과이며 수명·생존 기간이 아니다.
+
+as_of/data_updated_at/space·배치 집합/map_version·franchise_classification/brand_mapping·cohort_size가 Risk와 같아야 하고, 활동 영업 수 합=competitor_count, 활동 period=closure_rate_12m.period, closure 분모=영업 수 합+최근 폐업, 분자가 있으면=최근 폐업이어야 한다. 하나라도 다르면 원문 없는 500/no-store다. `get_activity`의 기존 500·SQL 오류·deadline 503 경로는 그대로다. 활동 재계산은 Risk 캐시 적중 여부와 무관하게 같은 스냅샷에서 6SQL을 더한다.
+
+`official_values`에 서버 참고 계산 문장(최근 구간 개폐업1개+선택 세부 업종마다1개)을 Risk 사실 문장 뒤에 추가한다. 문맥에 없는 숫자(12개월 등)는 쓰지 않는다. 사실 항목의 indicator_ids는 `recent_open_close`·`avg_operating_months`를 추가로 허용하며 반복될 수 있다. favorable/unfavorable의 indicator_ids는 기존 IndicatorId만 허용한다. 모델 후보·선택 구조는 그대로이며 활동 기반 유리/불리 후보는 만들지 않는다. prompt는 규칙14를 더한 risk-interpret-v6, data_version_hash에 활동 rule_version, 선택 cache rule은 selection-current-validation-v2다.
+
+설계·Claude Code 재검토·구현 기록은 docs/designs/feat96-ai-activity-context.md, FE 칩 라벨·반복 ID 처리는 docs/fe-risk-interpret-api-request.md로 요청하며 담당자 반영 대기다. 이력 추가문맥은 후속이다. 실제 개발 DB 읽기 전용 검증(6조합 일치·SQL cold15/warm8·빈 license_no 0건·행 hash 보존)은 설계 §13에 기록했다.

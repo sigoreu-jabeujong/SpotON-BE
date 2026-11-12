@@ -118,7 +118,20 @@ def test_query_flow_counts_and_dates(database, category, changes, expected):
         assert ai["meta"]["as_of"] == result["risk"]["meta"]["as_of"]
         assert {i for item in ai["data"]["official_values"] for i in item["indicator_ids"]} == {
             i["id"] for i in result["risk"]["data"]["indicators"] if i["status"] == "fact"
-        }
+        } | {"recent_open_close", "avg_operating_months"}
+        recent = result["activity"]["data"]["recent_12m"]
+        (activity_fact,) = (
+            i for i in ai["data"]["official_values"] if i["indicator_ids"] == ["recent_open_close"]
+        )
+        assert recent["period"] in activity_fact["text"]
+        assert f"개업 인허가 기록은 {recent['opened']:,}건" in activity_fact["text"]
+        assert f"폐업 기록은 {recent['closed']:,}건" in activity_fact["text"]
+        averages = [
+            i
+            for i in ai["data"]["official_values"]
+            if i["indicator_ids"] == ["avg_operating_months"]
+        ]
+        assert len(averages) == len(result["activity"]["data"]["by_sub_category"])
         competitor = next(
             i for i in ai["data"]["official_values"] if "competitor_count" in i["indicator_ids"]
         )

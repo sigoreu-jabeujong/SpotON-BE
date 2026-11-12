@@ -27,12 +27,21 @@ class CandidateSelection(InterpretModel):
         return self
 
 
+ActivityFactId = Literal["recent_open_close", "avg_operating_months"]
+
+
 class InterpretItem(InterpretModel):
+    """official_values 항목. 활동 ID는 여러 항목에 반복될 수 있다."""
+
+    text: str
+    indicator_ids: list[IndicatorId | ActivityFactId]
+
+
+class InterpretSourcedItem(InterpretModel):
+    """Risk 지표 비교 후보. 활동 ID는 허용하지 않는다."""
+
     text: str
     indicator_ids: list[IndicatorId]
-
-
-class InterpretSourcedItem(InterpretItem):
     sources: list[str]
 
 
