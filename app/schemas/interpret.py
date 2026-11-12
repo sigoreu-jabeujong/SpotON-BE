@@ -53,13 +53,14 @@ class CandidateSelection(InterpretModel):
 
 
 ActivityFactId = Literal["recent_open_close", "avg_operating_months"]
+HistoryFactId = Literal["building_history", "same_spot_history"]
 
 
 class InterpretItem(InterpretModel):
     """official_values 항목. 활동 ID는 여러 항목에 반복될 수 있다."""
 
     text: str
-    indicator_ids: list[IndicatorId | ActivityFactId]
+    indicator_ids: list[IndicatorId | ActivityFactId | HistoryFactId]
 
 
 class InterpretSourcedItem(InterpretModel):

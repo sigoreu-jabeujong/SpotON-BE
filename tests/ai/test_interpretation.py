@@ -17,7 +17,14 @@ from app.schemas.common import ErrorCode
 from app.schemas.interpret import CandidateSelection
 from app.schemas.risk import ReferenceCounts
 from app.services import risk_interpret as service
-from tests.ai.context_helpers import query, response, use_risk
+from tests.ai.context_helpers import (
+    history_query,
+    history_row,
+    query,
+    response,
+    use_history,
+    use_risk,
+)
 
 
 @pytest.fixture
@@ -369,3 +376,153 @@ def test_far_building_maps_to_422_without_provider_call(monkeypatch, prepared):
         r = c.post("/api/risk/interpret", json=body)
     assert r.status_code == 422 and r.json()["error"]["code"] == "INVALID_PARAM"
     assert r.headers["cache-control"] == "no-store" and provider.calls == 0
+
+
+def history_output(monkeypatch, rows, hq=None, q=None, result=None, checklist=("access",)):
+    q = q or query()
+    result = result or response(q)
+    use_risk(monkeypatch, context_module, result, q)
+    use_history(monkeypatch, context_module, result, rows)
+    p = prepare_risk_interpretation(
+        Mock(), q, Settings(_env_file=None), history=hq or history_query()
+    )
+    catalog = build_catalog(p)
+    selected = CandidateSelection(
+        favorable=list(catalog.favorable),
+        unfavorable=list(catalog.unfavorable),
+        checklist=list(checklist),
+    )
+    return render_interpretation(p, catalog, selected, model="fake", regenerated=False)
+
+
+def texts_by_id(output, identifier):
+    return [i.text for i in output.official_values if i.indicator_ids == [identifier]]
+
+
+def reasons(output):
+    return [m.reason for m in output.missing_data]
+
+
+def test_history_sentences_for_mixed_building(monkeypatch, caplog):
+    output = history_output(
+        monkeypatch,
+        [
+            history_row("same_spot", "closed", 14, index=0),
+            history_row("same_spot", "closed", 30, index=1),
+            history_row("same_spot", "other", None, index=2),
+            history_row("same_spot", "open", 5, index=3),
+            history_row("same_building", "closed", 9, index=4),
+            history_row("unverified", "open", 3, index=5),
+        ],
+    )
+    (overview,) = texts_by_id(output, "building_history")
+    assert overview == (
+        "참고 계산: 2026-11-08 최신 자료 기준 이 건물의 음식점·카페 인허가 기록은 6건이며, "
+        "같은 자리로 확인된 기록 4건, 같은 건물의 다른 위치 1건, 위치 미확인 1건입니다."
+    )
+    (spot,) = texts_by_id(output, "same_spot_history")
+    assert spot == (
+        "참고 계산: 같은 자리 기록 중 영업 중 1건, 폐업 2건, 기타 상태 1건이며, "
+        "영업 기간을 확인한 폐업 기록 2건의 영업 기간은 14~30개월입니다."
+    )
+    assert reasons(output)[-4:-3] == ["history_latest_data_basis"]
+    dumped = output.model_dump_json()
+    assert "PRIVATE" not in dumped + caplog.text and "101호" not in dumped
+
+
+@pytest.mark.parametrize(
+    "rows,expected",
+    [
+        (
+            [history_row("same_spot", "closed", 7)],
+            "폐업 1건이며, 영업 기간을 확인한 폐업 기록 1건의 영업 기간은 7개월입니다.",
+        ),
+        ([history_row("same_spot", "open", 7)], "영업 중 1건, 폐업 0건입니다."),
+        (
+            [history_row("same_spot", "closed", None)],
+            "폐업 기록의 영업 기간은 확인되지 않았습니다.",
+        ),
+    ],
+)
+def test_same_spot_sentence_variants(monkeypatch, rows, expected):
+    (spot,) = texts_by_id(history_output(monkeypatch, rows), "same_spot_history")
+    assert spot.endswith(expected)
+
+
+def test_history_without_floor_or_with_floor_only_and_empty(monkeypatch):
+    rows = [history_row("unverified", "closed", 12, index=i) for i in range(2)]
+    output = history_output(monkeypatch, rows, history_query(floor_unit=None))
+    assert texts_by_id(output, "building_history") == [
+        "참고 계산: 2026-11-08 최신 자료 기준 이 건물의 음식점·카페 인허가 기록은 2건입니다."
+    ]
+    assert not texts_by_id(output, "same_spot_history")
+    assert "history_floor_unit_missing" in reasons(output)
+    output = history_output(
+        monkeypatch, [history_row("same_building", index=0)], history_query(floor_unit="2층")
+    )
+    assert "history_detail_incomplete" in reasons(output)
+    output = history_output(monkeypatch, [])
+    assert not texts_by_id(output, "building_history")
+    assert "history_no_records" in reasons(output)
+    assert "history_latest_data_basis" not in reasons(output)
+
+
+def test_longest_combination_with_history_stays_within_limit(monkeypatch):
+    local = ReferenceCounts(
+        cohort_size=30000,
+        active=12345,
+        closure_num=1234,
+        closure_den=13579,
+        survival_1_num=400,
+        survival_1_den=500,
+        survival_3_num=100,
+        survival_3_den=300,
+    )
+    seoul = ReferenceCounts(
+        cohort_size=900000,
+        active=400000,
+        closure_num=20000,
+        closure_den=420000,
+        survival_1_num=9000,
+        survival_1_den=20000,
+        survival_3_num=3000,
+        survival_3_den=10000,
+    )
+    q = query(category="restaurant", include="market_change,day_night_ratio", radius=1000)
+    result = response(q, local, seoul)
+    use_risk(monkeypatch, context_module, result, q, opened=2345, months=1234)
+    rows = [
+        *(history_row("same_spot", "closed", 1000 + i, index=i) for i in range(1200)),
+        *(history_row("same_spot", "open", 3, index=2000 + i) for i in range(1100)),
+        *(history_row("same_spot", "other", None, index=4000 + i) for i in range(1050)),
+        *(history_row("same_building", "closed", 3, index=6000 + i) for i in range(1300)),
+        *(history_row("unverified", "open", 3, index=8000 + i) for i in range(1400)),
+    ]
+    use_history(monkeypatch, context_module, result, rows)
+    p = prepare_risk_interpretation(Mock(), q, Settings(_env_file=None), history=history_query())
+    catalog = build_catalog(p)
+    output = render_interpretation(
+        p,
+        catalog,
+        CandidateSelection(
+            favorable=list(catalog.favorable),
+            unfavorable=list(catalog.unfavorable),
+            checklist=["time_flow", "access", "visibility"],
+        ),
+        model="fake",
+        regenerated=False,
+    )
+    parts = [i.text for i in output.official_values + output.favorable + output.unfavorable]
+    parts += [m.text for m in output.missing_data]
+    parts += [x for c in output.checklist for x in (c.item, c.why)]
+    assert sum(map(len, parts)) <= 2000
+    (spot,) = texts_by_id(output, "same_spot_history")
+    assert "1,000~2,199개월" in spot and "기타 상태 1,050건" in spot
+
+
+def test_openapi_lists_history_ids_for_facts_only():
+    schema = create_app(Settings(_env_file=None)).openapi()["components"]["schemas"]
+    fact = json.dumps(schema["InterpretItem"]["properties"]["indicator_ids"])
+    sourced = json.dumps(schema["InterpretSourcedItem"]["properties"]["indicator_ids"])
+    assert "building_history" in fact and "same_spot_history" in fact
+    assert "building_history" not in sourced and "same_spot_history" not in sourced

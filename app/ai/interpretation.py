@@ -127,6 +127,77 @@ def _activity_facts(c: RiskInterpretContext) -> list[InterpretItem]:
     return facts
 
 
+def _history_items(c: RiskInterpretContext) -> tuple[list[InterpretItem], list[MissingItem]]:
+    """#98 건물 이력 문장. 숫자 바로 뒤에 층·호를, '로'·'길' 바로 뒤에 숫자를 두지 않는다."""
+    h = c.history
+    if h is None:
+        return [], []
+    day = h.data_updated_at.isoformat()
+    if h.total == 0:
+        return [], [
+            MissingItem(
+                text=f"{day} 최신 자료 기준 이 건물에서 확인된 음식점·카페 인허가 기록이 없습니다.",
+                reason="history_no_records",
+            )
+        ]
+    if h.floor_unit_provided:
+        overview = (
+            f"참고 계산: {day} 최신 자료 기준 이 건물의 음식점·카페 인허가 기록은 "
+            f"{h.total:,}건이며, 같은 자리로 확인된 기록 {h.same_spot:,}건, "
+            f"같은 건물의 다른 위치 {h.same_building:,}건, 위치 미확인 {h.unverified:,}건입니다."
+        )
+    else:
+        overview = (
+            f"참고 계산: {day} 최신 자료 기준 이 건물의 음식점·카페 인허가 기록은 "
+            f"{h.total:,}건입니다."
+        )
+    facts = [InterpretItem(text=overview, indicator_ids=["building_history"])]
+    if h.same_spot:
+        counts = f"같은 자리 기록 중 영업 중 {h.same_spot_open:,}건, 폐업 {h.same_spot_closed:,}건"
+        if h.same_spot_other:
+            counts += f", 기타 상태 {h.same_spot_other:,}건"
+        low, high = h.same_spot_closed_months_min, h.same_spot_closed_months_max
+        if h.same_spot_closed == 0:
+            detail = f"참고 계산: {counts}입니다."
+        elif low is None or high is None:
+            detail = f"참고 계산: {counts}이며, 폐업 기록의 영업 기간은 확인되지 않았습니다."
+        else:
+            span = f"{low:,}개월" if low == high else f"{low:,}~{high:,}개월"
+            detail = (
+                f"참고 계산: {counts}이며, 영업 기간을 확인한 폐업 기록 "
+                f"{h.same_spot_closed_period_count:,}건의 영업 기간은 {span}입니다."
+            )
+        facts.append(InterpretItem(text=detail, indicator_ids=["same_spot_history"]))
+    missing = []
+    if not h.floor_unit_provided:
+        missing.append(
+            MissingItem(
+                text="상세 위치(층·호수)가 없어 같은 자리 기록 여부는 판단하지 않았습니다.",
+                reason="history_floor_unit_missing",
+            )
+        )
+    elif not h.same_spot_comparable:
+        missing.append(
+            MissingItem(
+                text=(
+                    "입력한 상세 위치에 층과 호수가 함께 있지 않아 "
+                    "같은 자리 기록 여부는 판단하지 않았습니다."
+                ),
+                reason="history_detail_incomplete",
+            )
+        )
+    missing.append(
+        MissingItem(
+            text=(
+                "건물 이력은 요청 기준 시점이 아닌 최신 자료 기준이며 지원 업종 전체 기록입니다. "
+                "폐업 원인이나 자리의 성패를 뜻하지 않습니다."
+            ),
+            reason="history_latest_data_basis",
+        )
+    )
+    return facts, missing
+
+
 def build_catalog(prepared: PreparedRiskInterpretation) -> InterpretationCatalog:
     c = prepared.context
     facts = []
@@ -173,6 +244,9 @@ def build_catalog(prepared: PreparedRiskInterpretation) -> InterpretationCatalog
         )
         (positive if favorable else negative)[row.id + "_comparison"] = item
     facts.extend(_activity_facts(c))
+    history_facts, history_missing = _history_items(c)
+    facts.extend(history_facts)
+    missing.extend(history_missing)
     missing.extend(
         [
             MissingItem(

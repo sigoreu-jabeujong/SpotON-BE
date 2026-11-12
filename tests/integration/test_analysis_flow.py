@@ -71,6 +71,23 @@ def test_geocode_etl_identity_and_history_scope(database, caplog, capfd):
         for item in history["stores"]:
             assert item["franchise"] == "unknown"
         assert provider.calls == 0
+        # #98: the same geocode identity as optional AI history context.
+        body = {
+            "query": {"lat": geo["lat"], "lng": geo["lng"], "category": "cafe", "radius": 500},
+            "history": {"building_key": geo["building_key"], "floor_unit": geo["floor_unit"]},
+        }
+        ai = ok(client.post("/api/risk/interpret", json=body))
+        assert provider.calls == 1
+        values = ai["data"]["official_values"]
+        (overview,) = (v["text"] for v in values if v["indicator_ids"] == ["building_history"])
+        matches = [s["location_match"] for s in history["stores"]]
+        assert f"인허가 기록은 {history['total']:,}건이며" in overview
+        assert f"같은 자리로 확인된 기록 {matches.count('same_spot'):,}건" in overview
+        assert f"다른 위치 {matches.count('same_building'):,}건" in overview
+        assert f"위치 미확인 {matches.count('unverified'):,}건" in overview
+        assert [v for v in values if v["indicator_ids"] == ["same_spot_history"]]
+        assert "history_latest_data_basis" in [m["reason"] for m in ai["data"]["missing_data"]]
+        assert KEY not in str(ai) and "201호" not in str(ai)
     captured = capfd.readouterr()
     logs = caplog.text + captured.out + captured.err
     assert all(value not in logs for value in (PRIVATE, ROAD, JIBUN, KEY, "FLOW_SHARED", "201호"))
@@ -264,6 +281,10 @@ def test_invalid_conditions_do_not_invoke_provider(database, caplog):
             assert PRIVATE not in result.text
         result = client.post("/api/risk/interpret", json={"query": base, "building_key": PRIVATE})
         assert result.status_code == 422 and PRIVATE not in result.text + caplog.text
+        for history in ({"building_key": PRIVATE}, {"building_key": geo["building_key"], "x": 1}):
+            result = client.post("/api/risk/interpret", json={"query": base, "history": history})
+            assert result.status_code == 422 and result.headers["cache-control"] == "no-store"
+            assert PRIVATE not in result.text + caplog.text
         assert provider.calls == 0
         assert assert_consistent(query_flow(client, geo)) == 3
 
