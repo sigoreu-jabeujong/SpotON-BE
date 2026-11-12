@@ -218,3 +218,17 @@ verify_output 통과 근거(템플릿을 바꿀 때 지킬 조건):
 - FE가 `history`를 보내는 흐름, 알 수 없는 이력 ID 칩, 새 missing reason 4종의 표시는 FE 담당자 반영 대기다. 이번 검토에서 FE 저장소는 읽지 않았다(#96 후속 확인: 목록 key는 문장 text라 문장이 서로 다르면 중복 key는 없음).
 - 2,000자 여유(약 1,550자)는 추정이며 테스트로 확정해야 한다.
 - `canonical_detail` 정규화의 멱등성은 코드상 기대일 뿐 이번에 실행 확인하지 않았다. 단위 테스트로 고정한다.
+
+## 13. 구현 기록
+
+- 커밋: 설계 `b8cf372` → 요청 검증·위치·집계 `e389422` → 문장·응답 ID `1e0d105` → prompt v7 `0c5e56c` → 문서(이 커밋).
+- 설계 대비 조정
+  - `InterpretHistory`에는 별도 field validator를 두지 않고 `InterpretRequest`의 after model_validator에서 `HistoryQuery`를 만든다. `HistoryQuery`의 ValidationError(ValueError 하위)는 pydantic이 바깥 모델 오류로 바꿔 RequestValidationError → 422가 된다.
+  - 단위 테스트의 `use_risk`는 `get_history`·`check_history_location`을 "호출되면 실패" Mock으로 두고 `use_history`가 켠다.
+- 검증
+  - 일반 pytest 1,414 passed, ruff check·format, mypy 154 files. 기존 `test_gemini::test_overall_budget_cancels_retry_sleep` 1회 실패는 단독 5회·전체 재실행 통과(이번 변경 무관, 시간 의존).
+  - 이 PC에 Docker가 생겨 별도 포트 일회용 PostGIS(`TEST_DATABASE_URL`, 개발 DB와 분리)로 통합 212 passed(신규 2·흐름 테스트 확장 포함). CI에서도 다시 확인한다.
+  - 최장 조합(#96 최장 + 같은 자리 수천 건·기간 4자리·기타 상태) 서버 문장 2,000자 이내 테스트 통과.
+  - 실제 개발 DB(READ ONLY): 같은 자리 있음/호수 미입력/층만 입력/최대 건물(1,146건)/기록 0건 5사례 모두 문맥 집계=같은 세션 `get_history` 파생값, comparable 규칙 일치, 건물키·층호수 문자열 AI 입력 미포함. 이력 포함 준비 SQL 캐시 없음 17·cold 19·warm 12, 준비 0.21~0.49초(SLA 아님). 기준 건물 좌표에서 동쪽 약 1km 요청은 `prepare`·API 모두 422. 모의 공급자 API 200·prompt v7·이력 ID 각 1개, 공급자 호출 1회·실제 LLM 0회, 응답·프롬프트 건물키 0건. 검증 전후 11개 테이블 행 md5·건수 동일.
+  - 측정: 지원 점포가 있는 건물키 121,182개 중 좌표 확보 점포가 없는 키 11,988개(9.9%, 18,407행). 이 키들은 위치 검증 없이 통과한다(§2.1 한계).
+  - 미측정: 실제 geocode 좌표와 가장 가까운 점포 거리 분포(BE `.env`에 카카오 키가 없음). 키 확보 후 #78 재검증과 함께 측정을 권장한다.

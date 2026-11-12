@@ -90,7 +90,7 @@ LLM 전체 await(재시도 대기 포함)와 개별 요청은 asyncio timeout으
 
 프로세스별 기본5회/분·50회/일·동시2의 새 INTERPRET 설정을 적용하고 기존 LLM 공급자 한도도 유지한다. 대기/읽기 전용 준비/생성/최대1회 재생성/조립 모두 LLM_TIME_BUDGET(기본20초) 안에 둔다. DB 세션은 공급자 호출 전에 닫고 worker취소는 Event/SQL직전 검사와 기존 문장제한으로 정리한다. 즉시 동기SQL 강제중단·전역quota·운영SLA는 보장하지 않는다. 입력422, DB/서버결함500, 한도/공급자/시간503 AI_UNAVAILABLE, 두 번의 선택검증 실패503 AI_VERIFY_FAILED이며 no-store다. 기본문장 대체는 없으며 서버 캐시는 아래 #74 기준을 따른다.
 
-설계·Claude 실제 검토·수정/실검증은 docs/designs/feat68-risk-interpret-api.md를 따른다. FE 코드·이슈·PR·CLAUDE.md는 직접 수정하지 않고 docs/fe-risk-interpret-api-request.md로 담당자에게 요청한다. FE 반영·원본 합의·이력 추가문맥·전체 BE-32 통합은 후속이다. 활동 추가문맥은 아래 #96을 따른다.
+설계·Claude 실제 검토·수정/실검증은 docs/designs/feat68-risk-interpret-api.md를 따른다. FE 코드·이슈·PR·CLAUDE.md는 직접 수정하지 않고 docs/fe-risk-interpret-api-request.md로 담당자에게 요청한다. FE 반영·원본 합의·전체 BE-32 통합은 후속이다. 활동 추가문맥은 아래 #96, 선택 이력 문맥(최상위가 아닌 `history` 필드)은 #98을 따른다.
 
 ## 개인정보 없는 운영 로그 기반 (BE #72)
 
@@ -116,7 +116,7 @@ meta.link_catalog_version=support-links-v2는 생략/지정 모두 적용한다.
 
 앱마다 Risk/AI bytes LRU를 분리한다. CACHE_ENABLED=true, 각 TTL 기본300초/상한7일, CACHE_MAX_ENTRIES 기본256/상한4096, CACHE_MAX_BYTES 각4MiB/상한64MiB다. Python 객체/키 overhead와 worker별 합산은 별도다. 앱 수명 난수 HMAC key에 정확한 float guard+6자리 좌표·정규화한 조건/요청 월·규칙/경계를 넣으며 Risk 값에서 query echo를 제외하고 현재 요청으로 재구성한다. 원문 query/위치/지문을 로그·repr·응답의 cache 메타로 공개하지 않는다.
 
-primary READ ONLY REPEATABLE READ의 snapshot/DB/role/시작시각/GUC 지문으로 같은 배치·updated_at 불변 DML도 다른 namespace로 분리한다. old snapshot은 새 결과를 덮지 않는다. GET warm은 metadata1SQL, AI 준비는 같은 세션에서 Risk warm2SQL+활동 재계산6SQL(#96)이다. 적중에도 DB가 필요하며 SQL 오류500·원천 오류를 과거 결과로 숨기지 않는다. 무관한 쓰기/rollback은 보수적 miss이며 TRUNCATE/rewrite/복구는 요청 drain→cache 종료→변경→재시작 범위다. 일반 동시 ETL은 INSERT/UPSERT다.
+primary READ ONLY REPEATABLE READ의 snapshot/DB/role/시작시각/GUC 지문으로 같은 배치·updated_at 불변 DML도 다른 namespace로 분리한다. old snapshot은 새 결과를 덮지 않는다. GET warm은 metadata1SQL, AI 준비는 같은 세션에서 Risk warm2SQL+활동 재계산6SQL(#96)이며 history가 있으면 위치 검사·이력 4SQL(#98)을 더한다. 적중에도 DB가 필요하며 SQL 오류500·원천 오류를 과거 결과로 숨기지 않는다. 무관한 쓰기/rollback은 보수적 miss이며 TRUNCATE/rewrite/복구는 요청 drain→cache 종료→변경→재시작 범위다. 일반 동시 ETL은 INSERT/UPSERT다.
 
 AI 값은 현재 허용 후보와 검증한 선택 ID와 모델명뿐이다. snapshot/데이터/context/prompt/provider/model/max tokens/후보/schema/검증규칙을 key에 포함한다. 생성시각·이전 재생성 이력·문장/프롬프트는 저장하지 않는다. generated_at은 현재 응답 문장 조립 시각, regenerated는 현재 요청의 재생성 여부이며 hit=false다. 같은 key 생성만 single-flight로 합치고 key 대기는 semaphore 밖, 준비/공급자 실행만 gate 안이다. 전체 예산·hit의 앱 한도·miss의 공급자 한도·서버문장 실패500·no-store는 유지한다. 키 미설정/실패는 cache로 숨기지 않는다.
 
@@ -190,4 +190,14 @@ as_of/data_updated_at/space·배치 집합/map_version·franchise_classification
 
 `official_values`에 서버 참고 계산 문장(최근 구간 개폐업1개+선택 세부 업종마다1개)을 Risk 사실 문장 뒤에 추가한다. 문맥에 없는 숫자(12개월 등)는 쓰지 않는다. 사실 항목의 indicator_ids는 `recent_open_close`·`avg_operating_months`를 추가로 허용하며 반복될 수 있다. favorable/unfavorable의 indicator_ids는 기존 IndicatorId만 허용한다. 모델 후보·선택 구조는 그대로이며 활동 기반 유리/불리 후보는 만들지 않는다. prompt는 규칙14를 더한 risk-interpret-v6, data_version_hash에 활동 rule_version, 선택 cache rule은 selection-current-validation-v2다.
 
-설계·Claude Code 재검토·구현 기록은 docs/designs/feat96-ai-activity-context.md, FE 칩 라벨·반복 ID 처리는 docs/fe-risk-interpret-api-request.md로 요청하며 담당자 반영 대기다. 이력 추가문맥은 후속이다. 실제 개발 DB 읽기 전용 검증(6조합 일치·SQL cold15/warm8·빈 license_no 0건·행 hash 보존)은 설계 §13에 기록했다.
+설계·Claude Code 재검토·구현 기록은 docs/designs/feat96-ai-activity-context.md, FE 칩 라벨·반복 ID 처리는 docs/fe-risk-interpret-api-request.md로 요청하며 담당자 반영 대기다. 이력 추가문맥은 아래 #98이다. 실제 개발 DB 읽기 전용 검증(6조합 일치·SQL cold15/warm8·빈 license_no 0건·행 hash 보존)은 설계 §13에 기록했다.
+
+## AI 해석 선택 이력 문맥 (BE #98)
+
+`POST /api/risk/interpret` 요청에 선택 필드 `history: {building_key, floor_unit?}`(strict·extra forbid)를 받는다. 생략하면 #96과 같은 동작이며 문맥 `history=null`이다. `InterpretRequest` model_validator에서 `HistoryQuery`(canonical 건물키·floor_unit 정규화, category=query.category)까지 만들어 형식 오류는 DB 접속 전 422/no-store다. 최상위 building_key/floor_unit은 계속 422다.
+
+같은 READ ONLY 세션에서 Risk·활동 뒤 `check_history_location`(SUPPORTED_STORES·같은 건물키·좌표 확보 점포의 최소 geography 거리 ≤ 고정 300m, 좌표 점포가 없으면 생략)과 `get_history`를 실행한다. 위치 불일치는 `prepare_risk_interpretation`이 `AppError(INVALID_PARAM, NO_STORE)`를 직접 올려 422다(ValueError로 바꾸면 500이 되므로 금지). data_updated_at/as_of·배치 집합/map_version·이력 rule_version·분류/brand_mapping·total/denominator·location_match 규칙이 Risk와 맞지 않으면 원문 없는 500이다.
+
+`context.history`는 최신 자료 기준·지원 업종 전체 집계(total·same_category·same_spot/same_building/unverified·같은 자리 영업/폐업/기타·기간 확인 폐업 수와 완료 개월 min/max·floor_unit_provided·same_spot_comparable)뿐이다. 층과 호수가 모두 있어야 comparable이다. 건물키·층호수·상호·관리번호·날짜 원문은 AI 입력·응답·로그·캐시 key에 넣지 않는다. 캐시 key는 집계(payload/context_hash)로 구분되며 값은 Risk 후보 ID뿐이다.
+
+official_values에 `building_history`(호수 미입력이면 총계만)·`same_spot_history` 문장을, missing_data에 `history_no_records`·`history_floor_unit_missing`·`history_detail_incomplete`·`history_latest_data_basis`를 추가한다. 이력 기반 유리/불리 후보·자리 판정은 만들지 않는다. prompt는 규칙15를 더한 risk-interpret-v7, 선택 cache rule은 selection-current-validation-v3다. 설계·Claude Code 재검토·실제 DB 검증은 docs/designs/feat98-ai-history-context.md, FE 요청은 docs/fe-risk-interpret-api-request.md다. 좌표 점포가 없는 건물키(실측 약 9.9%)는 위치 검증 없이 통과하는 한계가 있다.
