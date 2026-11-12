@@ -52,7 +52,7 @@ router = APIRouter(tags=["support"], route_class=SupportRoute)
     "/support-links",
     response_model=ApiResponse[SupportLinks],
     responses=VALIDATION_ERROR_RESPONSES,
-    summary="공식 상담·지원기관 공통 링크",
+    summary="공식 상담·지원기관 링크와 관할 센터 안내",
     openapi_extra={
         "parameters": [
             {
@@ -73,5 +73,5 @@ router = APIRouter(tags=["support"], route_class=SupportRoute)
 def support_links(
     query: Annotated[SupportLinksQuery, Depends(support_query)],
 ) -> ApiResponse[SupportLinks]:
-    """Return the general catalog after validation; no targeted candidates exist yet."""
-    return get_support_links()
+    """Keep general links and add the published district contact when specified."""
+    return get_support_links(query)
