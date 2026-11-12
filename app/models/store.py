@@ -36,6 +36,14 @@ class Store(Base):
         Index("ix_stores_category_status", "category", "status"),
         Index("ix_stores_open_date", "open_date"),
         Index("ix_stores_close_date", "close_date"),
+        Index(
+            "ix_stores_provenance",
+            "batch_id",
+            "source",
+            "category",
+            "sub_category",
+            postgresql_where=text("deleted_at IS NULL AND category_review_flag IS NOT TRUE"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)

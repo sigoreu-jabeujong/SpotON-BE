@@ -67,7 +67,7 @@ def test_store_geometry_constraints_and_indexes_match_contract() -> None:
     assert tuple(column.name for column in unique.columns) == ("source", "license_no")
 
     indexes = {index.name: index for index in table.indexes}
-    assert set(indexes) == set(INDEX_SPECS) | {"ix_stores_geography_gist"}
+    assert set(indexes) == set(INDEX_SPECS) | {"ix_stores_geography_gist", "ix_stores_provenance"}
     geography_ddl = str(
         CreateIndex(indexes["ix_stores_geography_gist"]).compile(dialect=postgresql.dialect())
     )
