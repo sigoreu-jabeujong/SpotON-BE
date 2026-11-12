@@ -165,3 +165,11 @@ vacuum_completed는 정상 반환 확인, provenance_checked는 후속 출처 �
 load_input·read_source 성공 뒤, 설정/DB 전에 etl_quality를1회 남긴다. 기존 stdout·metadata/내용 hash·트랜잭션·공개API는 유지한다. 원천일 전체 suppressed_rows/missing_value_rows/observed_zero_rows/unlocated_rows/multi_admin_groups/multi_admin_rows만 기록한다. missing_value_rows는 빈 셀이지 없는 조합 수가 아니며, multi_admin은 source/hour/grid 내 서로 다른 저장 admin을 그대로 비교한다. 미좌표와 그룹 건수는 겹칠 수 있고 인구 합계·제외 수·완전성/제공률을 만들지 않는다.
 
 6개 유효 정수 카운터가 모두 있을 때 completed, 계산/검증 실패는 counts 없이 failed/quality_summary_unavailable이다. source=living_pop 유효 run UUID만 허용하고 scope=source_day_all_sources·spatial_compatibility=unverified·aggregation_status=pending을 고정한다. completed는 적재/공간 검증 성공이 아니며 뒤에 import failed가 올 수 있다. 로그는 실패해도 ETL 결과를 바꾸지 않고 취소는 전파한다. 공식 근거·30일 보관/삭제·#57/#78은 대기다. 설계·실제 Claude 검토·Codex 판단·검증은 docs/designs/feat90-population-quality-logs.md를 따른다.
+
+## 브랜드 원천 기반·판정 적용의 경계 (BE #57)
+
+2026-11-12 사용자 승인 화면 및 실제 인증 성공으로 이전 브랜드 승인 대기 서술을 대체한다. `python -m etl.brands --year YYYY --output <workspace밖새파일> [--compare-local]` 또는 `--snapshot <기존파일> [--compare-local]`를 제공한다. 순차1000행·재시도/연도대체없음·페이지/전체/연도/브랜드·본부복합키 중복 검증과 첫페이지 재확인, 원문base64/hash·규칙v2·이번 실제수집완료시각을 저장한다. 브랜드번호단독반복행은보존하고모든관련이름을repeated_brand_id로격리한다. 대표자/사업자/법인명은 정규화·대조·로그/LLM에 사용하지 않는다. 기존파일 덮기/원문출력 금지이며 offline은키/HTTP 없이 재검증한다.
+
+기본은DB미접속이며 compare-local만 로컬대상/head0010·READ ONLY RR·SQL60초/잠금5초·지원업종/삭제/검토대기 조건의 전체 점포를 스트리밍 대조한다. 정확 이름 후보도 프랜차이즈 판정이 아니며 과거 가맹계약으로 소급하지 않는다. 현재 stores/모델/migration/공개API/AI/pending/캐시/FE 계약은 유지한다. 후속 판정 활성화 때 브랜드/근거모델·외부가맹필드보존/무효화·API메타/AI검증/프롬프트/캐시·BE측FE요청을 함께 설계한다. #57은 종료하지 않는다.
+
+brands 로그의 save_snapshot은파일저장완료이고 DBpersist와다르다. snapshot저장후대조실패는파일을보존하고exit1·snapshot_saved=true/고정stage를반환한다. source원문은공급자의단일시점일관성까지보장하지않는다. 사용법/예외/상한은 README, 실제 Claude검토/최종판단·검증은 docs/designs/feat57-brand-catalog-foundation.md를 따른다.

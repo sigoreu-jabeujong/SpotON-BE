@@ -15,9 +15,24 @@ from typing import Any, Literal, ParamSpec
 from uuid import UUID, uuid4
 
 EtlSource = Literal[
-    "localdata", "market_areas", "market_stores", "market_sales", "market_changes", "living_pop"
+    "localdata",
+    "market_areas",
+    "market_stores",
+    "market_sales",
+    "market_changes",
+    "living_pop",
+    "brands",
 ]
-Stage = Literal["import", "read_source", "collect", "preflight", "transform", "prepare", "persist"]
+Stage = Literal[
+    "import",
+    "read_source",
+    "collect",
+    "preflight",
+    "transform",
+    "prepare",
+    "persist",
+    "save_snapshot",
+]
 Status = Literal["started", "completed", "failed"]
 API_PATHS = frozenset(
     {
@@ -226,9 +241,19 @@ def _etl_record(
             "market_sales",
             "market_changes",
             "living_pop",
+            "brands",
         }
         or stage
-        not in {"import", "read_source", "collect", "preflight", "transform", "prepare", "persist"}
+        not in {
+            "import",
+            "read_source",
+            "collect",
+            "preflight",
+            "transform",
+            "prepare",
+            "persist",
+            "save_snapshot",
+        }
         or status not in {"started", "completed", "failed"}
     ):
         return
