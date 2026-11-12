@@ -3,7 +3,8 @@
 - 작성일: 2026-11-12
 - 대상: FE 담당자
 - 관련 BE 이슈: [#78](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/78)
-- 검사 기준: FE develop `21ec13fb59d1eed456c150b2c99300d9fe755d5a`, BE develop `1f81baf` / 2026-11-12 재점검
+- 최초 실행 검사 기준: FE develop `21ec13fb59d1eed456c150b2c99300d9fe755d5a`, BE develop `1f81baf` / 2026-11-12 재점검
+- 현재 문서 대조 기준: BE develop `135ec63`(PR #93·migration0011), 로컬 FE `21ec13f` / 2026-11-12
 - 상태: **5종 재현·Claude Code 소스 대조 완료 / FE 수정·검증 요청 / 지도 기본 연결 통과·복합 식별 수정 대기**
 
 FE lint·build는 통과했지만 실제 BE 연결과 유효한 결측 응답에서 아래 문제가 재현됐습니다. BE의 공개 응답은 기존 요청서 계약에 맞으며, FE에 맞추기 위해 서버 검증을 완화하거나 결측을 가짜 값으로 채우지 않습니다. FE 파일·설정·문서·이슈·PR은 이번 작업에서 직접 수정하지 않았습니다.
@@ -11,6 +12,17 @@ FE lint·build는 통과했지만 실제 BE 연결과 유효한 결측 응답에
 정상 표본에서는 실제 이력5행과 요약 PNG 생성·인쇄 버튼·PDF메모리 렌더1페이지가 동작했습니다. 이를 결측/오표시 문제의 해결로 보지는 않습니다. 아래 실패는 정상값만 있는 화면과 별도로 재현한 결과입니다.
 
 브라우저는 headless Chrome, 데스크톱1440×1100, VITE_USE_MOCK=false로 실행했습니다. 서버만 테스트용 주소/CORS 설정 복사본을 사용했고 실제 .env는 수정하지 않았습니다. 브라우저의 AI 공급자는 강제로 모의 처리하고 실제 LLM 송신은0회였습니다. 별도 BE 실모델 검사는2회200·서버검증 통과였습니다.
+
+## 현재 전달 기준
+
+이하 브라우저·Claude 검토·성능 측정은 각 절에 기록된 당시 실행의 근거입니다. 현재 문서 대조를 브라우저 전체 재검사나 FE 수정 완료로 해석하지 않습니다. 최신 가맹 계약 및 공통 전달 기준은 아래 안내를 함께 적용해 주세요.
+
+- 기본 타입·식별·결측·필터: [이력](fe-store-history-api-request.md)·[주변](fe-nearby-api-request.md)·[시점](fe-store-snapshot-api-request.md)·[조회 가능 월](fe-data-range-api-request.md)을 함께 검토합니다.
+- 집계·해석·지원: [상권 활동](fe-market-activity-api-request.md)·[Risk](fe-risk-reference-api-request.md)·[AI 해석](fe-risk-interpret-api-request.md)·[상담·지원기관](fe-support-links-api-request.md)을 따릅니다.
+- 가맹 관련 필드·상태·필터·표시는 [프랜차이즈 추정 추가 계약](fe-franchise-classification-api-request.md)이 공통 기준입니다. 현재 개발DB는2025년 목록을 적용해estimate/partial이며 미적용DB만pending입니다. history/nearby/snapshot은franchise_basis·franchise_reference_year를 반환하고 snapshot에는franchise도 추가됐습니다. 원본 is_franchise=null만 보고 전체 미확인으로 처리하지 않습니다.
+- 가맹 전용 필터는franchise=franchise와include_unknown_franchise=false를 함께 전달합니다. 이름 일치를 실제 계약·과거 소속으로 확정하거나 미일치를 개인 매장으로 바꾸지 않습니다. AI의franchise_name_match_estimate 한계 안내도 유지합니다.
+- 현재 공통 기준일은meta.as_of입니다. 오류 응답은data=null·meta={}·error={code,message}이며error.detail은 반환하지 않습니다. AS_OF_OUT_OF_RANGE의최소/최대월을error.detail에서만 찾지 말고data-range응답을 사용합니다. collected_at=null을 현재 날짜로 대체하지 않습니다.
+- 현재 문서 검수에서는 JSON 예시의 BE 스키마·관련 상대 링크와 실제 로컬HTTP11건(정상8·입력 오류3)을 확인했습니다. AI는 잘못된 본문의422만 실제 호출했으며, 정상 AI 생성·전체 브라우저/지도·FE build를 이번 검수에서 재실행한 것은 아닙니다.
 
 ## 1. AI 요청이422로 거절됨 — P1
 
@@ -90,7 +102,7 @@ BE `ApiResponse[NearbyStores]` 검증을 통과한 합성2행(source 다름·lic
 **BE 스키마 검증을 통과한 합성 응답으로 재현했습니다.** open_date는 유효하지만 name=null·operating_months=null인 폐업 기록을 주면 표의 상호와 기간 셀이 빈칸이 됩니다. format 함수의 null 반환만으로는 정보 없음/미산정 사유가 표시되지 않습니다.
 
 - 상호·날짜·기간 결측은 `정보 없음`으로 표시하고 기간은 operating_period_reason을 함께 보여 주세요.
-- 폐업일이 없는 폐업 기록의 상태는 유지하고 `폐업일 정보 없음`을 구분해 주세요.
+- 폐업일이null인 폐업 기록의 상태를 유지하고 아래의사유별문구를구분해 주세요. null만으로 원본 폐업일이 없었다고 단정하지 않습니다.
 - `missing_close_date`는 폐업일 정보 없음, `invalid_close_date`는 폐업일 확인 필요, `invalid_date_order`는 개업일·폐업일 확인 필요로 구분해 주세요. null만 보고 원자료가 없었다고 확정하지 않습니다.
 - operating_months=0/fact는0개월, null/no_data는 미산정으로 구분합니다.
 - 표와 출력용 진단서에 같은 기준을 적용해 주세요.
