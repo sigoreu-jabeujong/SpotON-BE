@@ -13,13 +13,13 @@ from app.ai.context import prepare_risk_interpretation
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.services import risk_interpret as service
-from tests.ai.context_helpers import query, response
+from tests.ai.context_helpers import query, response, use_risk
 from tests.ai.test_interpretation import Client, app_with, choice
 
 
 @pytest.fixture
 def prepared(monkeypatch):
-    monkeypatch.setattr(context_module, "get_risk", Mock(return_value=response()))
+    use_risk(monkeypatch, context_module, response())
     p = prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
     return replace(p, snapshot_token="synthetic-opaque-view")
 

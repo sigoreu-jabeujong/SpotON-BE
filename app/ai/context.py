@@ -19,6 +19,8 @@ from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.dependencies import NO_STORE
 from app.schemas.ai_context import (
+    ContextActivity,
+    ContextActivityGroup,
     ContextFilters,
     ContextFlags,
     ContextIndicator,
@@ -33,8 +35,10 @@ from app.schemas.franchise import (
     BrandDataVersion,
     EstimatedClassification,
 )
+from app.schemas.market_activity import ActivityQuery, MarketActivity
 from app.schemas.risk import Risk, RiskIndicator, RiskQuery
-from app.services.market_activity import year_cutoff
+from app.services.market_activity import RULE_VERSION as ACTIVITY_RULE_VERSION
+from app.services.market_activity import get_activity, year_cutoff
 from app.services.risk import RULE_VERSION, get_risk, percent, period
 from app.services.risk_cache import snapshot_token
 from app.services.spatial_stores import effective_date
@@ -95,7 +99,13 @@ def prepare_risk_interpretation(
             response = get_risk(session, checked, settings, cache=cache)
         else:
             response = get_risk(session, checked, settings)
-        context, data_version_hash = _extract_context(response, checked)
+        activity = get_activity(
+            session,
+            ActivityQuery.model_validate(
+                checked.model_dump(exclude={"include", "include_unknown"}, warnings="error")
+            ),
+        )
+        context, data_version_hash = _extract_context(response, checked, activity)
         safe = context.model_dump(mode="json")
         serialized = serialize_context(safe)
         bundle = load_prompt_bundle()
@@ -160,9 +170,85 @@ def _indicator(row: RiskIndicator, target: date, radius: int) -> ContextIndicato
     )
 
 
+def _activity(
+    activity: ApiResponse[MarketActivity],
+    risk: Risk,
+    risk_meta: dict[str, JsonValue],
+    sub: tuple[str, ...],
+    radius: int,
+) -> ContextActivity:
+    """Same-session recomputation; reject any drift from the Risk cohort (design §4)."""
+    if activity.error is not None or activity.data is None:
+        raise ValueError("activity result unavailable")
+    data = MarketActivity.model_validate(activity.data.model_dump(warnings="error"))
+    meta = activity.meta
+    for key in ("as_of", "data_updated_at", "franchise_classification", "cohort_size"):
+        if key not in meta or meta.get(key) != risk_meta.get(key):
+            raise ValueError("activity provenance mismatch")
+    cohort = meta.get("cohort_size")
+    if type(cohort) is not int or cohort < 0:
+        raise ValueError("activity cohort mismatch")
+    if (
+        meta.get("space") != f"radius_{radius}m"
+        or meta.get("source") != ["R5", "R6"]
+        or meta.get("collected_at") is not None
+        or "collected_at" not in meta
+        or meta.get("denominator") is not None
+        or "denominator" not in meta
+    ):
+        raise ValueError("activity metadata mismatch")
+    version, risk_version = meta.get("data_version"), risk_meta.get("data_version")
+    if not isinstance(version, dict) or not isinstance(risk_version, dict):
+        raise ValueError("activity data version mismatch")
+    batches, risk_batches = version.get("stores_batch_ids"), risk_version.get("stores_batch_ids")
+    if (
+        not isinstance(batches, list)
+        or not isinstance(risk_batches, list)
+        or len(batches) != len(set(map(str, batches)))
+        or set(map(str, batches)) != set(map(str, risk_batches))
+        or version.get("map_version") != risk_version.get("map_version")
+        or version.get("rule_version") != ACTIVITY_RULE_VERSION
+        or version.get("brand_mapping") != risk_version.get("brand_mapping")
+    ):
+        raise ValueError("activity data version mismatch")
+    if data.sales is not None or data.living_pop is not None or data.flags.missing:
+        raise ValueError("activity optional data requested")
+    groups = sorted(data.by_sub_category, key=lambda g: g.sub_category)
+    if tuple(g.sub_category for g in groups) != sub:
+        raise ValueError("activity scope mismatch")
+    rows = {r.id: r for r in risk.indicators}
+    competitor, closure = rows["competitor_count"], rows["closure_rate_12m"]
+    active = sum(g.open_count for g in groups)
+    closed = data.recent_12m.closed
+    if (
+        competitor.value != active
+        or data.recent_12m.period != closure.period
+        or closure.denominator != active + closed
+        or (closure.numerator is not None and closure.numerator != closed)
+    ):
+        raise ValueError("activity counts mismatch")
+    return ContextActivity.model_validate(
+        {
+            "space": f"radius_{radius}m",
+            "recent_period": data.recent_12m.period,
+            "recent_opened": data.recent_12m.opened,
+            "recent_closed": closed,
+            "groups": tuple(
+                ContextActivityGroup(
+                    sub_category=g.sub_category,
+                    open_count=g.open_count,
+                    avg_operating_months=g.avg_operating_months,
+                )
+                for g in groups
+            ),
+        }
+    )
+
+
 def _extract_context(
     response: ApiResponse[Risk],
     query: RiskQuery,
+    activity: ApiResponse[MarketActivity],
 ) -> tuple[RiskInterpretContext, str]:
     if response.error is not None or response.data is None:
         raise ValueError("risk result unavailable")
@@ -224,13 +310,15 @@ def _extract_context(
     if version.brand_mapping is None:
         version_json.pop("brand_mapping")
     version_json["stores_batch_ids"] = sorted(str(v) for v in version.stores_batch_ids)
+    version_json["activity_rule_version"] = ACTIVITY_RULE_VERSION
     version_hash = hashlib.sha256(serialize_context(version_json).encode("utf-8")).hexdigest()
     sub = query.sub_category or (
         ("cafe",) if query.category == "cafe" else ("korean", "chinese", "japanese", "western")
     )
+    ordered_sub = tuple(sorted(sub))
     context = RiskInterpretContext(
         category=query.category,
-        sub_category=tuple(sorted(sub)),
+        sub_category=ordered_sub,
         radius_m=query.radius,
         filters=ContextFilters(
             area=query.area,
@@ -248,5 +336,6 @@ def _extract_context(
             insufficient_sample=data.flags.insufficient_sample, missing=tuple(data.flags.missing)
         ),
         methodology=method,
+        activity=_activity(activity, data, meta, ordered_sub, query.radius),
     )
     return context, version_hash

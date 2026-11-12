@@ -14,22 +14,28 @@ from app.ai.prompts.loader import PromptError
 from app.ai.verified import generate_verified
 from app.core.config import Settings
 from app.core.errors import AppError
+from app.schemas.common import ErrorCode
 from app.schemas.risk import ReferenceCounts
-from tests.ai.context_helpers import query, response
+from tests.ai.context_helpers import query, response, use_risk
 from tests.ai.test_gemini import Clock, make_client, ok_body
 
 
-def prepare(monkeypatch, q=None, result=None):
+def prepare(monkeypatch, q=None, result=None, **activity):
     q = q or query()
-    server = Mock(return_value=result or response(q))
-    monkeypatch.setattr(module, "get_risk", server)
+    server, recompute = use_risk(monkeypatch, module, result or response(q), q, **activity)
     session = Mock()
     settings = Settings(_env_file=None)
     output = module.prepare_risk_interpretation(session, q, settings)
-    assert server.call_count == 1
+    assert server.call_count == 1 and recompute.call_count == 1
     assert server.call_args.args[0] is session
     assert server.call_args.args[1].model_dump(exclude={"include_unknown"}) == q.model_dump(
         exclude={"include_unknown"}
+    )
+    assert recompute.call_args.args[0] is session
+    sent = recompute.call_args.args[1]
+    assert sent.include == () and sent.include_unknown is None
+    assert sent.model_dump(exclude={"include", "include_unknown"}) == q.model_dump(
+        exclude={"include", "include_unknown"}
     )
     return output
 
@@ -131,7 +137,7 @@ def test_hash_determinism_and_version_separation_and_nested_immutability(monkeyp
 def test_bad_indicator_values_are_rejected_without_context_leak(monkeypatch, path, value, caplog):
     result = response()
     setattr(result.data.indicators[2], path, value)
-    monkeypatch.setattr(module, "get_risk", Mock(return_value=result))
+    use_risk(monkeypatch, module, result)
     with pytest.raises(AppError) as exc:
         module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
     assert exc.value.__context__ is None
@@ -151,7 +157,7 @@ def test_bad_indicator_values_are_rejected_without_context_leak(monkeypatch, pat
 def test_unknown_provenance_or_methodology_rejected(monkeypatch, field, value):
     result = response()
     result.meta[field] = value
-    monkeypatch.setattr(module, "get_risk", Mock(return_value=result))
+    use_risk(monkeypatch, module, result)
     with pytest.raises(AppError):
         module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
 
@@ -183,7 +189,7 @@ def test_pending_zero_and_negative_zero_handling(monkeypatch):
         )
     )
     result.data.indicators[2].value = -0.0
-    monkeypatch.setattr(module, "get_risk", Mock(return_value=result))
+    use_risk(monkeypatch, module, result)
     with pytest.raises(AppError):
         module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
 
@@ -198,11 +204,12 @@ def test_invalid_radius_and_prompt_failure_are_safe(monkeypatch, caplog):
     q.radius = 37.56789123
     guard = Mock(side_effect=AssertionError("must not recalculate"))
     monkeypatch.setattr(module, "get_risk", guard)
+    monkeypatch.setattr(module, "get_activity", guard)
     with pytest.raises(AppError) as exc:
         module.prepare_risk_interpretation(Mock(), q, Settings(_env_file=None))
     assert exc.value.__context__ is None and "37.56789123" not in str(exc.value) + caplog.text
     guard.assert_not_called()
-    monkeypatch.setattr(module, "get_risk", Mock(return_value=response()))
+    use_risk(monkeypatch, module, response())
     monkeypatch.setattr(
         module, "load_prompt_bundle", Mock(side_effect=PromptError("PRIVATE-CANARY"))
     )
@@ -249,7 +256,137 @@ def test_generated_server_sample_reasons_match_outbound_allowlist(monkeypatch, d
 
 def test_server_result_must_match_requested_coordinates_and_month(monkeypatch):
     result = response()
-    monkeypatch.setattr(module, "get_risk", Mock(return_value=result))
+    use_risk(monkeypatch, module, result)
     for q in [query(lng=127.5), query(as_of="2025-01")]:
         with pytest.raises(AppError):
             module.prepare_risk_interpretation(Mock(), q, Settings(_env_file=None))
+
+
+def mutate(result, path, value):
+    target = result
+    *parents, last = path
+    for key in parents:
+        target = target[key] if isinstance(target, dict) else getattr(target, key)
+    if isinstance(target, dict):
+        target[last] = value
+    else:
+        setattr(target, last, value)
+
+
+def test_activity_allowlist_matches_server_activity(monkeypatch):
+    p = prepare(monkeypatch)
+    activity = p.json_context()["activity"]
+    assert set(activity) == {
+        "space",
+        "recent_period",
+        "recent_opened",
+        "recent_closed",
+        "groups",
+        "methodology",
+    }
+    assert activity["space"] == "radius_500m"
+    assert activity["recent_period"] == "(2025-11-08, 2026-11-08]"
+    assert (activity["recent_opened"], activity["recent_closed"]) == (3, 2)
+    assert activity["groups"] == [
+        {"sub_category": "cafe", "open_count": 8, "avg_operating_months": 41}
+    ]
+    assert activity["methodology"]["yearly_trend_included"] is False
+    keys = set(walk_keys(activity))
+    for forbidden in ["cohort_size", "stores_batch_ids", "yearly_trend", "license_no", "source"]:
+        assert forbidden not in keys
+    assert not keys & FORBIDDEN_CONTEXT_KEYS
+
+
+def test_restaurant_groups_are_sorted_and_keep_zero_groups(monkeypatch):
+    q = query(category="restaurant")
+    p = prepare(monkeypatch, q, response(q))
+    groups = p.json_context()["activity"]["groups"]
+    assert [g["sub_category"] for g in groups] == ["chinese", "japanese", "korean", "western"]
+    korean = next(g for g in groups if g["sub_category"] == "korean")
+    assert korean == {"sub_category": "korean", "open_count": 8, "avg_operating_months": 41}
+    assert all(g["avg_operating_months"] is None for g in groups if g["open_count"] == 0)
+
+
+def test_activity_values_change_context_hash_and_rule_changes_version_hash(monkeypatch):
+    a = prepare(monkeypatch)
+    b = prepare(monkeypatch, opened=4)
+    assert a.context_hash != b.context_hash and a.data_version_hash == b.data_version_hash
+    monkeypatch.setattr(module, "ACTIVITY_RULE_VERSION", "market-activity-license-ytd-v2")
+    result = response()
+    _, recompute = use_risk(monkeypatch, module, result)
+    recompute.return_value.meta["data_version"]["rule_version"] = "market-activity-license-ytd-v2"
+    c = module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
+    assert c.context_hash == a.context_hash and c.data_version_hash != a.data_version_hash
+
+
+@pytest.mark.parametrize(
+    "path,value",
+    [
+        (("meta", "as_of"), "2026-11-07"),
+        (("meta", "data_updated_at"), "2026-11-09"),
+        (("meta", "space"), "radius_300m"),
+        (("meta", "cohort_size"), 21),
+        (("meta", "cohort_size"), "20"),
+        (("meta", "collected_at"), "2026-11-12"),
+        (("meta", "denominator"), 8),
+        (("meta", "source"), ["R5"]),
+        (("meta", "franchise_classification"), {"status": "estimate"}),
+        (("meta", "data_version", "stores_batch_ids"), ["00000000-0000-0000-0000-000000000099"]),
+        (("meta", "data_version", "map_version"), "PRIVATE-CANARY"),
+        (("meta", "data_version", "rule_version"), "market-activity-license-ytd-v0"),
+        (("meta", "data_version", "brand_mapping"), {"reference_year": 2025}),
+        (("data", "recent_12m", "closed"), 3),
+        (("data", "recent_12m", "period"), "(2025-11-07, 2026-11-07]"),
+        (("data", "error"), None),
+    ],
+)
+def test_activity_drift_from_risk_is_rejected_without_leak(monkeypatch, path, value, caplog):
+    result = response()
+    _, recompute = use_risk(monkeypatch, module, result)
+    activity = recompute.return_value
+    if path == ("data", "error"):
+        activity.data = None
+    elif path[0] == "meta":
+        mutate(activity.meta, path[1:], value)
+    else:
+        mutate(activity.data, path[1:], value)
+    with pytest.raises(AppError) as exc:
+        module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
+    assert exc.value.__context__ is None
+    assert "PRIVATE-CANARY" not in str(exc.value) + caplog.text
+
+
+def test_activity_group_counts_and_scope_must_match_risk(monkeypatch):
+    for change in ("open_count", "scope", "optional", "missing"):
+        result = response()
+        _, recompute = use_risk(monkeypatch, module, result)
+        data = recompute.return_value.data
+        if change == "open_count":
+            data.by_sub_category[0].open_count = 9
+        elif change == "scope":
+            data.by_sub_category[0].sub_category = "korean"
+        elif change == "optional":
+            data.flags.missing = ["sales"]
+        else:
+            recompute.return_value.meta.pop("cohort_size")
+        with pytest.raises(AppError):
+            module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
+
+
+def test_closure_numerator_must_match_recent_closed_when_available(monkeypatch):
+    result = response()
+    _, recompute = use_risk(monkeypatch, module, result)
+    activity = recompute.return_value
+    activity.data.recent_12m.closed = 1
+    activity.data.by_sub_category[0].open_count = 9
+    with pytest.raises(AppError):
+        module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
+
+
+def test_activity_service_errors_propagate_unchanged(monkeypatch):
+    use_risk(monkeypatch, module, response())
+    failure = AppError(ErrorCode.INTERNAL_ERROR)
+    monkeypatch.setattr(module, "get_activity", Mock(side_effect=failure))
+    with pytest.raises(AppError) as exc:
+        module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
+    assert exc.value is failure

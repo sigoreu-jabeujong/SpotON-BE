@@ -14,7 +14,7 @@ from app.main import create_app
 from app.schemas.interpret import CandidateSelection
 from app.schemas.risk import ReferenceCounts
 from app.services import risk_interpret as service
-from tests.ai.context_helpers import query, response
+from tests.ai.context_helpers import query, response, use_risk
 
 
 @pytest.fixture
@@ -29,7 +29,7 @@ def prepared(monkeypatch):
         survival_3_num=2,
         survival_3_den=5,
     )
-    monkeypatch.setattr(context_module, "get_risk", Mock(return_value=response(local=local)))
+    use_risk(monkeypatch, context_module, response(local=local))
     return prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
 
 

@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 from app.ai.context import prepare_risk_interpretation
 from app.core.config import Settings
 from app.core.errors import AppError
+from app.schemas.market_activity import ActivityQuery
 from app.schemas.risk import RiskQuery
+from app.services.market_activity import get_activity
 from app.services.risk import get_risk
 from tests.integration.test_localdata_upsert import migrate
 from tests.integration.test_market_judgement import area, version
@@ -44,12 +46,27 @@ def test_server_recalculation_and_real_readonly_context_match(db):
     with Session(db) as s, s.begin():
         s.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
         actual = get_risk(s, q, config)
+        activity = get_activity(s, ActivityQuery(**PARAMS))
         prepared = prepare_risk_interpretation(s, q, config)
         assert s.scalar(text("SHOW transaction_read_only")) == "on"
         assert s.scalar(text("SHOW transaction_isolation")) == "repeatable read"
         for before, after in zip(actual.data.indicators, prepared.context.indicators, strict=True):
             assert before.value == after.value and before.denominator == after.denominator
             assert before.source == list(after.source) and before.status == after.status
+    context = prepared.context.activity
+    assert context.recent_period == activity.data.recent_12m.period
+    assert (context.recent_opened, context.recent_closed) == (
+        activity.data.recent_12m.opened,
+        activity.data.recent_12m.closed,
+    )
+    expected = sorted(
+        (g.sub_category, g.open_count, g.avg_operating_months)
+        for g in activity.data.by_sub_category
+    )
+    assert [(g.sub_category, g.open_count, g.avg_operating_months) for g in context.groups] == (
+        expected
+    )
+    assert sum(g.open_count for g in context.groups) == actual.data.indicators[5].value == 10
     assert prepared.context.as_of == date(2026, 11, 8)
     assert prepared.context.market_status == "unverified"
     assert "stores_batch_ids" not in prepared.request.user_content
@@ -111,3 +128,10 @@ def test_past_empty_and_source_not_ready_are_distinct(db):
     assert past.context.data_updated_at == date(2026, 11, 8)
     assert empty.context.indicators[-1].value == 0
     assert empty.context.indicators[2].value is None
+    assert [g.model_dump() for g in empty.context.activity.groups] == [
+        {"sub_category": "cafe", "open_count": 0, "avg_operating_months": None}
+    ]
+    assert past.context.activity.recent_period == "(2019-02-28, 2020-02-29]"
+    assert sum(g.open_count for g in past.context.activity.groups) == (
+        past.context.indicators[-1].value
+    )

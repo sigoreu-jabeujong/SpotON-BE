@@ -1,9 +1,9 @@
 """Outbound allowlist. No query, location identifiers, URLs or raw provenance objects."""
 
 from datetime import date
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.geocode import Category
 from app.schemas.risk import IndicatorId
@@ -86,6 +86,52 @@ class ContextMethodology(ContextModel):
     )
 
 
+PERIOD_PATTERN = r"^\(\d{4}-\d{2}-\d{2}, \d{4}-\d{2}-\d{2}\]$"
+
+
+class ContextActivityGroup(ContextModel):
+    """T 시점 영업 기록 수와 개업 후 경과 완료 개월 평균(버림). 수명·생존 기간이 아니다."""
+
+    sub_category: SubCategory
+    open_count: int = Field(ge=0)
+    avg_operating_months: int | None = Field(ge=0)
+
+    @model_validator(mode="after")
+    def consistent_average(self) -> Self:
+        if (self.open_count == 0) != (self.avg_operating_months is None):
+            raise ValueError("average requires a positive denominator")
+        return self
+
+
+class ContextActivityMethodology(ContextModel):
+    event_basis: Literal["validated_license_dates"] = "validated_license_dates"
+    operating_period_basis: Literal["elapsed_months_of_active_at_as_of"] = (
+        "elapsed_months_of_active_at_as_of"
+    )
+    avg_operating_months_rounding: Literal["floor_mean_of_completed_months"] = (
+        "floor_mean_of_completed_months"
+    )
+    yearly_trend_included: Literal[False] = False
+
+
+class ContextActivity(ContextModel):
+    """#60 활동 집계 중 최근 구간 개폐업 수와 T 시점 세부 업종 현황만 허용한다."""
+
+    space: Literal["radius_300m", "radius_500m", "radius_1000m"]
+    recent_period: str = Field(pattern=PERIOD_PATTERN)
+    recent_opened: int = Field(ge=0)
+    recent_closed: int = Field(ge=0)
+    groups: tuple[ContextActivityGroup, ...] = Field(min_length=1)
+    methodology: ContextActivityMethodology = Field(default_factory=ContextActivityMethodology)
+
+    @model_validator(mode="after")
+    def unique_groups(self) -> Self:
+        names = [g.sub_category for g in self.groups]
+        if names != sorted(set(names)):
+            raise ValueError("duplicate or unordered activity groups")
+        return self
+
+
 class RiskInterpretContext(ContextModel):
     category: Category
     sub_category: tuple[SubCategory, ...]
@@ -104,3 +150,13 @@ class RiskInterpretContext(ContextModel):
     indicators: tuple[ContextIndicator, ...] = Field(repr=False)
     flags: ContextFlags
     methodology: ContextMethodology = Field(default_factory=ContextMethodology)
+    activity: ContextActivity = Field(repr=False)
+
+    @model_validator(mode="after")
+    def activity_scope(self) -> Self:
+        if (
+            tuple(g.sub_category for g in self.activity.groups) != self.sub_category
+            or self.activity.space != f"radius_{self.radius_m}m"
+        ):
+            raise ValueError("activity scope mismatch")
+        return self
