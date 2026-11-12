@@ -71,6 +71,16 @@ QUALITY_FLAGS = frozenset(
         "area_invalid",
     }
 )
+POPULATION_QUALITY_COUNTS = frozenset(
+    {
+        "suppressed_rows",
+        "missing_value_rows",
+        "observed_zero_rows",
+        "unlocated_rows",
+        "multi_admin_groups",
+        "multi_admin_rows",
+    }
+)
 _WRITE_LOCK = Lock()
 P = ParamSpec("P")
 
@@ -154,6 +164,36 @@ class _Run:
 
 
 _RUN: ContextVar[_Run | None] = ContextVar("operation_run", default=None)
+
+
+def population_quality(counts: object) -> None:
+    """Count-only source-day diagnostic; never an aggregation or import success claim."""
+    try:
+        run = _RUN.get()
+        if run is None or run.source != "living_pop":
+            return
+        run_id = _uuid(run.run_id)
+        if run_id is None:
+            return
+        valid = _counts(counts, POPULATION_QUALITY_COUNTS)
+        complete = len(valid) == len(POPULATION_QUALITY_COUNTS)
+        event: dict[str, object] = {
+            "event": "etl_quality",
+            "source": "living_pop",
+            "run_id": run_id,
+            "stage": "read_source",
+            "status": "completed" if complete else "failed",
+            "scope": "source_day_all_sources",
+            "spatial_compatibility": "unverified",
+            "aggregation_status": "pending",
+        }
+        if complete:
+            event["counts"] = valid
+        else:
+            event["reason"] = "quality_summary_unavailable"
+        _emit(event)
+    except Exception:
+        pass
 
 
 def _etl_event(
