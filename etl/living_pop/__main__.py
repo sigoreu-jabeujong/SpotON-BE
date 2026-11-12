@@ -10,6 +10,7 @@ from app.db.session import create_db_engine
 from etl.living_pop.data import PopulationImportError
 from etl.living_pop.grid import prepare_grid
 from etl.living_pop.input import load_input
+from etl.living_pop.observability import record_quality
 from etl.living_pop.repository import inspect_import, limits, save
 from etl.localdata.runner import check_local_database, validate_local_target
 
@@ -25,6 +26,7 @@ def run_import(
 ) -> dict[str, Any]:
     with etl_phase("read_source"):
         daily = load_input(path)
+    record_quality(daily.rows)
     config = settings if settings is not None else Settings()
     validate_local_target(config)
     engine = create_db_engine(config)

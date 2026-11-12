@@ -1,3 +1,4 @@
+import json
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from threading import Barrier
@@ -16,6 +17,7 @@ from etl.living_pop.data import PopulationImportError
 from etl.living_pop.grid import prepare_grid
 from etl.living_pop.input import load_input
 from tests.etl.living_pop_helpers import make_manifest
+from tests.etl.test_living_pop_observability import EXPECTED
 from tests.integration.test_localdata_upsert import migrate
 
 pytestmark = pytest.mark.integration
@@ -168,9 +170,21 @@ def test_real_cli_read_only_plan_safe_output_and_timeout(source, monkeypatch, ca
         ("on", "repeatable read"),
         ("off", "read committed"),
     ]
-    output = capsys.readouterr().out
+    captured = capsys.readouterr()
+    output = captured.out
+    events = [json.loads(line) for line in captured.err.splitlines()]
+    quality = [event for event in events if event["event"] == "etl_quality"]
+    assert len(quality) == 3 and all(event["counts"] == EXPECTED for event in quality)
+    assert len({event["run_id"] for event in quality}) == 3
+    written, replayed = [json.loads(line) for line in output.splitlines()]
+    assert set(written) == set(dry)
+    assert written["inserted"] == 168 and replayed["inserted"] == 0
+    assert written["version_id"] == replayed["version_id"]
+    assert written["sources"] == replayed["sources"] == dry["sources"]
+    assert replayed["would_reuse"] and replayed["reused"]
     for marker in (str(p), "가가00000000", "11110530", "postgresql", "12.34000"):
         assert marker not in output
+        assert marker not in captured.err
     monkeypatch.setattr(repo, "LOCK_TIMEOUT_MS", 100)
     with e.connect() as held, held.begin():
         held.execute(
@@ -178,7 +192,82 @@ def test_real_cli_read_only_plan_safe_output_and_timeout(source, monkeypatch, ca
             {"n": repo.LOCK_NAMESPACE, "k": repo.LOCK_KEY},
         )
         assert cli.main(["--manifest", str(p), "--write"]) == 1
-    assert capsys.readouterr().out.strip() == '{"error": "living_pop:operation_failed"}'
+    captured = capsys.readouterr()
+    assert captured.out.strip() == '{"error": "living_pop:operation_failed"}'
+    events = [json.loads(line) for line in captured.err.splitlines()]
+    assert events[3]["event"] == "etl_quality" and events[3]["counts"] == EXPECTED
+    assert events[-2]["stage"] == "persist" and events[-2]["status"] == "failed"
+    assert events[-1]["status"] == "failed"
+
+
+@pytest.mark.parametrize("point", ["prepare_grid", "save"])
+def test_quality_survives_later_database_error_without_partial_writes(
+    source, monkeypatch, capsys, point
+):
+    e, p, d, g = source
+    config = Settings(
+        _env_file=None, database_url="postgresql://spoton_app:synthetic@localhost/spoton_dev"
+    )
+    monkeypatch.setattr(cli, "Settings", lambda: config)
+    monkeypatch.setattr(cli, "create_db_engine", lambda _: e)
+    monkeypatch.setattr(cli, "check_local_database", lambda _: None)
+
+    def fail(*args, **kwargs):
+        if point == "save":
+            repo.save(*args, **kwargs)
+        raise RuntimeError("private-database-error")
+
+    monkeypatch.setattr(cli, point, fail)
+    assert cli.main(["--manifest", str(p), "--write"]) == 1
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {"error": "living_pop:operation_failed"}
+    events = [json.loads(line) for line in captured.err.splitlines()]
+    assert events[3]["event"] == "etl_quality" and events[3]["counts"] == EXPECTED
+    assert events[-1]["status"] == "failed" and "private" not in captured.err
+    with e.connect() as c:
+        for model in (O, V, G, GV):
+            assert c.scalar(select(func.count()).select_from(model)) == 0
+
+
+@pytest.mark.parametrize("fault", ["summary", "sink"])
+def test_quality_failure_does_not_change_database_import_or_replay(
+    source, monkeypatch, capsys, fault
+):
+    from app.core import operations
+    from etl.living_pop import observability
+
+    e, p, d, g = source
+    config = Settings(
+        _env_file=None, database_url="postgresql://spoton_app:synthetic@localhost/spoton_dev"
+    )
+    monkeypatch.setattr(cli, "create_db_engine", lambda _: e)
+    monkeypatch.setattr(cli, "check_local_database", lambda _: None)
+    emit = operations._emit
+
+    def fail(*args):
+        raise RuntimeError("private-quality-error")
+
+    def sink(event):
+        if event["event"] == "etl_quality":
+            fail()
+        emit(event)
+
+    if fault == "summary":
+        monkeypatch.setattr(observability, "summarize", fail)
+    else:
+        monkeypatch.setattr(operations, "_emit", sink)
+    written = cli.run_import(p, settings=config, write=True)
+    replayed = cli.run_import(p, settings=config, write=True)
+    assert written["inserted"] == 168 and replayed["inserted"] == 0
+    assert written["version_id"] == replayed["version_id"] and replayed["reused"]
+    events = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
+    quality = [event for event in events if event["event"] == "etl_quality"]
+    assert len(quality) == (2 if fault == "summary" else 0)
+    assert all(event["status"] == "failed" and "counts" not in event for event in quality)
+    with e.connect() as c:
+        assert c.scalar(select(func.count()).select_from(O)) == 168
+        assert c.scalar(select(V.spatial_compatibility)) == "unverified"
+        assert c.scalar(select(V.content_sha256)) == d.content_sha256
 
 
 def test_transformed_grid_matches_independent_center_and_uses_gist(source):

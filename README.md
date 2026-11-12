@@ -196,10 +196,12 @@ API·ETL·LLM의 추가 운영 이벤트는 한 줄 JSON으로 **stderr**에 기
 |---|---|
 | api_request | UTC 시각·고정 경로·실제 전송 상태·처리시간·서버 UUID·ASGI 응답 완료 여부 |
 | etl_run / etl_stage | 6개 실행기의 독립 run_id·단계 시작/완료/실패·시간, 완료 결과의 허용 건수/품질 집계·실제 batch/version UUID |
+| etl_quality | 생활인구 입력 읽기 후 원천일 전체의 비공개·빈 셀·실제0·미좌표 행 수와 복수행정동 그룹/행 수. 인구값·코드 없음 |
 | llm_http_attempt | 애플리케이션의 client.post 시도1건과 HTTP200 관측 여부. 파싱/최종 AI 검증 성공률과 다름 |
 
 - 모르는 경로는 `unmatched`이며 원문 URL/query를 복사하지 않습니다. 헤더 관측 전 실패/취소는 status_code=null, 전송 중 중단은 response_complete=false입니다. 완료는 ASGI 전송 기준이며 사용자의 다운로드 완료 보장이 아닙니다. request_id는 입력 헤더를 무시하고 새로 만들며 응답 헤더에 추가하지 않습니다.
 - ETL은 실제 commit context 종료 후 persist 완료를 기록하고 원래 오류·취소를 전파합니다. run_id와 DB batch_id/version_id를 구분하며 없는 건수를0으로 채우지 않습니다. quality_flags는 겹칠 수 있으므로 합산해 최종 제외 수로 표시하지 않습니다. 인허가 CLI의 잘못된 인자는 입력을 echo하지 않는 고정 메시지·exit2입니다.
+- 생활인구 `etl_quality`의 completed는 입력 요약 성공이며 적재 완료·원천 완전성·공간 검증 성공이 아닙니다. DB 준비 전에 기록하므로 이후 import failed가 올 수 있습니다. 6개 카운터 중 하나라도 유효하지 않거나 계산에 실패하면 counts 없이 failed/quality_summary_unavailable을 기록합니다. 로그 실패는 적재 성공 조건이 아니며 원래 실행 결과를 바꾸지 않습니다.
 - 쓰기/직렬화/ID 생성 실패는 주 작업을 바꾸지 않으며 로그 오류를 다시 출력하지 않습니다. 한 줄은 최대4096 UTF-8 bytes이고 프로세스 내 thread 쓰기를 묶습니다. 느린 stderr의 지연이나 여러 프로세스 간 원자성은 보장하지 않습니다. 기존 서버 시작/오류 메시지는 같은 stderr에 있을 수 있으므로 수집기는 event가 있는 JSON을 구분합니다.
 - 기본 앱에서 uvicorn.access를 비활성화하고 기존 `--no-access-log` 실행 안내도 유지합니다. 별도 로그 재설정·reload/gunicorn·프록시/제3자 DEBUG 전체의 개인정보 처리를 대신하지 않습니다.
 - **원본의30일 보관·삭제 요구는 아직 미충족**입니다. 앱에 파일/DB 저장을 추가하지 않았으며 실제 배포 로그 수집기의 보관 설정·삭제 검증이 후속입니다. [설계·Claude 검토·검증](docs/designs/feat72-private-operation-logs.md)을 확인합니다. FE 응답 계약은 바뀌지 않습니다.
@@ -388,6 +390,8 @@ uv run --locked --extra dev python -m etl.living_pop --manifest "<로컬 manifes
 - `population`은 Numeric(20,5) 원천 총계, `value_status`는 observed/suppressed/missing입니다. `*`는 suppressed/null, 빈 값은 missing/null, 실제0은 observed/0이며 행 없음과 구분합니다. 후행 소수점 정수 표기를 포함한 명시적 ASCII 십진수만 받으며 원문 표기는 hash와 집계로 추적합니다. 세부 성별/연령/국적 숫자는 검사·hash만 하고 별도 적재하거나 총계를 복원하지 않습니다.
 - 사용자가 확정한 기준대로 공식 격자에 없는 내국인 1개 격자의 **24개 비식별 행**을 원문 코드·unlocated/null 참조로 보존합니다. 가짜 좌표·격자 행을 생성하지 않습니다. located 행은 복합 FK로 공식 격자와 연결하고 공간 inner join은 unlocated를 제외합니다. 전역 source/date 범위 미확인 수를 반경 내 missing_grid_count로 표시하지 않습니다.
 - 원본/규칙별 불변 버전과 실제 저장 hash를 검증하며 --write는 격자 및 세 원천 전체를 한 트랜잭션으로 처리합니다. replay는 기존 UUID·loaded_at·내용을 유지하며, 실패 시 이번 신규 버전/행을 모두 rollback합니다. 자료가 있으면 downgrade는 실패합니다.
+- 사용자 운영 규칙상 복수 행정동 행은 공식 답변 전 임의 합산하지 않고 원천 파일·행정동별 불변 관측·원문 행 hash로 보존합니다. 행이 없는 조합은 no_data이며 0으로 보정하거나 임의 행을 만들지 않습니다. 이 정책은 공급기관의 합산 가능성 확인을 대신하지 않습니다. 현재 SHP와2026-11-07 관측의 공식 버전 대응 자료 전에는 공간 집계 API와 주야간 인구비를 계속 보류합니다. 원천 수집·정제·적재는 가능합니다.
+- 별도 `etl_quality` 이벤트의 `suppressed_rows`는 비공개, `missing_value_rows`는 **실제 행의 빈 합계 셀(행 부재 미포함)**, `observed_zero_rows`는 실제 관측0, `unlocated_rows`는 좌표 미확인 행 수입니다. `multi_admin_groups`는 같은 원천·시각·원천 격자의 서로 다른 행정동2개 이상 그룹 수, `multi_admin_rows`는 그 그룹의 전체 행 수입니다. 미좌표 그룹도 포함할 수 있습니다. 플래그는 겹치므로 합산 제외 수·인구·완전성/제공률로 해석하지 않습니다. 없는 조합의 공식 기준이 없어 행 부재 수는 만들지 않습니다. scope=source_day_all_sources·spatial_compatibility=unverified·aggregation_status=pending을 유지합니다. [설계·Claude 검토·검증](docs/designs/feat90-population-quality-logs.md)을 따릅니다.
 
 실행·검증·원천 특이사항과 선택 근거는 [이슈 53 설계](docs/designs/feat53-living-population-import.md)를 확인합니다. 생활인구/반경 API·주야간 비율·FE 연동과 다일 누적·파티셔닝은 후속 범위입니다.
 

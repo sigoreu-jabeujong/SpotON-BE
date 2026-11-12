@@ -157,3 +157,11 @@ docs/be-system-audit.md에 기능별 상태와 실제/격리·모의/정적/기�
 vacuum_completed는 정상 반환 확인, provenance_checked는 후속 출처 검사 성공이다. 실패·인터럽트·해제 실패도 고정 코드/도달 단계/이미 완료한 상태만 출력한다. stdout JSON1건·성공0/실패1/Ctrl+C130, help는0이다. 명령 실패는 앞선 ETL 커밋·물리 정리를 되돌리지 않는다. 오래된 snapshot·동시 소유권/DDL·부하에 따른 회복을 보장하지 않는다. 읽기/writer/migration 중지와 실제API확인·재개는 운영자 책임이며 자동 제어/자동 일정/자동 ETL은 없다.
 
 설계·Claude 실제 MD 검토·Codex 결정과 실행 검증은 docs/designs/feat86-localdata-maintenance.md, 사용법은 README를 따른다. 실제dev에는 dry-run만 수행하고 VACUUM/DML/DDL은 하지 않는다. 공개 API/FE·SQL/기본 설정·ETL 트랜잭션·모델/migration·.env/Docker를 변경하지 않는다. #57 승인·생활인구 공식 근거 및 #78의 자동 조회 보호 등 후속은 유지한다.
+
+## 생활인구 미확정 정책·품질 로그 (BE #90)
+
+사용자 답변은 운영 규칙이며 공급기관 공식 의미/버전 근거가 아니다. 같은 원천·시각·격자의 서로 다른 행정동 행은 합산하지 않고 원본 파일/행정동별 불변 관측/원문 hash로 보존한다. 행 부재는 no_data, 실제 빈 셀은 missing/null, *는 suppressed/null, 실제0만 observed/0이다. 행/좌표/0을 임의 생성하지 않는다. 현재 SHP와2026-11-07의 공식 대응 확인 전 공간 수치·주야간 비율은 pending이며 수집·정제·적재는 가능하다.
+
+load_input·read_source 성공 뒤, 설정/DB 전에 etl_quality를1회 남긴다. 기존 stdout·metadata/내용 hash·트랜잭션·공개API는 유지한다. 원천일 전체 suppressed_rows/missing_value_rows/observed_zero_rows/unlocated_rows/multi_admin_groups/multi_admin_rows만 기록한다. missing_value_rows는 빈 셀이지 없는 조합 수가 아니며, multi_admin은 source/hour/grid 내 서로 다른 저장 admin을 그대로 비교한다. 미좌표와 그룹 건수는 겹칠 수 있고 인구 합계·제외 수·완전성/제공률을 만들지 않는다.
+
+6개 유효 정수 카운터가 모두 있을 때 completed, 계산/검증 실패는 counts 없이 failed/quality_summary_unavailable이다. source=living_pop 유효 run UUID만 허용하고 scope=source_day_all_sources·spatial_compatibility=unverified·aggregation_status=pending을 고정한다. completed는 적재/공간 검증 성공이 아니며 뒤에 import failed가 올 수 있다. 로그는 실패해도 ETL 결과를 바꾸지 않고 취소는 전파한다. 공식 근거·30일 보관/삭제·#57/#78은 대기다. 설계·실제 Claude 검토·Codex 판단·검증은 docs/designs/feat90-population-quality-logs.md를 따른다.
