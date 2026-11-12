@@ -49,7 +49,7 @@ official_values의 각 항목은 text/indicator_ids, favorable/unfavorable은 te
 
 Risk의 최근 기간 폐업률·고정 개업 주년 생존율과 같은 필터의 좌표 확보 서울 비교를 사용합니다. 생존율은 현재 잔존율이 아니며 현재 폐업했어도 주년 이후 폐업이면 해당 주년 생존에 포함됩니다. [Risk 요청서](fe-risk-reference-api-request.md)의 계산 보완안을 함께 검토해 주세요.
 
-소표본/0분모·공식 지표/상권 적용/수집일 미확인은 그대로 안내합니다. 가맹 분류는 미적용DB의pending과 적용DB의estimate/partial을 구분하며, [프랜차이즈 추정 요청서](fe-franchise-classification-api-request.md)를 함께 반영해 주세요. 적용DB는 `missing_data`에 `reason=franchise_name_match_estimate`인 한계 안내를 반환합니다. 이는 이름 일치 추정이 실제 계약·과거 소속을 증명하지 않는다는 뜻이며 미적용 상태의 `classification_unverified`와 구분합니다. 반환 문구를 유지하고 기준년도를 점포 개업 당시 가맹 소속으로 바꾸지 않습니다. 현재 서버 prompt는risk-interpret-v5이며 FE에서 자체 프롬프트나 판정을 만들 필요는 없습니다.
+소표본/0분모·공식 지표/상권 적용/수집일 미확인은 그대로 안내합니다. 가맹 분류는 미적용DB의pending과 적용DB의estimate/partial을 구분하며, [프랜차이즈 추정 요청서](fe-franchise-classification-api-request.md)를 함께 반영해 주세요. 적용DB는 `missing_data`에 `reason=franchise_name_match_estimate`인 한계 안내를 반환합니다. 이는 이름 일치 추정이 실제 계약·과거 소속을 증명하지 않는다는 뜻이며 미적용 상태의 `classification_unverified`와 구분합니다. 반환 문구를 유지하고 기준년도를 점포 개업 당시 가맹 소속으로 바꾸지 않습니다. 현재 서버 prompt는risk-interpret-v6이며 FE에서 자체 프롬프트나 판정을 만들 필요는 없습니다.
 
 서울 비교값이 같으면 유리/불리 후보를 만들지 않으며, 동종업체 수에 임의로 많음/적음 등급을 붙이지 않습니다. 유리/불리 구역이 비어도 설명을 임의로 채우지 않습니다.
 
@@ -78,3 +78,13 @@ meta는 T/D/수집일null·반경·분모null·입력/데이터/프롬프트 has
 - [ ] 422/500/503 두 오류·수동 재시도·GET /risk 화면 유지
 - [ ] 자동 중복/재호출 방지·전송 timeout 여유 검토
 - [ ] FE lint/build·실제 BE 연결·계약/CLAUDE.md 반영 후 결과 전달
+
+## BE #96 상권 활동 문맥 추가에 따른 요청
+
+- 요청 본문은 바뀌지 않습니다. 서버가 같은 조건으로 상권 활동 집계를 재계산해 AI 해석에 함께 사용합니다.
+- `official_values` 끝에 참고 계산 문장이 추가됩니다. 최근 구간 개업·폐업 건수 1개, 선택한 세부 업종마다 평균 경과 기간 1개입니다(카페 1개, 음식점 전체 4개). 카페 기준 항목 수는 4개에서 6개로 늘어납니다.
+- 이 항목들의 `indicator_ids`는 새 값 `recent_open_close`, `avg_operating_months`입니다. FE 타입 `InterpretItem.indicator_ids`에 두 값을 추가해 주세요. favorable/unfavorable의 `indicator_ids`는 기존 지표 ID만 옵니다.
+- 현재 `EvidenceChips`는 이름 표에 없는 ID를 영문 코드 그대로 보여 주고, 눌러도 이동할 지표 카드가 없습니다. 두 ID의 칩 이름(예: "최근 개폐업 기록", "평균 경과 기간")을 추가하고, 화면에 대응 카드가 없으면 이동하지 않는 칩으로 표시해 주세요. 상권 활동 섹션(`/result/analysis#activity`)으로 이동하는 방식도 가능합니다.
+- `avg_operating_months`는 여러 항목에 반복됩니다. 목록 key로 ID를 쓰지 말고 지금처럼 문장 text나 배열 순서를 사용해 주세요.
+- 평균 경과 기간은 기준일에 영업 중인 기록의 개업 후 경과 개월 평균(버림)입니다. 점포 수명·생존 기간·영업 성과로 바꿔 표시하지 마세요. 서버 문장을 그대로 보여 주면 됩니다.
+- 활동 집계와 Risk 수치가 서로 맞지 않으면 서버가 500을 반환합니다. 기존 AI 실패 처리와 같으며 지표 카드는 계속 보여 주세요.

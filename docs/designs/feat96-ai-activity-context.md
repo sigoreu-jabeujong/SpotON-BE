@@ -219,3 +219,17 @@ Risk 캐시 적중 시에도 활동은 캐시 없이 재계산된다. Risk 캐�
 - 2,000자 상한 여유는 추정치이며 테스트로 확정해야 한다.
 - 빈 license_no 행의 실제 존재 여부(활동 500 유발)는 DB 제약으로 확인하지 못했다. 실제 DB 검증 때 0건인지 확인을 권장한다.
 - 실제 DB·Docker 사용 가능 여부와 1000m 조합 준비 시간은 미확인이다.
+
+## 13. 구현 기록
+
+- 커밋: 설계 `b6d49a7` → 문맥 추출·교차 검증 `e38b76d` → 서버 문장·응답 ID `10fd00d` → prompt v6 `ccc438d` → 통합 보강 `83cd21c` → 문서(이 커밋).
+- 설계 대비 조정
+  - `InterpretSourcedItem`은 필드 재정의 대신 `InterpretItem`을 상속하지 않는 별도 모델로 분리했다. pydantic 필드의 list 타입 축소 재정의가 mypy에서 불변성 충돌을 일으키기 때문이다. 필드·OpenAPI 이름은 그대로다.
+  - 테스트 헬퍼 `use_risk`는 Risk 응답에서 활동 응답을 파생한다(competitor=영업 수 합, closure 분모-영업 수=최근 폐업, 같은 배치/분류/cohort_size). 테스트마다 Risk 수치가 달라도 불변식이 유지된다.
+  - `RiskInterpretContext`에 활동 그룹 순서=문맥 sub_category, space=반경을 강제하는 validator를 추가했다.
+  - 연초·윤년 기간 문자열 전용 단위 테스트는 두지 않았다. 기간 문자열의 숫자는 문맥 문자열에서 그대로 허용되므로 날짜와 무관하다. 대신 통합 테스트의 과거 월(2020-02 → `(2019-02-28, 2020-02-29]`)로 확인한다.
+- 검증
+  - 일반 pytest 1,373 passed / 203 deselected(기준선 1,347 + 신규 26), ruff check·format, mypy 154 files 통과. 경고는 기존 Starlette 1건.
+  - 최장 조합 서버 문장 1,169자(활동 315자), 큰 수 쉼표·0건 그룹 3개 포함 verifier 통과.
+  - 격리 PostGIS 통합(test_ai_context 11건 수집, test_analysis_flow ID 단언 갱신)은 이 PC에 Docker가 없어 로컬 미실행. CI에서 확인한다.
+  - 실제 개발 DB 읽기 전용 검증: **미실행(DB 연결 대기)**. §10에 따라 PR 생성 전 수행한다.
