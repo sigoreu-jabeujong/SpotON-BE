@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.cache import CacheResources
 from app.core.config import Settings
+from app.models.brand import MAPPING_RULE
 from app.schemas.common import ApiResponse
 from app.schemas.risk import Risk, RiskQuery
 
@@ -59,7 +60,12 @@ def risk_key(
     if token is None:
         return None
     return cache.key(
-        "risk", token, query_parts(query), str(settings.risk_boundary_version_id), rule
+        "risk",
+        token,
+        query_parts(query),
+        str(settings.risk_boundary_version_id),
+        rule,
+        MAPPING_RULE,
     )
 
 

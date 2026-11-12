@@ -27,6 +27,12 @@ from app.schemas.ai_context import (
     RiskInterpretContext,
 )
 from app.schemas.common import ApiResponse, ErrorCode
+from app.schemas.franchise import (
+    CLASSIFICATION,
+    ESTIMATE_LIMIT,
+    BrandDataVersion,
+    EstimatedClassification,
+)
 from app.schemas.risk import Risk, RiskIndicator, RiskQuery
 from app.services.market_activity import year_cutoff
 from app.services.risk import RULE_VERSION, get_risk, percent, period
@@ -48,6 +54,7 @@ class _DataVersion(ContextModel):
     trdar_quarter: None
     map_version: str | None
     rule_version: Literal["risk-reference-fixed-anniversary-v1"]
+    brand_mapping: BrandDataVersion | None = None
 
     @model_validator(mode="after")
     def unique_batches(self) -> "_DataVersion":
@@ -176,14 +183,19 @@ def _extract_context(
         raise ValueError("risk result date mismatch")
     if target != effective_date(reference, MIN_OPEN_DATE, query.as_of):
         raise ValueError("risk query date mismatch")
+    classification = CLASSIFICATION.validate_json(
+        json.dumps(meta.get("franchise_classification"), allow_nan=False)
+    )
     method = ContextMethodology()
+    if isinstance(classification, EstimatedClassification):
+        method = ContextMethodology(limitations=(*method.limitations, ESTIMATE_LIMIT))
     expected_meta = {
         "collected_at": None,
         "collection_reason": "source_completion_time_not_recorded",
         "source": ["R5", "R6"],
         "denominator": None,
         "event_basis": "validated_license_dates",
-        "franchise_classification": {"status": "pending", "reason": "brand_mapping_blocked"},
+        "franchise_classification": classification.model_dump(mode="json"),
         "minimum_samples": {"closure": 10, "survival": 5},
         **method.model_dump(
             mode="json", exclude={"minimum_closure_sample", "minimum_survival_sample"}
@@ -196,7 +208,21 @@ def _extract_context(
     )
     if version.rule_version != RULE_VERSION:
         raise ValueError("risk rule mismatch")
+    estimated = isinstance(classification, EstimatedClassification)
+    reference_year = (
+        classification.reference_year
+        if isinstance(classification, EstimatedClassification)
+        else None
+    )
+    if estimated != (version.brand_mapping is not None):
+        raise ValueError("brand classification version mismatch")
+    if estimated and (
+        version.brand_mapping is None or version.brand_mapping.reference_year != reference_year
+    ):
+        raise ValueError("brand reference year mismatch")
     version_json = version.model_dump(mode="json")
+    if version.brand_mapping is None:
+        version_json.pop("brand_mapping")
     version_json["stores_batch_ids"] = sorted(str(v) for v in version.stores_batch_ids)
     version_hash = hashlib.sha256(serialize_context(version_json).encode("utf-8")).hexdigest()
     sub = query.sub_category or (
@@ -214,6 +240,9 @@ def _extract_context(
         ),
         as_of=target,
         data_updated_at=reference,
+        franchise_classification=classification.status,
+        franchise_reference_year=reference_year,
+        franchise_basis="reference_catalog_name_match" if estimated else None,
         indicators=tuple(_indicator(r, target, query.radius) for r in data.indicators),
         flags=ContextFlags(
             insufficient_sample=data.flags.insufficient_sample, missing=tuple(data.flags.missing)

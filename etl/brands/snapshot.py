@@ -87,6 +87,10 @@ def save_snapshot(path: Path, catalog: Catalog) -> None:
 
 
 def load_snapshot(path: Path) -> Catalog:
+    return read_snapshot(path)[0]
+
+
+def read_snapshot(path: Path) -> tuple[Catalog, str]:
     path = external_path(path)
     with path.open("rb") as stream:
         raw = stream.read(MAX_SNAPSHOT_BYTES + 1)
@@ -138,4 +142,4 @@ def load_snapshot(path: Path) -> Catalog:
         or value["content_sha256"] != catalog.content_sha256
     ):
         fail("snapshot_content")
-    return catalog
+    return catalog, digest(raw)

@@ -4,6 +4,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.franchise import FranchiseBasis
 from app.schemas.nearby import NearbyQuery
 from app.schemas.stores import PeriodReason, StoreSource, StoreStatus, SubCategory
 
@@ -27,6 +28,9 @@ class SnapshotStore(BaseModel):
     operating_period_status: Literal["fact", "no_data"]
     operating_period_reason: PeriodReason | None
     current_status: StoreStatus
+    franchise: Literal["franchise", "independent", "unknown"] = "unknown"
+    franchise_basis: FranchiseBasis | None = None
+    franchise_reference_year: int | None = Field(default=None, ge=2000, le=9999)
 
     @model_validator(mode="after")
     def consistent_period(self) -> Self:

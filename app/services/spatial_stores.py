@@ -15,6 +15,13 @@ from app.models import Store
 from app.models.store import STORE_GEOGRAPHY
 from app.schemas.common import ApiMeta, ErrorCode
 from app.schemas.nearby import NearbyMarker, NearbyQuery
+from app.services.franchise import (
+    brand_context,
+    effective_franchise,
+    enrich_meta,
+    franchise_fields,
+    franchise_filter,
+)
 from app.services.store_cohort import current_provenance, provenance_meta, temporal_cohort
 from app.services.store_history import operating_period
 
@@ -55,14 +62,7 @@ def attribute_filters(query: NearbyQuery) -> list[ColumnElement[bool]]:
     area = area_ranges[query.area]
     if query.include_unknown_area:
         area = or_(area, Store.area_m2.is_(None), Store.area_m2 == 0)
-    franchise: ColumnElement[bool] = (
-        Store.is_franchise.is_not(None)
-        if query.franchise == "all"
-        else Store.is_franchise.is_(query.franchise == "franchise")
-    )
-    if query.include_unknown_franchise:
-        franchise = or_(franchise, Store.is_franchise.is_(None))
-    return [area, franchise]
+    return [area, franchise_filter(query)]
 
 
 @dataclass(frozen=True)
@@ -94,7 +94,13 @@ def get_spatial_stores(session: Session, query: NearbyQuery, *, rule_version: st
     geography = cast(Store.geom, STORE_GEOGRAPHY)
     distance = func.ST_Distance(geography, point, True)
     rows = session.execute(
-        select(Store, distance.label("distance_m"), func.ST_Y(Store.geom), func.ST_X(Store.geom))
+        select(
+            Store,
+            distance.label("distance_m"),
+            func.ST_Y(Store.geom),
+            func.ST_X(Store.geom),
+            effective_franchise(),
+        )
         .where(
             *conditions,
             Store.geom.is_not(None),
@@ -105,7 +111,8 @@ def get_spatial_stores(session: Session, query: NearbyQuery, *, rule_version: st
     ).all()
     batch_map = {batch.batch_id: batch for batch in batches}
     markers: list[NearbyMarker] = []
-    for store, raw_distance, lat, lng in rows:
+    branding = brand_context(session)
+    for store, raw_distance, lat, lng, franchise_value in rows:
         months, reason, opened, closed = operating_period(
             store, reference, batch_map.get(store.batch_id)
         )
@@ -129,9 +136,7 @@ def get_spatial_stores(session: Session, query: NearbyQuery, *, rule_version: st
                     "current_status": store.status
                     if store.status in {"open", "closed"}
                     else "other",
-                    "franchise": "unknown"
-                    if store.is_franchise is None
-                    else ("franchise" if store.is_franchise else "independent"),
+                    **franchise_fields(store, franchise_value, branding),
                     "area_m2": float(store.area_m2)
                     if store.area_m2 is not None and store.area_m2 > 0
                     else None,
@@ -146,4 +151,5 @@ def get_spatial_stores(session: Session, query: NearbyQuery, *, rule_version: st
         "excluded_no_coord_scope": NO_COORD_SCOPE,
         "operating_period_basis": "latest_data",
     }
+    enrich_meta(meta, branding)
     return SpatialStores(as_of=target, markers=markers, excluded_no_coord=excluded, meta=meta)

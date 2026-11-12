@@ -138,8 +138,15 @@ def build_catalog(prepared: PreparedRiskInterpretation) -> InterpretationCatalog
     missing.extend(
         [
             MissingItem(
-                text="상권 적용 시점과 가맹 분류는 미확인 상태입니다.",
-                reason="classification_unverified",
+                text=(
+                    "상권 적용 시점은 미확인이고 가맹 분류는 기준년도 목록과 상호의 "
+                    "일치에 따른 추정입니다. 실제 가맹계약이나 과거 소속을 증명하지 않습니다."
+                    if c.franchise_classification == "estimate"
+                    else "상권 적용 시점과 가맹 분류는 미확인 상태입니다."
+                ),
+                reason="franchise_name_match_estimate"
+                if c.franchise_classification == "estimate"
+                else "classification_unverified",
             ),
             MissingItem(
                 text="전체 수집 완료일이 확인되지 않았으며 검증일을 수집일로 대체하지 않습니다.",

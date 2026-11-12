@@ -118,7 +118,8 @@ def test_invalid_query_never_opens_db_or_echoes_input(params, caplog) -> None:
 def test_history_empty_and_openapi_with_database_unconfigured() -> None:
     app = create_app(Settings(_env_file=None))
     session = MagicMock()
-    session.scalars.side_effect = [[], []]
+    session.scalars.return_value = []
+    session.execute.return_value.one_or_none.return_value = None
     app.dependency_overrides[validated_session] = lambda: session
     with TestClient(app) as client:
         response = client.get("/api/stores/history", params={"building_key": KEY})

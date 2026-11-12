@@ -177,7 +177,7 @@ def test_real_cli_readonly_no_insert_write_replay_and_safe_output(
     monkeypatch.setattr(cli, "create_db_engine", lambda _: e)
 
     def check(c):
-        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0010"
+        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0011"
 
     monkeypatch.setattr(cli, "check_local_database", check)
     original = cli.inspect_import

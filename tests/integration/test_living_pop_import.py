@@ -147,7 +147,7 @@ def test_real_cli_read_only_plan_safe_output_and_timeout(source, monkeypatch, ca
     monkeypatch.setattr(cli, "create_db_engine", lambda _: e)
 
     def check(c):
-        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0010"
+        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0011"
         states.append(
             (
                 c.scalar(text("SHOW transaction_read_only")),

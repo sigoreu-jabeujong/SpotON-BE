@@ -1,5 +1,12 @@
 """Spot:ON 데이터 모델."""
 
+from app.models.brand import (
+    Brand,
+    BrandCatalogVersion,
+    BrandMappingRun,
+    BrandMappingState,
+    StoreBrandMatch,
+)
 from app.models.living_population import (
     LivingGrid,
     LivingGridVersion,
@@ -14,6 +21,11 @@ from app.models.store import Store
 from app.models.store_import_batch import StoreImportBatch
 
 __all__ = [
+    "Brand",
+    "BrandCatalogVersion",
+    "BrandMappingRun",
+    "BrandMappingState",
+    "StoreBrandMatch",
     "MarketChange",
     "MarketChangeVersion",
     "LivingGrid",

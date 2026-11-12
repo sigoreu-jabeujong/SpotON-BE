@@ -30,7 +30,7 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 
 ## 상권 경계 적재 기준 (BE #47)
 
-현재 migration head는 0010다. `python -m etl.market_areas`는 공식 OA-15560 ZIP의 hash·첨부 수정일을 받아 기본 읽기 전용 dry-run, --write일 때 일반 로컬 앱 계정에서 원자적으로 적재한다. EPSG:5181 원본의 무효 도형만 linework 보정 후 유효 MULTIPOLYGON 4326·GIST로 저장한다. 원본 면적·hole/multipart·타입/5자리 구 코드를 보존하고 버전/데이터 digest를 검증한다. 같은 원본/규칙 재실행은 불변 버전을 재사용하며 기존 버전 수정/삭제·최신 자동 선택은 하지 않는다. source_file_date는 첨부 수정일이고 boundary_as_of는 미확인 null이다. 후속 통계 분기와의 코드/경계 호환 전에는 지표에 자동 적용하지 않는다. 현재 1,650행·6개 보정, 기존 stores 689,440건이다. 상세는 docs/designs/feat47-market-areas-import.md를 따른다. API 응답/FE 변경은 없다.
+현재 migration head는 0011이다. `python -m etl.market_areas`는 공식 OA-15560 ZIP의 hash·첨부 수정일을 받아 기본 읽기 전용 dry-run, --write일 때 일반 로컬 앱 계정에서 원자적으로 적재한다. EPSG:5181 원본의 무효 도형만 linework 보정 후 유효 MULTIPOLYGON 4326·GIST로 저장한다. 원본 면적·hole/multipart·타입/5자리 구 코드를 보존하고 버전/데이터 digest를 검증한다. 같은 원본/규칙 재실행은 불변 버전을 재사용하며 기존 버전 수정/삭제·최신 자동 선택은 하지 않는다. source_file_date는 첨부 수정일이고 boundary_as_of는 미확인 null이다. 후속 통계 분기와의 코드/경계 호환 전에는 지표에 자동 적용하지 않는다. 현재 1,650행·6개 보정, 기존 stores 689,440건이다. 상세는 docs/designs/feat47-market-areas-import.md를 따른다. API 응답/FE 변경은 없다.
 
 ## 공식 점포 통계 적재 기준 (BE #49)
 
@@ -138,13 +138,13 @@ docs/be-system-audit.md에 기능별 상태와 실제/격리·모의/정적/기�
 
 ## 출처 연결 배치 조회 인덱스 (BE #82)
 
-현재 head0010의 ix_stores_provenance는 batch_id/source/category/sub_category 네 컬럼 key와 deleted_at IS NULL AND category_review_flag IS NOT TRUE predicate를 사용한다. SQL/공개 계약·3초 제한·고아 검증은 유지한다. ETL head guard도0010이다. 일반1166·격리155·mypy136files, 실제14테이블전체행/geometry hash·기존인덱스/응답보존과 실제동시15건200을 확인했다. 실제dev에는 인덱스 migration만 적용했고 데이터DML은 하지 않았다.
+현재 head0011의 ix_stores_provenance는 batch_id/source/category/sub_category 네 컬럼 key와 deleted_at IS NULL AND category_review_flag IS NOT TRUE predicate를 사용한다. SQL/공개 계약·3초 제한·고아 검증은 유지한다. ETL head guard도0011이다. 일반1166·격리155·mypy136files, 실제14테이블전체행/geometry hash·기존인덱스/응답보존과 실제동시15건200을 확인했다. 실제dev에는 인덱스 migration만 적용했고 데이터DML은 하지 않았다.
 
 대량 인허가 재적재 직후는 미해결 경계다. 읽기를 중지하고 커밋 후 별도autocommit 세션의 수동 VACUUM(ANALYZE)stores·API확인 후 읽기를 재개한다. ETL과원자적이지 않고 자동VACUUM/자동조회차단은 없다. 생성/삭제 DDL의 잠금 영향을 고려하며 rollback은 읽기 트래픽이 없는 시점에 실행한다. 상세 Claude2회 검토·측정/쓰기비용·최종판단은 docs/designs/feat82-store-provenance-index.md, 절차는 README를 따른다. FE수정·API응답변경은 없다.
 
 ## 생활인구 원자료 상태 진단 (BE #84)
 
-`python -m etl.living_pop.quality --population-version UUID --lat FLOAT --lng FLOAT --radius 300|500|1000`은 명시 관측 버전의 내부 진단이다. 기존 로컬 대상/head0010 검사·READ ONLY REPEATABLE READ·SQL3초를 재사용한다. 원천 EPSG5179 중심 속성→4326 geography 타원체 거리≤반경을 선택 기준으로 쓰며 polygon 중심으로 바꾸지 않는다.
+`python -m etl.living_pop.quality --population-version UUID --lat FLOAT --lng FLOAT --radius 300|500|1000`은 명시 관측 버전의 내부 진단이다. 기존 로컬 대상/head0011 검사·READ ONLY REPEATABLE READ·SQL3초를 재사용한다. 원천 EPSG5179 중심 속성→4326 geography 타원체 거리≤반경을 선택 기준으로 쓰며 polygon 중심으로 바꾸지 않는다.
 
 72개 원천·시각 칸의 행/격자 수만 센다. 실제0·비공개·결측·행 부재·복수행정동을 구분하고 미좌표는 버전 전역 통계로 분리한다. 인구 합산/완전성/제공률을 선언하지 않는다. 저장 건수/metadata 대조는 full hash/의미 검증이 아니다. 출력에 좌표·격자/행정동 코드·인구 값·접속정보를 넣지 않는다. 공개 API/FE·pending·모델/migration·환경설정은 변경하지 않았다.
 
@@ -152,7 +152,7 @@ docs/be-system-audit.md에 기능별 상태와 실제/격리·모의/정적/기�
 
 ## 인허가 적재 후 로컬 유지보수 (BE #86)
 
-`python -m etl.localdata.maintenance` 기본은 READ ONLY REPEATABLE READ의 로컬 대상/head0010/public.stores 소유권 점검이다. `--execute`만 별도 AUTOCOMMIT의 VACUUM(ANALYZE, TRUNCATE FALSE)public.stores와 새 읽기 전용 current_provenance 검증을 수행한다. 소유자 정확 일치·public 이름 해석을 요구하고 명령/잠금60초/5초, 후속 SQL 제한은 기존 설정을 쓴다. 전용 engine은 finally dispose를 시도한다.
+`python -m etl.localdata.maintenance` 기본은 READ ONLY REPEATABLE READ의 로컬 대상/head0011/public.stores 소유권 점검이다. `--execute`만 별도 AUTOCOMMIT의 VACUUM(ANALYZE, TRUNCATE FALSE)public.stores와 새 읽기 전용 current_provenance 검증을 수행한다. 소유자 정확 일치·public 이름 해석을 요구하고 명령/잠금60초/5초, 후속 SQL 제한은 기존 설정을 쓴다. 전용 engine은 finally dispose를 시도한다.
 
 vacuum_completed는 정상 반환 확인, provenance_checked는 후속 출처 검사 성공이다. 실패·인터럽트·해제 실패도 고정 코드/도달 단계/이미 완료한 상태만 출력한다. stdout JSON1건·성공0/실패1/Ctrl+C130, help는0이다. 명령 실패는 앞선 ETL 커밋·물리 정리를 되돌리지 않는다. 오래된 snapshot·동시 소유권/DDL·부하에 따른 회복을 보장하지 않는다. 읽기/writer/migration 중지와 실제API확인·재개는 운영자 책임이며 자동 제어/자동 일정/자동 ETL은 없다.
 
@@ -170,6 +170,14 @@ load_input·read_source 성공 뒤, 설정/DB 전에 etl_quality를1회 남긴�
 
 2026-11-12 사용자 승인 화면 및 실제 인증 성공으로 이전 브랜드 승인 대기 서술을 대체한다. `python -m etl.brands --year YYYY --output <workspace밖새파일> [--compare-local]` 또는 `--snapshot <기존파일> [--compare-local]`를 제공한다. 순차1000행·재시도/연도대체없음·페이지/전체/연도/브랜드·본부복합키 중복 검증과 첫페이지 재확인, 원문base64/hash·규칙v2·이번 실제수집완료시각을 저장한다. 브랜드번호단독반복행은보존하고모든관련이름을repeated_brand_id로격리한다. 대표자/사업자/법인명은 정규화·대조·로그/LLM에 사용하지 않는다. 기존파일 덮기/원문출력 금지이며 offline은키/HTTP 없이 재검증한다.
 
-기본은DB미접속이며 compare-local만 로컬대상/head0010·READ ONLY RR·SQL60초/잠금5초·지원업종/삭제/검토대기 조건의 전체 점포를 스트리밍 대조한다. 정확 이름 후보도 프랜차이즈 판정이 아니며 과거 가맹계약으로 소급하지 않는다. 현재 stores/모델/migration/공개API/AI/pending/캐시/FE 계약은 유지한다. 후속 판정 활성화 때 브랜드/근거모델·외부가맹필드보존/무효화·API메타/AI검증/프롬프트/캐시·BE측FE요청을 함께 설계한다. #57은 종료하지 않는다.
+기본은DB미접속이며 compare-local만 로컬대상/head0011·READ ONLY RR·SQL60초/잠금5초·지원업종/삭제/검토대기 조건의 전체 점포를 스트리밍 대조한다. 정확 이름 후보도 프랜차이즈 판정이 아니며 과거 가맹계약으로 소급하지 않는다. 현재 stores/모델/migration/공개API/AI/pending/캐시/FE 계약은 유지한다. 후속 판정 활성화 때 브랜드/근거모델·외부가맹필드보존/무효화·API메타/AI검증/프롬프트/캐시·BE측FE요청을 함께 설계한다. #57은 종료하지 않는다.
 
 brands 로그의 save_snapshot은파일저장완료이고 DBpersist와다르다. snapshot저장후대조실패는파일을보존하고exit1·snapshot_saved=true/고정stage를반환한다. source원문은공급자의단일시점일관성까지보장하지않는다. 사용법/예외/상한은 README, 실제 Claude검토/최종판단·검증은 docs/designs/feat57-brand-catalog-foundation.md를 따른다.
+
+## 현재 브랜드 분류 기준 (BE-21 / #57 최종 단계)
+
+현재 head는0011이다. 브랜드 원천 기반 단계(PR92)의 pending·후속 표기는 당시 상태이며 현재는 이 절을 우선한다. `python -m etl.brands.apply --snapshot PATH`는 읽기 전용 계획, `--write`만 새5테이블에 원자 적용한다. stores 원문/is_franchise/brand_id/updated_at·기존14테이블은 변경하지 않는다. 현재 run의 점포 원문 이름·업종이 일치할 때만 catalog_exact_name 추정이며 외부 분류값이 우선한다. 별도 근거 없는 independent는 생성하지 않는다.
+
+history/nearby/snapshot 행에 franchise_basis·franchise_reference_year를 추가하고 snapshot에는 franchise도 추가한다. history/nearby/snapshot/activity/risk의 meta.franchise_classification은 적용 전 pending, 적용 후 estimate·reference_year=2025·coverage=partial이다. 계약·과거 가맹·공식 업종 대응은 검증된 것으로 표시하지 않는다. 프랜차이즈 전용 조회는 franchise=franchise와 include_unknown_franchise=false를 함께 전달한다. 기존 인허가 collected_at=null·공식 미확인 수치 pending을 유지한다.
+
+Risk/AI는 동일 근거/버전과 추정 한계를 사용한다. prompt는 risk-interpret-v5이며 내부 UUID/hash는 LLM에 보내지 않는다. cache는 매핑 규칙과 catalog/run/input 지문을 구분한다. 상세는 [최종 설계 9절](docs/designs/feat57-franchise-classification.md), FE 담당자 요청은 [브랜드 분류 연동 보고서](docs/fe-franchise-classification-api-request.md)를 따른다. FE CLAUDE.md·타입·화면 반영은 담당자 대기이며 직접 변경하지 않는다.

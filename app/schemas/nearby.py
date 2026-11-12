@@ -4,6 +4,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.franchise import FranchiseBasis
 from app.schemas.store_filters import CategoryFilters
 from app.schemas.stores import PeriodReason, StoreSource, StoreStatus, SubCategory
 
@@ -92,6 +93,8 @@ class NearbyMarker(BaseModel):
     operating_period_reason: PeriodReason | None
     current_status: StoreStatus
     franchise: Literal["franchise", "independent", "unknown"]
+    franchise_basis: FranchiseBasis | None = None
+    franchise_reference_year: int | None = Field(default=None, ge=2000, le=9999)
     area_m2: float | None = Field(ge=0, allow_inf_nan=False)
 
     @model_validator(mode="after")

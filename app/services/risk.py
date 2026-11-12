@@ -16,6 +16,7 @@ from app.db.dependencies import NO_STORE
 from app.models import Store
 from app.models.store import STORE_GEOGRAPHY
 from app.schemas.common import ApiMeta, ApiResponse, ErrorCode
+from app.schemas.franchise import ESTIMATE_LIMIT, EstimatedClassification
 from app.schemas.market_judgement import BoundaryQuery
 from app.schemas.risk import (
     MIN_CLOSURE_SAMPLE,
@@ -30,6 +31,7 @@ from app.schemas.risk import (
     RiskQuery,
     RiskQueryEcho,
 )
+from app.services.franchise import brand_context, enrich_meta
 from app.services.market_activity import year_cutoff
 from app.services.market_judgement import judge_market
 from app.services.risk_cache import load_risk, risk_key, save_risk, snapshot_token
@@ -323,7 +325,6 @@ def _get_risk(session: Session, query: RiskQuery, settings: Settings) -> ApiResp
         "rounding": "decimal_half_up_1dp",
         "minimum_samples": {"closure": MIN_CLOSURE_SAMPLE, "survival": MIN_SURVIVAL_SAMPLE},
         "seoul_comparison_basis": "same_filters_located_license_records",
-        "franchise_classification": {"status": "pending", "reason": "brand_mapping_blocked"},
         "limitations": [
             "license_records_not_business_outcomes",
             "ownership_transfer_not_separated",
@@ -331,4 +332,10 @@ def _get_risk(session: Session, query: RiskQuery, settings: Settings) -> ApiResp
             "coordinate_selection_bias_possible",
         ],
     }
+    branding = brand_context(session)
+    enrich_meta(meta, branding)
+    if isinstance(branding.classification, EstimatedClassification):
+        limitations = meta["limitations"]
+        if isinstance(limitations, list):
+            limitations.append(ESTIMATE_LIMIT)
     return ApiResponse(data=data, meta=meta)
