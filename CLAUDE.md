@@ -102,13 +102,15 @@ LLM 이벤트는 실제 client.post 시도1·HTTP200 관측 여부다. 앱 재�
 
 설계·Claude 실제 MD 검토·Codex 최종 점검은 docs/designs/feat72-private-operation-logs.md를 따른다. 앱 파일/DB 로그 저장·외부수집기를 추가하지 않아 **원본30일 보관/삭제는 미구현**이며 배포 시 수집기 설정/삭제 검증이 필요하다. 제3자/프록시/커스텀 로그 전체 정화도 완료로 주장하지 않는다. 공개 API/응답·DB모델/migration·의존성·.env/Docker·FE 변경은 없다. 이번 작업에는 FE 보고서/CLAUDE.md 동기화가 필요하지 않다.
 
-## 공식 상담·지원기관 공통 링크 (BE #70)
+## 공식 상담·지원기관 링크와 관할 연락처 (BE #70·#88)
 
-`GET /api/support-links`는 원본 API v1.2 §4-9/D-08의 공식4기관을 서버 설정 불변 tuple에서 반환한다. 선택 sigungu는 기존 서울25개 정확한 구명, category는 cafe/restaurant이며 생략만 기본값이다. 잘못된/빈/중복/미지원 입력은422 INVALID_PARAM이다. 현재 일반 안내만 있어 지역/업종별 우선 정렬은 미적용이며 네 곳 전체·고정 순서를 유지하고 meta.prioritization={status:not_applied,reason:general_links_only}로 표시한다. 원본의 맞춤 정렬까지 완료로 주장하지 않는다.
+`GET /api/support-links`는 구 생략 시 기존4개·순서를 유지한다. sigungu는 서울25개 정확한 구명, category는 cafe/restaurant이며 생략만 기본값이다. 잘못된/빈/중복/미지원 입력은422 INVALID_PARAM이다. 구를 지정하면 중기부 제2026-576호 PDF25쪽 별표2의8센터 중 관할1개를 앞에 추가해5개다. 마포/은평/서대문은서대문센터, 성북/동대문은중부센터 등 현재 공고 매핑을 사용한다. 누락/중복 설정이면500/no-store다. category는 목록·순서에 영향이 없으며 업종/자격/모집 추천을 하지 않는다.
 
-항목8필드/id/type/region은 기존 FE mock과 맞춘다. URL은 정확한 공식 HTTPS 호스트와 원문 문자열을 보존하며 임의 URL/입력을 이어붙이거나 호출하지 않는다. last_checked=실제 수동 확인 KST 날짜(현재2026-11-12), data_updated_at=확인일 최대값이다. 오늘/배포일/공고 공표일로 바꾸지 않는다. 설정/확인일 변경 시 카탈로그 버전을 올리고 분기1회 수동 점검한다. 당시 HTTP200은 이후 접속/자격/신청 성공 보장이 아니다.
+meta.link_catalog_version=support-links-v2는 생략/지정 모두 적용한다. 생략 prioritization={status:not_applied,reason:general_links_only}, 지정은 {status:applied,reason:district_contact_first,category_applied:false}다. applied는 구 관할 연락처 순서만 뜻한다. 지정일 때만 district_contact_source={url,published_on:2026-10-01,checked_on:2026-11-12,page:25,table:annex_2}다. 연락처 링크는 센터/예약 페이지가 아닌 공고 본문이며 description에 관할/전화/첨부25쪽 안내를 둔다.
 
-요청 중 DB/LLM/외부 HTTP 미사용·인증키 불필요, R17/is_demo=false·no-store·안전한422/500을 따른다. DB 모델/migration·의존성·Docker/.env·FE 저장소는 바꾸지 않는다. 설계/Claude 검토/검증은 docs/designs/feat70-support-links-api.md, FE 코드/CLAUDE.md 연결 요청은 docs/fe-support-links-api-request.md를 따른다. FE 반영은 담당자 대기다. 상담 기능은 AI PR69와 별개로 개발해 PR71로 병합했다. 두 API의 등록과 계약을 함께 유지한다.
+항목8필드와 기존4개id/type/region을 유지하며 관할id는semas-seoul-{센터}, type=consulting/region=서울이다. 기존 공식4호스트 외에는 support_sources.MSS_NOTICE_URL 정확 문자열1개만 허용한다. mss호스트 전체/변형 query를 허용하거나 사용자 입력을 URL에 붙이지 않는다. last_checked=KST 수동 확인일(2026-11-12), data_updated_at=반환 링크 확인일 최대값이다. 오늘/배포일/공고일로 바꾸지 않는다. 설정/확인일 변경 시 버전을 올리고 분기1회 후속 공고/관할을 수동 점검한다. 당시 HTTP200은 이후 접속/자격/신청 성공 보장이 아니다.
+
+요청 중 DB/LLM/외부 HTTP 미사용·인증키 불필요, R17/is_demo=false·no-store·안전한422/500을 따른다. DB 모델/migration·의존성·Docker/.env·FE 저장소는 바꾸지 않는다. 최신 설계/Claude 실제검토/검증은 docs/designs/feat88-district-support-contacts.md, 초기4기관은 docs/designs/feat70-support-links-api.md, FE 코드/CLAUDE.md 연결 요청은 docs/fe-support-links-api-request.md다. FE 반영은 담당자 대기다. FE는 배열을4개로 자르거나 첫id를 고정하지 않고 반환 순서·선택meta를 보존해야 한다.
 
 ## Risk·AI 메모리 캐시 (BE #74)
 

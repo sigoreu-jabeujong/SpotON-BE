@@ -118,10 +118,11 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 
 `GET /api/support-links`는 서울시 자영업지원센터·소상공인아카데미·서울시 소상공인 지원사업 안내·소상공인24의 공식 시작 주소를 반환합니다. DB나 인증키 없이 동작하며 요청 중 외부 사이트를 호출하지 않습니다. 선택 sigungu는 서울25개 구의 정확한 구명, category는 cafe/restaurant입니다. 생략은 허용하며 빈 값·중복·미지원 인자는422 INVALID_PARAM입니다.
 
-- 현재 네 기관은 공통 안내로 항상 같은 순서/전체 목록을 반환합니다. 지역·업종별 우선 정렬은 후속이며 `meta.prioritization.status=not_applied`입니다. 맞춤 선정이나 현재 지원 자격/모집 상태로 해석하지 않습니다.
+- 구 생략(category만 지정 포함)은 기존 공통4개·순서와 `prioritization={status:not_applied,reason:general_links_only}`를 유지합니다. 구를 지정하면 공식 공고의 관할 센터 연락처1개를 맨 앞에 추가해5개를 반환하며 `prioritization={status:applied,reason:district_contact_first,category_applied:false}`입니다. 업종/자격/모집 추천은 하지 않습니다.
+- 지역 연락처는 중기부 제2026-576호(2026-10-01) 첨부 PDF25쪽 별표2의8센터/25구 기준입니다. 예를 들어 마포구는 서울서대문센터입니다. 연결은 개별 지점/예약이 아닌 공식 공고 페이지이며 전화·관할·표 위치는 description에서 확인합니다. 카탈로그 버전은 구 생략/지정 모두support-links-v2입니다.
 - 항목은 id/org_name/title/description/url/type/region/last_checked입니다. last_checked는 KST 수동 확인일(현재2026-11-12)이며 요청 날짜로 바꾸지 않습니다. data_updated_at도 목록 확인일 기준이며 개별 공고 공표일·마감일이 아닙니다.
-- 서버 설정 목록은 분기1회 수동 점검합니다. 확인 당시 네 곳의 HTTP200·페이지 제목을 대조했지만 이후 접속/신청 성공을 보장하지 않습니다. 실제 모집/자격은 공식 사이트에서 확인합니다.
-- 출처는 R17, is_demo=false이며 정상/422/서버500은 공통 외피·no-store입니다. [설계·Claude 검토·검증](docs/designs/feat70-support-links-api.md), [FE 연결 요청](docs/fe-support-links-api-request.md)을 확인합니다. FE 코드/CLAUDE.md 반영은 담당자 대기입니다.
+- 서버 설정 목록은 분기1회 수동 점검하며 후속 공고의 관할 변경도 확인합니다. 구 지정의 district_contact_source는 공식 URL·공고일·확인일·표 위치이며 공고일과 카탈로그 확인일을 구분합니다. 요청 시 페이지를 호출하지 않으며 이후 접속/신청 성공을 보장하지 않습니다.
+- 출처는 R17, is_demo=false이며 정상/422/서버500은 공통 외피·no-store입니다. 기존4호스트 외에는 검토한 중기부 공고 URL1개만 정확히 허용하며 사용자 입력을 URL에 붙이지 않습니다. [지역 안내 설계·Claude 검토·검증](docs/designs/feat88-district-support-contacts.md), [FE 연결 요청](docs/fe-support-links-api-request.md)을 확인합니다. FE 코드/CLAUDE.md 반영은 담당자 대기입니다.
 
 ## AI LLM client
 
