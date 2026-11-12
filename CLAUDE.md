@@ -139,3 +139,11 @@ docs/be-system-audit.md에 기능별 상태와 실제/격리·모의/정적/기�
 현재 head0010의 ix_stores_provenance는 batch_id/source/category/sub_category 네 컬럼 key와 deleted_at IS NULL AND category_review_flag IS NOT TRUE predicate를 사용한다. SQL/공개 계약·3초 제한·고아 검증은 유지한다. ETL head guard도0010이다. 일반1166·격리155·mypy136files, 실제14테이블전체행/geometry hash·기존인덱스/응답보존과 실제동시15건200을 확인했다. 실제dev에는 인덱스 migration만 적용했고 데이터DML은 하지 않았다.
 
 대량 인허가 재적재 직후는 미해결 경계다. 읽기를 중지하고 커밋 후 별도autocommit 세션의 수동 VACUUM(ANALYZE)stores·API확인 후 읽기를 재개한다. ETL과원자적이지 않고 자동VACUUM/자동조회차단은 없다. 생성/삭제 DDL의 잠금 영향을 고려하며 rollback은 읽기 트래픽이 없는 시점에 실행한다. 상세 Claude2회 검토·측정/쓰기비용·최종판단은 docs/designs/feat82-store-provenance-index.md, 절차는 README를 따른다. FE수정·API응답변경은 없다.
+
+## 생활인구 원자료 상태 진단 (BE #84)
+
+`python -m etl.living_pop.quality --population-version UUID --lat FLOAT --lng FLOAT --radius 300|500|1000`은 명시 관측 버전의 내부 진단이다. 기존 로컬 대상/head0010 검사·READ ONLY REPEATABLE READ·SQL3초를 재사용한다. 원천 EPSG5179 중심 속성→4326 geography 타원체 거리≤반경을 선택 기준으로 쓰며 polygon 중심으로 바꾸지 않는다.
+
+72개 원천·시각 칸의 행/격자 수만 센다. 실제0·비공개·결측·행 부재·복수행정동을 구분하고 미좌표는 버전 전역 통계로 분리한다. 인구 합산/완전성/제공률을 선언하지 않는다. 저장 건수/metadata 대조는 full hash/의미 검증이 아니다. 출력에 좌표·격자/행정동 코드·인구 값·접속정보를 넣지 않는다. 공개 API/FE·pending·모델/migration·환경설정은 변경하지 않았다.
+
+일반1196·격리173·ruff/format·mypy138files와 실제9개 반경 진단을 통과했다. 별도 QA로 생활인구4테이블 전체 행/공간 hash·건수와 head0010 보존을 확인했다. 설계·Claude 실제 MD 검토·Codex 최종 결정과 한계는 docs/designs/feat84-population-quality-diagnostic.md를 따른다. 브랜드 #57은 승인 답변 전까지 보류한다.
