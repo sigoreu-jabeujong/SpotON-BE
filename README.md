@@ -90,7 +90,7 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 
 - 최근 12개월은 `(T의 전년 같은 월일, T]`이며 존재하지 않는 2월 29일만 28일로 제한합니다. 폐업 기록도 보존해 구간 내 개업·폐업을 각각 셉니다. 연도별 추이는 각 연도 1월 1일~T와 같은 월일까지의 YTD 비교이고 실제 사건이 없는 연도를 임의로 만들지 않습니다.
 - 세부 업종별 점포 수와 평균은 T에 영업 중인 인허가 기록 기준입니다. 평균은 T까지 경과한 달력 완료 개월의 평균을 버린 정수이며, 점포 수 0이면 null입니다. 최신 데이터 기준 전체 영업기간·폐업 점포의 수명·생존율과 구분합니다.
-- 브랜드 매핑은 승인 대기로 `meta.franchise_classification.status=pending`입니다. 가맹 미확인을 개인 매장으로 바꾸지 않으며 분류 조건으로 생긴 0건을 실제 점포 부재로 단정하지 않습니다.
+- 브랜드 API 승인·실제 인증은 확인했습니다. 원천 수집·정확 상호 후보 대조와 실제 판정 적용을 구분하며, 현재 `meta.franchise_classification.status=pending`을 유지합니다. 가맹 미확인을 개인 매장으로 바꾸지 않으며 분류 조건으로 생긴 0건을 실제 점포 부재로 단정하지 않습니다.
 - 매출·생활인구 수치는 이번 릴리스에서 항상 null입니다. 요청한 항목만 `flags.missing`과 `meta.optional_data`에 pending 및 사유를 반환합니다. 적재된 원천이 있어도 집계 기간·경계/격자 적용 시점 검증 전에는 수치를 활성화하지 않습니다.
 - `meta.as_of`는 실제 적용일 T, `data_updated_at`은 전역 인허가 갱신일 D, `collected_at`은 현재 null입니다. `denominator=null`, `cohort_size`는 폐업을 포함한 집계 대상 수이며 좌표 미확보 수는 서울 전체 동일 비공간 조건 기준입니다. no-store·읽기 전용 일관된 트랜잭션을 사용합니다.
 
@@ -188,6 +188,26 @@ AI 해석 프롬프트는 `app/ai/prompts/risk_interpret/`의 `system.md`(시스
 
 `app/ai/verified.py`의 `generate_verified()`는 검증에 실패하면 같은 요청으로 1회 다시 생성하고, 또 실패하면 `AiVerifyFailedError`(→ `AI_VERIFY_FAILED` 503)를 냅니다. 공급자 오류 `LlmError`는 그대로 전달되어 `AI_UNAVAILABLE`과 섞이지 않습니다. 호출자의 Pydantic 모델과 선택적 의미 검증/남은 예산 검사를 지원하며, AI API는 요청별 enum·전체 비교 후보 포함·중복 검사를 추가합니다. 상세 내용은 [작업 29 설계서](docs/designs/feat29-ai-verifier.md)와 #68 설계를 확인합니다.
 
+## 공정위 브랜드 원천 수집·읽기 전용 대조 (BE-21 1단계)
+
+[공정위 브랜드 목록 API](https://www.data.go.kr/data/15125467/openapi.do)의 기준년도별 전체 목록을 수집하고 기존 점포와 정확한 정규화 상호를 대조합니다. 이 단계는 **후보 조사**이며 가맹계약·브랜드 소속·과거 소속 판정이 아닙니다. 실제 `is_franchise/brand_id`와 공개 API·AI의 pending 상태를 유지합니다.
+
+```powershell
+uv run --locked --extra dev python -m etl.brands --year 2025 --output "<저장소 밖 새 snapshot.json>"
+uv run --locked --extra dev python -m etl.brands --snapshot "<기존 snapshot.json>" --compare-local
+```
+
+- 수집은 로컬 `DATA_GO_KR_SERVICE_KEY`가 필요합니다. 명시한 연도를 순차1000행씩 수집하며 자동 연도 대체·재시도는 없습니다. 결과코드·전체/페이지 건수·브랜드/본부 관리번호 복합키 중복·연도를 검사하고 마지막에 첫 페이지를 다시 대조합니다. 중간 페이지의 동시 변경까지 검출하거나 공급자의 단일 시점 일관성을 증명하는 것은 아닙니다.
+- 원문 body/base64·페이지SHA256·정규화content hash·규칙·실제 전체 수집 완료 UTC시각을 BE/FE 저장소 밖 파일에 보존합니다. 관리번호는 영문 접두사·구분자·앞0를 보존하는 문자열입니다. snapshot의 완료시각은 기존 인허가 collected_at이나 원천 갱신일과 별개입니다. 기존 파일을 덮지 않으며 실패/Ctrl+C 때 이번 생성 파일만 정리합니다. 강제 종료나 정리 실패 시 불완전 파일이 남을 수 있고 replay에서 거절합니다.
+- snapshot에는 공식 공개 대표자·사업자정보가 포함될 수 있습니다. 로컬에만 보관하고 커밋·로그·Claude/LLM 입력으로 보내지 않습니다. 정규화/후보 대조는 브랜드명·관리번호·기준년도·업종만 사용하며 법인명·대표자·사업자번호는 사용하지 않습니다. stdout/stderr는 고정 건수·상태·해시만 출력합니다.
+- replay는 원문·페이지·hash·규칙·완료시각을 다시 검증하며 키/HTTP가 필요 없습니다. 최대100,000행·페이지5MiB·raw 합계140MiB·base64 포함 snapshot200MiB입니다. hash 일치는 공급기관 서명이나 원천 의미 검증이 아닙니다.
+- `--compare-local`만 기존 로컬대상/head0010 검사를 통과한 DB에 READ ONLY REPEATABLE READ·SQL60초/잠금5초로 연결합니다. 지원5업종·삭제없음·검토대기아님 점포를 스트리밍 대조하며 좌표/날짜/영업 상태로 한정하지 않습니다. 현재 지도/과거 조회의 실제 점포 수와 다른 모집단입니다. 점포 상호는 외부로 전송하지 않습니다.
+- NFKC/casefold/공백만 정규화하고 지점명·구두점 제거/부분일치/유사도 판정은 하지 않습니다. 전체 업종 목록 기준 유일한 외식 이름이 정확히 일치해도 `exact_name_candidate`일 뿐입니다. 기존판정보존→상호결측→약한이름→반복브랜드번호→동명모호→비외식→정확후보→미일치 순의 배타건수이며 합계는 total과 같습니다. 3자 미만/숫자만인 이름은 약한 이름입니다. 미일치를 비프랜차이즈 수로 사용하지 않습니다.
+- 원천은 `(기준년,브랜드관리번호,가맹본부관리번호)` 행으로 보존합니다. 같은 브랜드번호·다른 본부의 모든 행을 유지하며 그 번호와 관련된 이름은 유일해도 `repeated_brand_id`로 격리합니다. 원천 반복의 이유나 브랜드 소속은 추론하지 않습니다. v2 content hash/첫페이지 재확인은 복합키 순서이며 이전 규칙 snapshot은 거절합니다. `rows`는 원천 행 수, `unique_brand_ids/repeated_brand_ids/repeated_rows`는 번호·행 건수입니다. `ambiguous_names`는 정규화명이 복수 원천 행에 있는 그룹 수로 반복번호 행도 포함할 수 있습니다. 이 요약들을 합산해 실제 브랜드/점포 수로 쓰지 않습니다.
+- 성공0·고정 JSON오류1·인자오류2·Ctrl+C130입니다. `request_count`는 성공한 실행의 HTTP시도 수이며 replay는0입니다. 원천 파일 저장 뒤 DB 대조가 실패하면 exit1·`snapshot_saved=true`·stage=prepare를 출력하고 파일을 보존하므로 `--snapshot`으로 재실행합니다. `snapshot_saved`는 이번 실행이 완료 파일을 저장했는지 뜻합니다.
+
+실제 판정 모델/근거·별칭·원천 재적재 보존/무효화·API/AI/캐시/FE 표시를 함께 반영하는 다음 단계까지 #57을 유지합니다. [설계·Claude 검토·검증](docs/designs/feat57-brand-catalog-foundation.md)을 따릅니다.
+
 ## 개인정보 없는 운영 로그
 
 API·ETL·LLM의 추가 운영 이벤트는 한 줄 JSON으로 **stderr**에 기록합니다. 기존 ETL stdout 결과와 API 본문·헤더는 유지합니다. 원문을 마스킹해 저장하는 방식 대신 고정 필드·허용 건수만 선택하며 주소·좌표·건물/층호·헤더/IP·원자료·프롬프트/출력·키를 기록하지 않습니다.
@@ -195,12 +215,13 @@ API·ETL·LLM의 추가 운영 이벤트는 한 줄 JSON으로 **stderr**에 기
 | event | 의미 |
 |---|---|
 | api_request | UTC 시각·고정 경로·실제 전송 상태·처리시간·서버 UUID·ASGI 응답 완료 여부 |
-| etl_run / etl_stage | 6개 실행기의 독립 run_id·단계 시작/완료/실패·시간, 완료 결과의 허용 건수/품질 집계·실제 batch/version UUID |
+| etl_run / etl_stage | 7개 실행기의 독립 run_id·단계 시작/완료/실패·시간, 완료 결과의 허용 건수/품질 집계·실제 batch/version UUID |
 | etl_quality | 생활인구 입력 읽기 후 원천일 전체의 비공개·빈 셀·실제0·미좌표 행 수와 복수행정동 그룹/행 수. 인구값·코드 없음 |
 | llm_http_attempt | 애플리케이션의 client.post 시도1건과 HTTP200 관측 여부. 파싱/최종 AI 검증 성공률과 다름 |
 
 - 모르는 경로는 `unmatched`이며 원문 URL/query를 복사하지 않습니다. 헤더 관측 전 실패/취소는 status_code=null, 전송 중 중단은 response_complete=false입니다. 완료는 ASGI 전송 기준이며 사용자의 다운로드 완료 보장이 아닙니다. request_id는 입력 헤더를 무시하고 새로 만들며 응답 헤더에 추가하지 않습니다.
 - ETL은 실제 commit context 종료 후 persist 완료를 기록하고 원래 오류·취소를 전파합니다. run_id와 DB batch_id/version_id를 구분하며 없는 건수를0으로 채우지 않습니다. quality_flags는 겹칠 수 있으므로 합산해 최종 제외 수로 표시하지 않습니다. 인허가 CLI의 잘못된 인자는 입력을 echo하지 않는 고정 메시지·exit2입니다.
+- brands의 파일 저장 완료는 별도 `save_snapshot` 단계입니다. DB commit을 뜻하는 persist와 구분하며 대조는 prepare의 읽기 전용 동작입니다. 원천 저장 후 대조 실패 시 save_snapshot completed 뒤 import failed가 올 수 있습니다.
 - 생활인구 `etl_quality`의 completed는 입력 요약 성공이며 적재 완료·원천 완전성·공간 검증 성공이 아닙니다. DB 준비 전에 기록하므로 이후 import failed가 올 수 있습니다. 6개 카운터 중 하나라도 유효하지 않거나 계산에 실패하면 counts 없이 failed/quality_summary_unavailable을 기록합니다. 로그 실패는 적재 성공 조건이 아니며 원래 실행 결과를 바꾸지 않습니다.
 - 쓰기/직렬화/ID 생성 실패는 주 작업을 바꾸지 않으며 로그 오류를 다시 출력하지 않습니다. 한 줄은 최대4096 UTF-8 bytes이고 프로세스 내 thread 쓰기를 묶습니다. 느린 stderr의 지연이나 여러 프로세스 간 원자성은 보장하지 않습니다. 기존 서버 시작/오류 메시지는 같은 stderr에 있을 수 있으므로 수집기는 event가 있는 JSON을 구분합니다.
 - 기본 앱에서 uvicorn.access를 비활성화하고 기존 `--no-access-log` 실행 안내도 유지합니다. 별도 로그 재설정·reload/gunicorn·프록시/제3자 DEBUG 전체의 개인정보 처리를 대신하지 않습니다.
