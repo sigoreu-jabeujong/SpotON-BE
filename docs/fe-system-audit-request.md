@@ -3,8 +3,8 @@
 - 작성일: 2026-11-12
 - 대상: FE 담당자
 - 관련 BE 이슈: [#78](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/78)
-- 검사 기준: FE develop `21ec13fb59d1eed456c150b2c99300d9fe755d5a`, BE develop `45a6bbf` 이후
-- 상태: **실제 브라우저 재현 완료 / FE 수정·검증 요청**
+- 검사 기준: FE develop `21ec13fb59d1eed456c150b2c99300d9fe755d5a`, BE develop `1f81baf` / 2026-11-12 재점검
+- 상태: **5종 재현·Claude Code 소스 대조 완료 / FE 수정·검증 요청 / 지도 도메인 설정 대기**
 
 FE lint·build는 통과했지만 실제 BE 연결과 유효한 결측 응답에서 아래 문제가 재현됐습니다. BE의 공개 응답은 기존 요청서 계약에 맞으며, FE에 맞추기 위해 서버 검증을 완화하거나 결측을 가짜 값으로 채우지 않습니다. FE 파일·설정·문서·이슈·PR은 이번 작업에서 직접 수정하지 않았습니다.
 
@@ -23,7 +23,11 @@ FE lint·build는 통과했지만 실제 BE 연결과 유효한 결측 응답에
 - `src/types/risk.ts`의 `RiskInterpretRequest`를 원래 요청용 조건의 `{query: ...}`로 변경해 주세요.
 - `src/components/summary/ai/AiInterpretation.tsx`에서 전달받은 원래 `params`로 본문을 만들고 market/indicators/flags/context는 보내지 마세요.
 - `radius`와 `as_of=YYYY-MM`을 사용합니다. building_key·floor_unit·주소·화면 수치는 보내지 않습니다.
+- 최신 조회의 `as_of`는 원래 요청처럼 생략합니다. 응답 날짜를 자르거나 오늘 월을 임의로 넣지 않습니다.
+- Risk GET에 `include`가 있으면 AI 본문에도 동일하게 넣습니다. 공통 `params`에 Risk용 include가 자동으로 들어 있다고 가정하지 않습니다. 현재 SummaryPage와 ActivitySection은 `useRisk(params)`로 include를 생략합니다.
+- 현재 FE의 단일 `include_unknown`도 지원합니다. 이를 유지하거나 두 개의 개별 unknown 플래그로 바꾸되 두 형식을 혼용하지 않습니다.
 - AI 실패 후 자동 재호출을 반복하지 않고 지표는 유지합니다. 현재응답조립시각/generated_at·현재요청재생성/regenerated 의미도 기존 요청서를 따릅니다.
+- query-only 전환 후 `INVALID_PARAM`은 입력 형식 오류입니다. 기존의 '서버 지표 값 불일치' 주석과 지표 재조회 처리를 함께 검토하고 AI 재시도는 사용자 버튼으로 진행합니다.
 
 ```json
 {
@@ -46,6 +50,7 @@ FE lint·build는 통과했지만 실제 BE 연결과 유효한 결측 응답에
 **실제 BE와 브라우저에서 재현했습니다.** 서버 `market.status=unverified` 응답에 종합 화면이 `서울시 지정 상권 밖 주소예요`를 표시합니다. 현재 `MarketCard.tsx`가 in_market이 아닌 모든 상태를 outside로 처리하고, `ReportPage.tsx`도 같은 분기를 사용합니다.
 
 - `src/types/risk.ts`에 현행 `unverified` 상태와 nullable 필드를 반영해 주세요.
+- 같은 파일의 `MetricIndicator.source`도 실제 응답의 `string[]`에 맞춰 주세요. 현재 MetaLine은 배열도 받으므로 이 항목은 새 화면 장애로 분류하지 않고 타입 보완 요청으로 둡니다.
 - `src/components/summary/MarketCard.tsx`와 `src/pages/ReportPage.tsx`에 미확인 분기를 명시해 주세요.
 - 미확인을 상권 안/밖으로 확정하지 말고 상권 적용 기준을 확인 중임을 표시해 주세요.
 - spatial_candidate가 있더라도 파일 형상 후보이며 공식 적용이 확정된 상권명/수치로 대입하지 않습니다.
@@ -75,6 +80,7 @@ FE lint·build는 통과했지만 실제 BE 연결과 유효한 결측 응답에
 
 - 상호·날짜·기간 결측은 `정보 없음`으로 표시하고 기간은 operating_period_reason을 함께 보여 주세요.
 - 폐업일이 없는 폐업 기록의 상태는 유지하고 `폐업일 정보 없음`을 구분해 주세요.
+- `missing_close_date`는 폐업일 정보 없음, `invalid_close_date`는 폐업일 확인 필요, `invalid_date_order`는 개업일·폐업일 확인 필요로 구분해 주세요. null만 보고 원자료가 없었다고 확정하지 않습니다.
 - operating_months=0/fact는0개월, null/no_data는 미산정으로 구분합니다.
 - 표와 출력용 진단서에 같은 기준을 적용해 주세요.
 
@@ -83,6 +89,8 @@ FE lint·build는 통과했지만 실제 BE 연결과 유효한 결측 응답에
 ## 6. 지도 검증 선행 설정
 
 최초 검사 시 FE의 `VITE_KAKAO_JS_KEY`가 설정되지 않아 지도 SDK·마커/정보창·표 선택 연동 검증을 중단하고 사용자에게 로컬 설정을 요청했습니다. BE의 KAKAO_REST_API_KEY와 다른 JavaScript 키입니다. 키/카카오 지도 사용 설정·허용 웹 도메인이 준비된 뒤 검증해야 하며, 표/API 성공으로 지도 성공을 대신하지 않습니다.
+
+재점검에서는 JavaScript 키가 BE 로컬 환경 파일에 있음을 확인하고 테스트용 Vite 자식 프로세스에만 전달했습니다. FE 환경 파일은 바꾸지 않았습니다. Chrome SDK 로딩은 `KAKAO_SCRIPT_ERROR`·`net::ERR_BLOCKED_BY_ORB`, SDK 직접 HTTPS 응답은401·도메인 제한이었습니다. 해당 키의 JavaScript SDK 도메인에 `http://localhost:5173` 등록을 요청하고 실제 지도 검증은 중단했습니다. 설정 경로는 [카카오 공식 지도 가이드](https://apis.map.kakao.com/web/guide/)를 따릅니다. 키 존재만으로 지도 연동 완료라고 표시하지 않습니다.
 
 나머지 화면 검사는 지도 SDK 성공을 전제로 하지 않았습니다. 설정 이후 후속 결과는 [전체 기능 감사 보고서](be-system-audit.md)의 지도 항목을 확인합니다. 이번 문서에 실제 키나 개인 주소는 기록하지 않습니다.
 
@@ -99,3 +107,75 @@ FE lint·build는 통과했지만 실제 BE 연결과 유효한 결측 응답에
 - [ ] FE 타입/계약/결정문서/CLAUDE.md 반영 후 BE에 변경 내용 전달
 
 BE API/응답 형식은 이번 감사에서 바꾸지 않았습니다. FE 담당자가 수정하고 검증 결과를 전달하기 전에는 위 항목을 완료로 표시하지 않습니다.
+
+## BE 재점검과 FE 작업 순서
+
+재점검 중 이력·주변·활동·Risk의 동시 조회가 약3초 뒤500으로 실패한 실행도 있었습니다. 이후 순차5건·동시10건은200이었으며 초기 실패의 SQLSTATE를 확보하지 못했습니다. FE만의 오류로 일괄 처리하지 않고 BE #78에서 별도로 추적합니다. 출처 쿼리의 임시 최적화안은 과거 배치 누적 시 회귀 위험 때문에 적용하지 않았습니다. 상세 근거는 [재점검 설계·Claude 검토·최종 판단](designs/feat78-audit-recheck.md)에 남겼습니다.
+
+FE 작업 순서는 ① HistoryStore 타입·공통 정렬/결측 표시·복합 key로 이력/진단서 복구 ② unverified 분기·Risk 타입 ③ 원래 query-only AI 본문·include 일치·오류 처리 ④ 지도 도메인 설정 후 마커/표/반경 ⑤ 실제 검색부터 진단서까지 연결 검증입니다. 수정 완료 전에는 본문의 체크리스트를 체크하지 않습니다. 이번 재점검에서 실제 LLM은 추가 호출하지 않았습니다.
+
+## 부록. Claude Code 재검토 근거와 한계 (#78)
+
+### 검토 방법과 한계
+
+- BE 소스만 Read로 대조했습니다: `app/routers/interpret.py`, `app/schemas/interpret.py`, `app/schemas/risk.py`, `app/schemas/nearby.py`, `app/schemas/store_filters.py`, `app/schemas/stores.py`, `app/services/store_history.py`, `app/services/spatial_stores.py`, `app/services/store_cohort.py`, `app/models/store.py`.
+- **FE 소스(`SpotON-FE/src/...`)는 이번 도구 권한이 BE 작업 폴더로 제한되어 읽지 못했습니다.** 1~5번의 FE 현재 동작(응답 query 전송, outside 분기, `localeCompare`, license_no 단독 key, 빈칸 표시)은 Codex의 브라우저 재현과 기술 내용을 근거로 하며, Claude Code가 FE 코드에서 직접 확인한 것은 아닙니다.
+- 브라우저·DB·네트워크는 사용하지 않았습니다. 아래 판단은 BE 계약 측면의 타당성입니다.
+
+### 요청별 판단
+
+| # | 판단 | BE 근거와 보완 |
+|---|---|---|
+| 1 query-only | 타당 | `InterpretRequest`는 `query: RiskQuery` 하나만 받고 `extra="forbid"`입니다. 응답 echo(`RiskQueryEcho`)의 `radius_m`·date형 `as_of`·`filters`는 입력 모델에 없으므로 그대로 보내면 422입니다. |
+| 2 unverified | 타당, 영향은 요청서보다 큼 | 현재 `RiskMarket.status`는 `Literal["unverified"]` 하나뿐이고 market_code/name/type은 항상 null입니다. 따라서 in_market이 아니면 outside로 처리하는 분기라면 **모든 Risk 응답**이 상권 밖으로 표시됩니다. `spatial_candidate`는 nullable이며 null이면 reason=`boundary_version_not_selected`입니다. |
+| 3 open_date null | 타당 | `HistoryStore.open_date`는 `date \| None`입니다. 원본 null뿐 아니라 1960년 이전·미래·기준일 이후 개업일도 `operating_period`에서 null로 바뀌므로 실제 데이터에서도 발생할 수 있습니다. BE 정렬은 (null 마지막, 날짜, source, license_no)라 FE의 최근순+미확인 마지막+source·license_no 동률 고정과 일관됩니다. |
+| 4 복합 key | 타당 | DB에 `UNIQUE(source, license_no)`가 있어 `${source}:${license_no}`는 한 응답 안에서 유일합니다. source는 콜론이 없는 고정 값이라 구분자 충돌도 없습니다. nearby 마커도 source를 반환하므로 같은 원칙이 맞습니다. |
+| 5 nullable 상호·기간 | 타당, 문구 보완 필요 | 스키마가 `operating_months=null ⇔ no_data+reason`, `값 ⇔ fact+reason null`을 강제하므로 0개월과 미산정을 구분할 수 있습니다. |
+
+### 입력 형식 보완 (1번)
+
+- 원래 Risk GET 조건을 그대로 옮깁니다: `lat`/`lng`(JSON number), `category`, `radius`(300·500·1000), 선택 `sub_category`·`area`·`franchise`·`include`(market_change/day_night_ratio)·unknown 플래그.
+- `as_of`는 원래 요청에 있을 때만 `YYYY-MM`으로 보냅니다. 생략(또는 null)은 최신 기준이므로, 최신 조회에 오늘 월을 임의로 넣지 않습니다.
+- `include_unknown`과 `include_unknown_area`/`include_unknown_franchise`를 함께 보내면 422입니다. 한쪽 형식만 사용합니다.
+- 내부 RiskQuery는 문자열 radius·boolean을 일부 허용하지만 이를 전제로 하지 말고 숫자·불리언 JSON 타입으로 보냅니다.
+
+### 결측 표시 보완 (5번)
+
+- `store_status=closed`이고 `close_date=null`이어도 원인이 항상 "정보 없음"은 아닙니다. `operating_period_reason`이 `missing_close_date`(원본 없음), `invalid_close_date`(원본 있으나 무효), `invalid_date_order`(개폐업 순서 오류로 BE가 폐업일을 비움)일 수 있습니다. `폐업일 정보 없음`은 `missing_close_date`에만 쓰고, 나머지는 사유 문구로 표시해 주세요.
+- 개업일 null도 `missing_open_date`/`invalid_open_date`를 구분합니다.
+
+### 범위 밖 확인
+
+- nearby `NearbyMarker.open_date`는 non-null이므로 nearby에는 open_date null 정렬 수정이 필요하지 않습니다. 다만 `close_date`·`operating_months`·`name`·`area_m2`는 nullable입니다.
+- 이번 재검토에서 BE 계약 변경이 필요한 항목은 찾지 못했습니다.
+
+## 부록 2. FE 소스 2차 대조 결과 (#78)
+
+위 부록의 "FE 소스를 읽지 못했다"는 1차 한계 기록은 그대로 유지합니다. 2차에서는 FE 읽기 경로가 추가되어 아래 파일을 **Read로만** 확인했고, FE는 수정하지 않았습니다. 브라우저·DB·네트워크는 사용하지 않았으므로 실행 결과가 아닌 정적 소스 대조입니다.
+
+- 읽은 FE 파일: `src/components/summary/ai/AiInterpretation.tsx`, `src/components/summary/MarketCard.tsx`, `src/components/analysis/history/HistoryTable.tsx`, `src/pages/ReportPage.tsx`, `src/types/risk.ts`, `src/types/stores.ts`, `src/api/params.ts`, `src/utils/format.ts`
+- 함께 대조한 BE 파일: `app/schemas/interpret.py`, `app/schemas/risk.py`
+- 읽지 않은 파일: `src/types/api.ts`(CommonQueryParams), `src/hooks/useRisk*`, `app/schemas/nearby.py` 등. 이에 의존하는 판단은 "미확인"으로 표시했습니다.
+
+### 요청별 소스 대조
+
+| # | 요청서 주장 | FE 소스 확인 | 판단 |
+|---|---|---|---|
+| 1 | 응답 query와 market/indicators/flags/context를 본문에 넣음 | `AiInterpretation.tsx:61-68`이 `risk.query`·market·indicators·flags와 캐시 기반 `context`를 보냄. `risk.ts:86-92,109-116`의 `RiskQuery`/`RiskInterpretRequest`도 `radius_m`·`as_of`·`filters` 응답형 | 일치 |
+| 2 | in_market이 아니면 outside | `MarketCard.tsx:11,35-37`, `ReportPage.tsx:360-362` 모두 그렇게 분기. `risk.ts:9`의 `MarketStatus`에 `unverified`가 없고 `reason`·`spatial_candidate` 필드도 없음 | 일치. BE는 항상 `unverified`라 현재 **모든** 응답이 상권 밖으로 표시됨(1차 부록 판단 확인) |
+| 3 | `b.open_date.localeCompare` TypeError | `HistoryTable.tsx:36`, `ReportPage.tsx:181`에 그대로 있음. 둘 다 `[...stores]`로 복사 후 정렬하므로 캐시 변경 문제는 현재 없음 | 일치. `stores.ts:24-36` `HistoryStore`는 open_date·name·operating_months non-null, source·기간상태·사유 필드 없음 |
+| 4 | license_no 단독 key | `HistoryTable.tsx:59`, `ReportPage.tsx:212` 모두 `key={s.license_no}`. `stores.ts`의 History/Nearby/Snapshot 타입에 `source` 필드가 없음 | 일치. 요청서의 "중복 제거" 코드는 읽은 파일에서 찾지 못함(다른 파일 여부 미확인) |
+| 5 | null 상호·기간이 빈칸 | `formatOperatingMonths(null)`·`formatDate(null)`이 null 반환(`format.ts:11-27`) → 표/진단서 셀이 빈칸. `s.name`도 그대로 출력 | 일치. 추가로 close_date null은 표에서 `—`+sr-only `noCloseDate`, 진단서에서 `—`라서 영업 중과 폐업일 결측이 구분되지 않음 |
+
+### 틀린 주장·누락
+
+- 1~5번에서 FE 소스와 **틀린 주장은 찾지 못했습니다.**
+- 누락①(1번 예시): 요청서 예시는 `include_unknown_area`/`include_unknown_franchise`를 쓰지만 현재 FE `params.ts:26`은 단일 `include_unknown`만 만듭니다. 1차 부록 기준 BE는 한쪽 형식만 쓰면 수용하므로 `params`를 그대로 옮기는 것이 가장 작은 변경입니다. 두 형식을 섞어 보내지 않도록 명시가 필요합니다.
+- 누락②(1번 include): `RiskQuery`는 `include`(market_change/day_night_ratio)를 받고, `Risk.complete_result`는 지표 목록이 include에 따라 달라집니다. `params.ts`의 공통 파라미터에는 Risk용 `include`가 없습니다. Risk GET이 include를 붙인다면 AI 본문에도 같은 값을 넣어야 지표 화면과 AI 재계산 조건이 일치합니다(Risk GET 훅은 읽지 않아 미확인).
+- 누락③(1번 형식): `params.sub_category`는 배열, `as_of`는 `query.asOf`가 있을 때만 들어갑니다(`params.ts:28-31`) — 생략=최신 규칙과 일치. 다만 배열 sub_category와 `area`/`franchise`의 JSON 값 형식을 BE `NearbyQuery`(strict)가 받는지는 이번에 `nearby.py`를 읽지 않아 미확인이며, FE 수정 후 실제 200 확인이 필요합니다. `undefined` 값은 JSON 직렬화에서 빠지지만 `null`을 넣지는 않도록 해야 합니다.
+- 누락④(1번 실패 처리): `onError`가 `INVALID_PARAM`이면 `onReloadIndicators()`를 호출합니다(`AiInterpretation.tsx:74-78`). AI 자동 재호출은 아니지만, query-only 전환 후 422는 "지표 값 불일치"가 아니라 입력 형식 오류이므로 지표 재조회 트리거가 의미에 맞지 않습니다. 재시도는 사용자 버튼으로만 두는 것을 권장합니다.
+- 누락⑤(타입): `risk.ts:50` `MetricIndicator.source`는 `string`이지만 BE `RiskIndicator.source`는 `list[str]`입니다. 이번 요청 범위 밖이나 타입 반영 시 함께 맞추기를 권장합니다. `verification.passed !== false` 판정은 BE `Literal[True]`와 충돌하지 않습니다.
+
+### 결론
+
+FE 소스 2차 대조로 1~5번 요청의 근거가 모두 실제 코드에서 확인됐습니다. query-only 본문은 기존 `params`(단일 `include_unknown`)를 그대로 쓰면 되고, Risk GET과 같은 `include`를 포함해야 합니다. 이 결론은 정적 대조이며, 200 응답과 화면 표시는 FE 수정 후 실제 연결로 확인해야 합니다.
