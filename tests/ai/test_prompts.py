@@ -168,3 +168,12 @@ def test_activity_rule_keeps_average_and_counts_as_reference_only():
     assert "점포 수명·생존 기간·영업 성과로 바꾸지 않고" in rule
     assert "성장·쇠퇴를 판정하지 않습니다" in rule
     assert system.index("14. ") < system.index("## 답변 형식")
+
+
+def test_history_rule_keeps_building_records_descriptive_only():
+    system = load_prompt_bundle().system_instruction
+    rule = next(line for line in system.splitlines() if line.startswith("15. "))
+    assert "analysis.history" in rule and "same_spot_comparable" in rule
+    assert "폐업 원인, 앞으로의 결과로 해석하지 않고" in rule
+    assert "null이면 건물 이력을 언급하지 않습니다" in rule
+    assert system.index("14. ") < system.index("15. ") < system.index("## 답변 형식")
