@@ -601,3 +601,11 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - 신규 단위30·통합18을 포함해 **일반1,196·격리PostGIS173**, ruff/format290파일·mypy138파일 통과. 경계r±0.01m·중심속성/도형 불일치·다른 관측/격자버전·누락건수·READ ONLY 쓰기거절·오류/해제를 확인했다. 기존 Starlette 경고1건만 있다.
 - 실제2026-11-07 명시 버전·공개 고정점3곳×반경3개 총9회는1.672~1.906초였다. SQL3초는 유지하며 SLA로 주장하지 않는다. 별도 QA에서 생활인구4테이블 전체 행/공간 hash·건수와 head0010 보존을 확인했다. 실제 DML/DDL/재적재/VACUUM·실LLM 호출은 없다.
 - README/BE CLAUDE에 사용법·의미 한계를 반영했다. 공개API/FE계약·pending·모델/migration·실제.env/Docker·사용자 분석문서는 수정하지 않는다. #57·#78 및 생활인구 의미/시점 검증·로그 보관/추천정렬 등 후속은 남아 있다. CI/CodeQL 후 develop 정상 Squash하며 실제 병합 상태는 #84 연결 PR을 따른다.
+
+## 35. 인허가 적재 후 로컬 유지보수 실행기 (#86)
+
+- 생활인구 공식 근거·브랜드 승인 대기와 독립적으로 #78/PR83의 수동 유지보수 절차를 실행기로 제공한다. [Codex 설계·Claude 실제 MD 검토·최종 판단](designs/feat86-localdata-maintenance.md) 후 `python -m etl.localdata.maintenance [--execute]`를 구현했다. 기본은 READ ONLY 대상/head/public.stores 소유권 점검이며 --execute만 별도 AUTOCOMMIT VACUUM(ANALYZE,TRUNCATE FALSE)·후속 읽기 전용 출처 검증이다.
+- 기존 API/SQL·SQL별3초 기본값·ETL 트랜잭션·모델/migration·의존성/설정은 유지한다. 실행 단계만 명령60초·잠금5초를 쓴다. VACUUM 명령 정상 반환/후속 검사 통과를 분리해 실패·인터럽트·해제 오류에서 이미 완료한 상태를 보존하고 원문 없이 고정 오류를 출력한다. ETL 커밋·물리 정리를 되돌리지 않는다.
+- 신규 단위17·통합7과 전체 **일반1,213·격리PostGIS180**, ruff/format294파일·mypy139파일 통과. 실제 격리 UPDATE/VACUUM·AUTOCOMMIT/세션설정·READ ONLY RR/3초·visibility 회복·비소유자/shadow schema·잠금/고아 실패·행/head/인덱스 보존을 확인했다. 기존 Starlette 경고1건 유지다.
+- 실제dev는 dry-run만 수행하고 READ ONLY RR/3초를 계측했다. 별도 QA에서 stores/배치2테이블 전체행·공간 포함 hash/건수·head0010·인덱스·수동 유지보수/DML 카운터 보존을 확인했다. 실제 VACUUM/DML/DDL·원천/실LLM 호출0, FE/.env/Docker·사용자 미추적 분석문서 변경0이다.
+- README/BE CLAUDE에 사용법·실패/비원자성을 기록했다. 운영자의 읽기/writer/migration 중지·실제API확인 후 재개는 계속 필요하다. 자동 조회 차단/재개·자동 일정·대량 성능/SLA를 구현/검증한 것은 아니다. #78·#57/생활인구 공식 근거·조건부 지표·로그30일보관·맞춤지원 등 후속을 유지한다. 지정PR·CI/CodeQL 후 develop 정상 Squash하며 실제 상태는 #86 연결 PR을 따른다.

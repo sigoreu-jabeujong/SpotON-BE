@@ -147,3 +147,11 @@ docs/be-system-audit.md에 기능별 상태와 실제/격리·모의/정적/기�
 72개 원천·시각 칸의 행/격자 수만 센다. 실제0·비공개·결측·행 부재·복수행정동을 구분하고 미좌표는 버전 전역 통계로 분리한다. 인구 합산/완전성/제공률을 선언하지 않는다. 저장 건수/metadata 대조는 full hash/의미 검증이 아니다. 출력에 좌표·격자/행정동 코드·인구 값·접속정보를 넣지 않는다. 공개 API/FE·pending·모델/migration·환경설정은 변경하지 않았다.
 
 일반1196·격리173·ruff/format·mypy138files와 실제9개 반경 진단을 통과했다. 별도 QA로 생활인구4테이블 전체 행/공간 hash·건수와 head0010 보존을 확인했다. 설계·Claude 실제 MD 검토·Codex 최종 결정과 한계는 docs/designs/feat84-population-quality-diagnostic.md를 따른다. 브랜드 #57은 승인 답변 전까지 보류한다.
+
+## 인허가 적재 후 로컬 유지보수 (BE #86)
+
+`python -m etl.localdata.maintenance` 기본은 READ ONLY REPEATABLE READ의 로컬 대상/head0010/public.stores 소유권 점검이다. `--execute`만 별도 AUTOCOMMIT의 VACUUM(ANALYZE, TRUNCATE FALSE)public.stores와 새 읽기 전용 current_provenance 검증을 수행한다. 소유자 정확 일치·public 이름 해석을 요구하고 명령/잠금60초/5초, 후속 SQL 제한은 기존 설정을 쓴다. 전용 engine은 finally dispose를 시도한다.
+
+vacuum_completed는 정상 반환 확인, provenance_checked는 후속 출처 검사 성공이다. 실패·인터럽트·해제 실패도 고정 코드/도달 단계/이미 완료한 상태만 출력한다. stdout JSON1건·성공0/실패1/Ctrl+C130, help는0이다. 명령 실패는 앞선 ETL 커밋·물리 정리를 되돌리지 않는다. 오래된 snapshot·동시 소유권/DDL·부하에 따른 회복을 보장하지 않는다. 읽기/writer/migration 중지와 실제API확인·재개는 운영자 책임이며 자동 제어/자동 일정/자동 ETL은 없다.
+
+설계·Claude 실제 MD 검토·Codex 결정과 실행 검증은 docs/designs/feat86-localdata-maintenance.md, 사용법은 README를 따른다. 실제dev에는 dry-run만 수행하고 VACUUM/DML/DDL은 하지 않는다. 공개 API/FE·SQL/기본 설정·ETL 트랜잭션·모델/migration·.env/Docker를 변경하지 않는다. #57 승인·생활인구 공식 근거 및 #78의 자동 조회 보호 등 후속은 유지한다.

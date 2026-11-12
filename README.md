@@ -493,6 +493,22 @@ VACUUM은 ETL·migration의 트랜잭션 블록 안에서 실행할 수 없습�
 
 합성 전체 재적재 직후에는 이 인덱스에서도 배치조회가3초를 초과했습니다. 현재 정적 데이터의 읽기 개선과 이 제한을 구분하며, 비용·회귀·실제 검증은 [설계 및 Claude 검토](docs/designs/feat82-store-provenance-index.md)를 확인합니다.
 
+로컬 개발 DB는 다음 전용 명령으로 대상·소유권 점검과 유지보수를 실행할 수 있습니다. **읽기·대량 writer·migration 중지와 ETL 커밋을 먼저 확인합니다.** 실행기는 트래픽을 자동 중지하거나 ETL을 실행하지 않습니다.
+
+```powershell
+# 기본: 읽기 전용 대상·head·소유권 확인만
+uv run --locked --extra dev python -m etl.localdata.maintenance
+
+# 명시적 실행: 별도 autocommit VACUUM → 새 읽기 전용 출처 검증
+uv run --locked --extra dev python -m etl.localdata.maintenance --execute
+```
+
+loopback의 `spoton_dev`·비슈퍼유저 `spoton_app`·head0010과 정확한 `public.stores` 소유자만 허용합니다. 실행 SQL은 `VACUUM (ANALYZE, TRUNCATE FALSE) public.stores`로 고정하며 FULL·테이블명/URL 옵션은 제공하지 않습니다. 잠금 대기5초·명령60초를 적용하고, 후속 출처 검증은 기존 SQL별 제한(기본3초)을 사용합니다.
+
+결과는 stdout JSON 한 건입니다. 정상0·실패1·Ctrl+C130이며 `--help`는 도움말/0입니다. 오류는 `localdata_maintenance:` 뒤 고정 코드만 반환합니다. `vacuum_completed=true`는 명령이 정상 반환했다는 뜻이고 `provenance_checked=true`는 그 뒤 출처 검사가 통과했다는 뜻입니다. 기본 dry-run은 두 값이 false입니다. VACUUM 후 검증이 실패하면 첫 값은 true인 채 실패로 종료합니다. 실패/중단 시 일부 물리 정리가 반영됐을 수 있으며 앞선 ETL 커밋을 되돌리지 않습니다.
+
+오래된 snapshot이 있으면 VACUUM이 반환해도 회수가 제한될 수 있습니다. 성공 결과가 모든 API·부하/SLA 검증을 대신하지 않으므로 **실제 API 정상 응답까지 확인한 뒤 조회를 재개합니다.** DB 설정·사용법과 검증 범위는 [유지보수 설계·Claude 검토](docs/designs/feat86-localdata-maintenance.md)를 따릅니다.
+
 ## 생활인구 원자료 상태 진단
 
 내부 진단 CLI는 명시한 관측 버전의 원천별·시간별 **행과 격자 개수**를 확인합니다. 먼저 읽기 전용 조회로 사용할 버전 UUID와 관측일을 확인합니다. 자동 최신 버전 선택이나 다른 날짜 대체는 하지 않습니다.
