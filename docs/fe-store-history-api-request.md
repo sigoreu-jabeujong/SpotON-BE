@@ -44,8 +44,10 @@ GET /api/stores/history
 | `operating_months` | 0 이상의 정수 또는 null | null과 실제 0개월 구분 |
 | `operating_period_status` | `fact \| no_data` | 신규 필드. 계산 완료 또는 미산정 구분 |
 | `operating_period_reason` | 사유 코드 또는 null | 신규 필드. 미산정 사유 표시 |
+| `franchise_basis` | `catalog_exact_name \| external_classification` 또는 null | 목록명 일치 추정과 기존 외부 분류를 구분 |
+| `franchise_reference_year` | integer 또는 null | 목록명 일치 추정의 기준년도. 현재 2025, 그 외 null |
 
-`category`, `sub_category`, `store_status`, `franchise`, `floor_unit`, `location_match`는 기존 필드명을 유지합니다. 이번 요청 때문에 주변 점포·시점 조회 등 다른 API 타입까지 일괄 변경하지 않아도 됩니다.
+`category`, `sub_category`, `store_status`, `franchise`, `floor_unit`, `location_match`는 기존 필드명을 유지합니다. 가맹 관련 필드는 이력·주변·시점 조회에 공통으로 추가됐으므로 [프랜차이즈 추정 요청서](fe-franchise-classification-api-request.md)를 함께 반영해 주세요. 가맹 분류의 상세 의미·필터·메타는 해당 요청서를 기준으로 합니다.
 
 ### 기간 미산정 사유
 
@@ -74,7 +76,7 @@ GET /api/stores/history
 - 같은 날짜는 source·license_no로 순서를 고정해 주세요. API 캐시 배열을 직접 정렬하지 말고 복사본을 사용해 주세요.
 - 표와 출력용 진단서에 동일한 정렬·결측 표시를 적용해 주세요.
 - 상호·개업일·영업 기간이 null이면 `정보 없음`을 표시하고, 기간에는 사유를 함께 보여 주세요.
-- 폐업일이 null인 폐업 점포는 `폐업일 정보 없음`으로 구분할 수 있도록 해 주세요.
+- 폐업 상태에서 폐업일이 null이면 `operating_period_reason`을 확인해 주세요. `missing_close_date`는 `폐업일 정보 없음`, `invalid_close_date`는 `폐업일 확인 필요`, `invalid_date_order`는 `개업일·폐업일 확인 필요`로 구분합니다. null만 보고 원자료가 없었다고 단정하지 않습니다. 다른 사유가 반환되면 해당 사유 안내를 유지합니다.
 
 ### 서버 계산값 표시
 
@@ -87,10 +89,11 @@ GET /api/stores/history
 - `location_match=same_building`: 확인된 같은 건물의 다른 위치.
 - `location_match=unverified`: 상세 위치 미확인. 층만 같거나 한쪽 상세 위치가 없으면 이 값이 나올 수 있습니다.
 - `franchise=unknown`은 `정보 없음`입니다. 개인 매장으로 바꾸지 말아 주세요.
+- `franchise_basis=catalog_exact_name`은 `프랜차이즈(추정)`으로 표시하고 목록 기준년도를 안내합니다. 실제 계약·직영 여부·과거 가맹 소속을 확인한 값이 아닙니다. 외부 분류와 자동 추정을 구분해 표·진단서에 동일하게 표시해 주세요.
 
 ## 4. 응답 예시
 
-아래는 **합성 데이터**이며 화면에 필요한 필드를 중심으로 작성했습니다. `meta`의 배치 상세는 생략했습니다. `category=cafe`, 상세 위치 생략 요청에서도 음식점과 카페가 모두 반환되는 예시입니다.
+아래는 **합성 데이터**이며 화면에 필요한 필드를 중심으로 작성했습니다. `meta`의 배치·분류 버전 등 일부 상세는 생략했습니다. 브랜드 목록을 적용한 DB의 예시이며 분류 방법이 estimate여도 개별 점포는 unknown일 수 있습니다. `category=cafe`, 상세 위치 생략 요청에서도 음식점과 카페가 모두 반환되는 예시입니다.
 
 ```json
 {
@@ -110,6 +113,8 @@ GET /api/stores/history
         "operating_period_reason": "missing_close_date",
         "store_status": "closed",
         "franchise": "unknown",
+        "franchise_basis": null,
+        "franchise_reference_year": null,
         "floor_unit": null,
         "location_match": "unverified"
       },
@@ -126,6 +131,8 @@ GET /api/stores/history
         "operating_period_reason": null,
         "store_status": "open",
         "franchise": "unknown",
+        "franchise_basis": null,
+        "franchise_reference_year": null,
         "floor_unit": "2층",
         "location_match": "unverified"
       }
@@ -140,6 +147,15 @@ GET /api/stores/history
     "data_updated_at": "2026-11-08",
     "collected_at": null,
     "collection_reason": "source_completion_time_not_recorded",
+    "franchise_classification": {
+      "status": "estimate",
+      "reason": "reference_catalog_name_match",
+      "reference_year": 2025,
+      "source": ["R7"],
+      "coverage": "partial",
+      "historical_contract_verified": false,
+      "industry_mapping_verified": false
+    },
     "is_demo": true
   },
   "error": null
@@ -169,7 +185,8 @@ BE 기본 주소는 기존 FE 설정 `VITE_API_BASE_URL`을 따릅니다. `/api`
 - [ ] 같은 license_no·다른 source 2건을 표와 진단서에서 모두 유지
 - [ ] open_date=null이 있어도 오류 없이 날짜 미확인 마지막으로 정렬
 - [ ] name=null·기간 null은 정보 없음, 실제 0개월은 0개월로 구분
-- [ ] 폐업일 없는 폐업 점포의 상태 유지 및 기간 미산정 사유 표시
+- [ ] 폐업일 null인 폐업 점포의 상태 유지 및 결측·무효·날짜 역전 사유 구분
+- [ ] 가맹 추정·외부 분류·미확인과 기준년도/역사 한계를 표·진단서에 동일하게 표시
 - [ ] 같은 층만 확인된 점포는 same_spot으로 바꾸지 않고 서버의 미확인 표시 유지
 - [ ] category=cafe 요청에서도 타 지원 음식점 이력 유지
 - [ ] 0건 안내·422 입력 오류·500 서버 오류 표시 확인
@@ -177,4 +194,4 @@ BE 기본 주소는 기존 FE 설정 `VITE_API_BASE_URL`을 따릅니다. `/api`
 - [ ] FE build·lint·관련 회귀 테스트 및 실제 BE 연결 확인
 - [ ] FE 계약 문서·CLAUDE.md 반영 후 BE에 완료 내용 전달
 
-BE는 기본 테스트 626개·격리 PostGIS 통합 18개·실제 API 원자료 표본 20건 대조를 통과했습니다. FE 구현·통합 완료 여부는 이 보고서를 전달한 뒤 담당자 검증 결과로 확인합니다.
+이력 API 최초 구현 시 기본 테스트 626개·격리 PostGIS 통합 18개·실제 API 원자료 표본 20건 대조를 통과했습니다. 이는 해당 구현 당시의 기록이며 이후 가맹 추정 적용·회귀 검증은 [BE PR #93](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/93)을 따릅니다. FE 구현·통합 완료 여부는 담당자 검증 결과로 확인합니다.

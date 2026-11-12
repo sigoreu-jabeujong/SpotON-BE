@@ -53,6 +53,8 @@ GET /api/stores/nearby
 | marker.operating_period_status/reason | fact/no_data 및 이력 API와 같은 사유 코드/null |
 | marker.current_status | 현재 데이터의 open/closed/other. 선택 과거 시점의 색으로 재해석하지 않음 |
 | marker.franchise | franchise/independent/unknown. unknown을 개인 매장으로 바꾸지 않음 |
+| marker.franchise_basis | catalog_exact_name/external_classification/null. 추정·외부 분류·미확인 구분 |
+| marker.franchise_reference_year | integer/null. 목록명 일치 추정의 기준년도, 현재2025 |
 | meta.excluded_no_coord_scope | 아래 좌표 누락 수의 집계 범위 명시 |
 | meta.operating_period_basis | latest_data. 목록 운영기간이 선택 과거 T까지의 기간이 아님을 구분 |
 
@@ -84,12 +86,12 @@ GET /api/stores/nearby
 - unknown=false는 미확인을 제외합니다. independent는 외부false만 선택하므로0건을 실제 독립 점포 부재로 단정하지 않습니다. 미적용 DB는 기존pending/미확인입니다.
 - 빈 결과는 count=0, markers=[], 안내 메시지입니다. 기준일/배치가 준비되지 않은 오류를 0건으로 바꾸지 않습니다.
 - 유효한 개업일이 없거나 날짜가 역전·미래인 점포, 폐업인데 폐업일이 없는 점포는 시점 판단에서 제외합니다. 과거 점포 수가 실제 영업 수보다 작을 수 있으며 이 제외 수를 좌표 누락 수와 합산하지 않습니다. 한시 영업 true는 제외하고 한시 여부 미확인은 포함합니다.
-- 유효 표본이 없는 세부 업종은 기본 현재 조회가 200·0건이며 과거 월은 AS_OF_OUT_OF_RANGE일 수 있습니다. data-range API는 이번 범위에 없으므로 임의의 달력 최소 월을 만들지 말아 주세요.
+- 유효 표본이 없는 세부 업종은 기본 최신 조회가 200·0건이며 과거 월은 AS_OF_OUT_OF_RANGE일 수 있습니다. 구현된 [data-range API](fe-data-range-api-request.md)에서 같은 업종·세부 업종의 범위를 조회하고, 임의의 달력 최소 월을 만들지 말아 주세요.
 - 잘못된 일반 인자는 422 INVALID_PARAM, 업종 누락/잘못된 업종은 422 CATEGORY_REQUIRED, 시점 범위 밖은 422 AS_OF_OUT_OF_RANGE입니다. DB 오류·문장 timeout은 현행 500 INTERNAL_ERROR 설계입니다.
 
 ## 5. 표시 검토용 합성 응답
 
-아래는 **구현 응답 구조에 맞춘 합성 예시**입니다. 선택 시점은 2026-10-31, 최신 데이터 기준일은 2026-11-08입니다. 두 점포는 합성 중심점과 같은 좌표여서 거리 0m입니다. meta의 배치 상세는 생략했습니다. 실제 API의 is_demo는 false이며 collected_at=null은 실제 수집 완료일이 기록되지 않았다는 의미입니다.
+아래는 **구현 응답 구조에 맞춘 합성 예시**입니다. 선택 시점은 2026-10-31, 최신 데이터 기준일은 2026-11-08입니다. 두 점포는 합성 중심점과 같은 좌표여서 거리 0m입니다. meta의 배치·분류 버전 등 일부 상세는 생략했습니다. 브랜드 목록을 적용한DB에서도 미일치 개별 점포는unknown입니다. 실제 API의 is_demo는 false이며 collected_at=null은 실제 수집 완료일이 기록되지 않았다는 의미입니다.
 
 ```json
 {
@@ -115,6 +117,8 @@ GET /api/stores/nearby
         "operating_period_reason": null,
         "current_status": "closed",
         "franchise": "unknown",
+        "franchise_basis": null,
+        "franchise_reference_year": null,
         "area_m2": null
       },
       {
@@ -132,6 +136,8 @@ GET /api/stores/nearby
         "operating_period_reason": "other_status",
         "current_status": "other",
         "franchise": "unknown",
+        "franchise_basis": null,
+        "franchise_reference_year": null,
         "area_m2": null
       }
     ],
@@ -147,7 +153,16 @@ GET /api/stores/nearby
     "collection_reason": "source_completion_time_not_recorded",
     "is_demo": true,
     "excluded_no_coord_scope": "seoul_nonspatial_cohort",
-    "operating_period_basis": "latest_data"
+    "operating_period_basis": "latest_data",
+    "franchise_classification": {
+      "status": "estimate",
+      "reason": "reference_catalog_name_match",
+      "reference_year": 2025,
+      "source": ["R7"],
+      "coverage": "partial",
+      "historical_contract_verified": false,
+      "industry_mapping_verified": false
+    }
   },
   "error": null
 }
@@ -155,7 +170,7 @@ GET /api/stores/nearby
 
 ## 6. 수정 검토 경로와 완료 기준
 
-검토 대상은 `src/types/stores.ts`, `src/types/api.ts`, `src/api/params.ts`, 진단 조건 타입·URL 변환, 주변 지도·표·팝업·진단서, `src/constants/messages.ts`와 관련 목업·문서·CLAUDE.md입니다. 기존 getNearbyStores()와 query 변환 경로를 우선 활용해 주세요. BE-14 data-range나 snapshot 구현 완료를 이번 요청에 포함하지 않습니다.
+검토 대상은 `src/types/stores.ts`, `src/types/api.ts`, `src/api/params.ts`, 진단 조건 타입·URL 변환, 주변 지도·표·팝업·진단서, `src/constants/messages.ts`와 관련 목업·문서·CLAUDE.md입니다. 기존 getNearbyStores()와 query 변환 경로를 우선 활용해 주세요. data-range·snapshot은 별도 요청서에서 다루며 현재 BE 구현은 완료됐습니다.
 
 BE-14 data-range는 원본 v1.2처럼 category 필수·sub_category 선택으로 구현했습니다. [월 범위 API 연동 요청](fe-data-range-api-request.md)에 따라 nearby와 같은 업종 조건을 전달해 달력 범위와 질의 허용 범위를 맞춰 주세요. 후속 BE-15 snapshot도 구현했으며 [별도 연동 요청](fe-store-snapshot-api-request.md)을 확인해 주세요.
 
@@ -166,7 +181,7 @@ BE-14 data-range는 원본 v1.2처럼 category 필수·sub_category 선택으로
 - [ ] 과거 포함 조건과 현재 상태·전체 영업 기간의 구분 표시
 - [ ] 반경·업종·면적·가맹·시점 필터의 요청 값 확인
 - [ ] 0건·입력 오류·범위 오류·DB 오류 표시 확인
-- [ ] 실제 API 구현 후 BE와 연결해 지도·표·진단서 검증
+- [ ] 현재 BE API에 연결해 지도·표·진단서 및 가맹 추정 근거/기준년도 표시 검증
 - [ ] FE 계약·CLAUDE.md 반영 및 결과 전달
 
 연결 시 기존 `VITE_API_BASE_URL`을 사용합니다. API client가 `/api`를 붙이는 구조를 유지하고, 일부 API만 실제 연결한다면 기존 `VITE_REAL_API_PATHS`에 `/stores/nearby`를 추가하는 방식을 검토해 주세요. BE 키·DB 접속 정보는 FE에 넣지 않습니다. FE build·lint·관련 회귀와 실제 지도·표·진단서 통합 결과를 반영 후 전달해 주세요.

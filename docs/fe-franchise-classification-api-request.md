@@ -2,7 +2,10 @@
 
 - 작성일: 2026-11-12 / 대상: SpotON FE 담당자
 - BE 이슈: [#57](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/57)
+- BE PR: [#93](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/93), develop 병합 완료 (`135ec63`)
 - 상태: BE 구현·검증 / FE 타입·표시·진단서·계약·CLAUDE.md 반영 요청
+
+이 문서는 이력·주변·시점·활동·Risk·AI 요청서에 공통으로 적용되는 가맹 추정 추가 계약입니다. 가맹 관련 필드·메타·필터·표시의 기준으로 함께 전달해 주세요. 각 API의 날짜·정렬·집계·오류 계약은 해당 요청서를 유지합니다.
 
 ## 1. 판정의 의미
 

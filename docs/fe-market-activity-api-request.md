@@ -48,7 +48,7 @@ meta.denominator는null입니다. 평균의 분모는 업종별open_count이며 
 
 `meta.excluded_no_coord`는 서울 전체의 같은 비공간 조건·T 이전 개업 기록 중 좌표 미확보 수입니다. `excluded_no_coord_scope=seoul_nonspatial_cohort`, `excluded_no_coord_cohort=opened_by_as_of`이며 T 이전 폐업도 포함해 nearby/snapshot의 값과 다를 수 있습니다. 반경 내 누락 수나 점포 총수에 합산하지 않습니다.
 
-가맹 분류는 `meta.franchise_classification={status:"pending",reason:"brand_mapping_blocked"}`입니다. 현재 모든 실제 점포의 is_franchise는null입니다. 가맹/개인 조건에서 unknown을 제외해0건이 되면 "실제 점포 없음"으로 단정하지 말고 "선택한 분류로 확인할 수 있는 정보 없음"을 안내해 주세요. 기본 unknown 포함 집계를 개인 매장 수로 바꾸지 않습니다.
+가맹 분류는 브랜드 목록을 명시 적용한 DB에서 `status=estimate`, `reason=reference_catalog_name_match`, `coverage=partial`이며 현재 개발 DB의 목록 기준년도는2025년입니다. 미적용 DB만 `status=pending`, `reason=brand_mapping_blocked`입니다. 원본 stores.is_franchise가null이어도 별도 근거가 현재 점포 이름·업종과 일치하면 조회에 추정이 반영되므로 원본 필드만 보고 전체 미확인으로 판단하지 않습니다. 가맹 전용은 `franchise=franchise&include_unknown_franchise=false`로 요청합니다. unknown을 제외해0건이 되면 "실제 점포 없음"으로 단정하지 말고 "선택한 분류로 확인할 수 있는 정보 없음"을 안내해 주세요. 기본 unknown 포함 집계를 개인 매장 수로 바꾸지 않습니다. 과거 집계도 당시 실제 가맹계약을 확인한 값이 아니라는 한계를 표시합니다.
 
 선택 항목 상태는 `meta.optional_data`에 요청된 항목만 있습니다.
 
@@ -63,7 +63,7 @@ collected_at은 실제 전체 수집 완료일 미확인으로null입니다. 오
 
 ## 5. 합성 응답 예시
 
-다음은 구조 설명용 합성 값이며 실제 점포·시연 실측값이 아닙니다. 공통 배치 상세·연도별 상세meta는 생략했습니다.
+다음은 브랜드 목록 적용 DB의 구조 설명용 합성 값이며 실제 점포·시연 실측값이 아닙니다. 공통 배치·분류 버전·연도별 상세meta는 생략했습니다. 매출·생활인구의 pending은 가맹 분류의 estimate와 별개입니다.
 
 ```json
 {
@@ -86,7 +86,15 @@ collected_at은 실제 전체 수집 완료일 미확인으로null입니다. 오
     "event_basis": "validated_license_dates",
     "yearly_comparison_basis": "same_month_day_ytd",
     "operating_period_basis": "elapsed_months_of_active_at_as_of",
-    "franchise_classification": {"status": "pending", "reason": "brand_mapping_blocked"},
+    "franchise_classification": {
+      "status": "estimate",
+      "reason": "reference_catalog_name_match",
+      "reference_year": 2025,
+      "source": ["R7"],
+      "coverage": "partial",
+      "historical_contract_verified": false,
+      "industry_mapping_verified": false
+    },
     "optional_data": {"sales": {"status": "pending", "reason": "source_period_and_boundary_unverified"}},
     "is_demo": true
   },
@@ -105,6 +113,7 @@ collected_at은 실제 전체 수집 완료일 미확인으로null입니다. 오
 - [ ] T 기준 평균과 최신 전체 기간 구분,0개월/null 구분
 - [ ] 미요청 항목은missing에 넣지 않고 요청된pending 항목의 사유 표시
 - [ ] 가맹 분류 미확인으로0건인 경우 점포 부재로 단정하지 않음
+- [ ] 적용 DB의estimate/partial·기준년도·역사 한계와 미적용DB의pending을 구분
 - [ ] data_updated_at(D)/as_of(T)/collected_at(null) 구분·좌표 누락 수 범위 안내
 - [ ] 빈 집계·422/500·로딩/재시도와 표/출력 일관성 확인
 - [ ] FE lint/build/관련 회귀 및 실제BE 연결 확인 후 계약 문서·CLAUDE.md 반영 결과 전달

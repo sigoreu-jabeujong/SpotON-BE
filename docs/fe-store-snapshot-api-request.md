@@ -38,9 +38,12 @@ GET /api/stores/snapshot?lat={위도}&lng={경도}&category=restaurant&as_of=202
 | operating_period_status | fact/no_data | 신규. 계산 완료/미산정 |
 | operating_period_reason | 기존 이력의 사유 코드 또는 null | 신규. 미산정 안내 |
 | current_status | open/closed/other | 최신 데이터 기준 상태. 과거 시점 상태로 바꾸지 않음 |
+| franchise | franchise/independent/unknown | 신규. 자동 추정·외부 분류·미확인 표시 |
+| franchise_basis | catalog_exact_name/external_classification/null | 신규. 목록명 일치 추정과 기존 외부 분류 구분 |
+| franchise_reference_year | integer 또는 null | 신규. 목록명 일치 추정의 기준년도, 현재2025 |
 | excluded_no_coord | 0 이상 정수 | 신규. 아래 서울 범위 의미 확인 |
 
-license_no/sub_category/lat/lng는 유지합니다. snapshot 목록에는 nearby의 distance_m/franchise/area_m2를 복제하지 않습니다. 필터에는 적용되지만 표 타입에서 해당 응답을 필수로 요구하지 않습니다. nullable은 키 생략을 뜻하지 않습니다.
+license_no/sub_category/lat/lng는 유지합니다. snapshot 목록에는 distance_m/area_m2를 반환하지 않지만, franchise/franchise_basis/franchise_reference_year는 반환합니다. nullable은 키 생략을 뜻하지 않습니다. [프랜차이즈 추정 요청서](fe-franchise-classification-api-request.md)에 따라 목록명 일치를 `프랜차이즈(추정)`으로 표시하고, 기준년도를 과거 시점의 실제 가맹 소속으로 해석하지 않습니다. 가맹 관련 응답 계약은 해당 요청서를 함께 따릅니다.
 
 표·진단서·선택 상태·목업의 key는 `${source}:${license_no}`를 사용해 주세요. 같은 관리번호의 다른 원천 두 행을 합치지 않습니다. 상호가 null일 때 빈 셀을 남기지 않고 정보 없음으로 표시합니다.
 
@@ -57,7 +60,7 @@ license_no/sub_category/lat/lng는 유지합니다. snapshot 목록에는 nearby
 
 ## 4. 합성 응답 예시
 
-아래는 **합성 데이터**이며 meta의 배치 상세는 생략했습니다. 실제 API는 is_demo=false입니다.
+아래는 **합성 데이터**이며 meta의 배치·분류 버전 등 일부 상세는 생략했습니다. 브랜드 목록 적용 후에도 개별 점포는unknown일 수 있습니다. 실제 API는 is_demo=false입니다.
 
 ```json
 {
@@ -79,7 +82,10 @@ license_no/sub_category/lat/lng는 유지합니다. snapshot 목록에는 nearby
       "operating_months": null,
       "operating_period_status": "no_data",
       "operating_period_reason": "other_status",
-      "current_status": "other"
+      "current_status": "other",
+      "franchise": "unknown",
+      "franchise_basis": null,
+      "franchise_reference_year": null
     }],
     "summary_text": "2020.01.31 기준 동일 업종 1곳 → 최신 데이터 기준 영업 0곳 · 폐업 0곳 · 기타 1곳",
     "excluded_no_coord": 2
@@ -94,7 +100,16 @@ license_no/sub_category/lat/lng는 유지합니다. snapshot 목록에는 nearby
     "collection_reason": "source_completion_time_not_recorded",
     "is_demo": true,
     "operating_period_basis": "latest_data",
-    "excluded_no_coord_scope": "seoul_nonspatial_cohort"
+    "excluded_no_coord_scope": "seoul_nonspatial_cohort",
+    "franchise_classification": {
+      "status": "estimate",
+      "reason": "reference_catalog_name_match",
+      "reference_year": 2025,
+      "source": ["R7"],
+      "coverage": "partial",
+      "historical_contract_verified": false,
+      "industry_mapping_verified": false
+    }
   },
   "error": null
 }
@@ -106,7 +121,7 @@ collected_at=null을 오늘·검증일·적재일로 바꾸지 않습니다. dat
 
 | 경로 | 요청 범위 |
 |---|---|
-| src/types/stores.ts | source·기간 상태/사유·상호/기간 nullable·좌표 미확보 수 |
+| src/types/stores.ts | source·기간 상태/사유·상호/기간 nullable·가맹 분류/근거/기준년도·좌표 미확보 수 |
 | src/components/analysis/nearby/SnapshotTable.tsx | 복합 key·결측/0개월/사유·서버 순서 유지 |
 | src/components/analysis/nearby/SnapshotBlock.tsx | 서버 집계·요약·기준일·안내와 세부 업종 범위 요청 |
 | src/pages/ReportPage.tsx 및 출력용 경로 | 동일 식별·결측·서버 순서/기간 기준 검토 |
@@ -118,6 +133,7 @@ collected_at=null을 오늘·검증일·적재일로 바꾸지 않습니다. dat
 - [ ] 실제 주소·업종·필터·as_of로 snapshot 요청과 표/진단서 표시
 - [ ] source+license_no 복합 식별과 다른 원천의 같은 번호 두 행 유지
 - [ ] name/기간 null의 정보 없음·사유 및 실제 0개월 구분
+- [ ] 가맹 분류·추정 근거/기준년도 표시와 과거 실제 가맹 소속으로 오인하지 않는 안내
 - [ ] 최신 데이터 상태와 과거 포함 시점·전체 영업 기간 구분
 - [ ] 서버 수 4개·요약·순서 표시와 0건/오류 처리
 - [ ] 서울 범위 좌표 미확보 표시 검토, N과 합산하지 않음
