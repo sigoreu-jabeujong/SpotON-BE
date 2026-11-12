@@ -127,3 +127,9 @@ tests/integration/test_analysis_flow.py는 합성 snapshot→기존 runner→격
 같은 좌표/반경/업종/필터/T일 때 nearby.count=snapshot.N=Risk.competitor_count=활동open_count합이다. 이력total은 지원업종 전체/결측을 보존하여 별도다. nearby/snapshot의 좌표누락 수는 T시점영업, 활동/Risk는 T이전개업전체라 다를 수 있다. 전역D·과거월말T·현재기준상태·날짜결측과 실제0을 구분한다. 독립 HTTP 호출 사이의 원자적 snapshot은 보장하지 않는다. 원천 없는 이력0건/as_of=null은 기존 계약이며 전체 준비 완료를 뜻하지 않는다.
 
 실제 개발 검증은 로컬 uvicorn HTTP+실제 Kakao/READ ONLY DB+모의 모델로 수행했고 head0009·앱모델차이0·14테이블 행/geometry hash를 보존했다. schema/앱코드·모델/migration·프롬프트·의존성·실제 .env/Docker·FE 변경은 없다. 재현·결과·한계는 docs/be-api-verification.md, 설계/Claude 실제 검토/최종 결정은 docs/designs/feat76-api-flow-verification.md다. FE 계약/화면·실제 LLM 안전성·공식/조건부 활성화·브랜드57·로그30일삭제·운영/최종제출을 완료로 주장하지 않는다.
+
+## 전체 기능 감사 (BE #78)
+
+docs/be-system-audit.md에 기능별 상태와 실제/격리·모의/정적/기존재사용 근거를 분리했다. 이번 일반1,166/격리146·실원천dry-run7회·실모델2건은 통과했으나 실제FE의 AI422·미확인상권오표시·유효null날짜파손·복합key충돌·빈결측셀을 재현했다. 수정 요청은 docs/fe-system-audit-request.md이며 FE 파일/설정/문서/이슈/PR은 직접 수정하지 않는다. 실제 지도는 JS키 설정 완료 후 검증해야 하며 일반음식점 원천API 응답지연도 미해결이다.
+
+실제DB읽기전용·14테이블/geometry hash·인덱스·head0009·모델차이0·FE추적파일변경0을 확인했다. 원문/키/실제.env/Docker·의존성을 커밋하지 않았고 브라우저실제LLM송신0·실제별도모델2회/재생성0과 warm재사용을 구분한다. 전체정상/FE완료/외부원천최신수집을 주장하지 않는다. 감사문서PR은 Ref#78로 연결하고 CI/CodeQL 후 정상 develop Squash하되 이슈는 후속수정/지도/외부응답 추적용으로 열린상태를 유지한다.
