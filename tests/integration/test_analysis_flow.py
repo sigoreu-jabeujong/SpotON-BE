@@ -124,16 +124,17 @@ def test_query_flow_counts_and_dates(database, category, changes, expected):
         )
         assert f"{expected}건" in competitor["text"]
         assert ai["data"]["missing_data"]
-        assert (
-            len(
-                ok(
-                    client.get(
-                        "/api/support-links", params={"sigungu": "마포구", "category": category}
-                    )
-                )["data"]["links"]
-            )
-            == 4
+        support = ok(
+            client.get("/api/support-links", params={"sigungu": "마포구", "category": category})
         )
+        assert [link["id"] for link in support["data"]["links"]] == [
+            "semas-seoul-seodaemun",
+            "seoulsbdc",
+            "seoulsbdc-edu",
+            "seoul-small-business",
+            "sbiz24",
+        ]
+        assert support["meta"]["prioritization"]["category_applied"] is False
 
 
 @pytest.mark.parametrize("month,target", [("2024-02", "2024-02-29"), ("2024-04", "2024-04-30")])

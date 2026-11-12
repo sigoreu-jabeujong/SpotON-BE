@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.support_sources import MSS_NOTICE_URL
 from app.schemas.geocode import Category
 from etl.localdata.constants import SEOUL_AUTHORITY_CODES
 
@@ -42,6 +43,8 @@ class SupportLink(BaseModel):
     @field_validator("url")
     @classmethod
     def official_https_url(cls, value: str) -> str:
+        if value == MSS_NOTICE_URL:
+            return value
         if (
             any(ord(char) <= 32 or ord(char) == 127 for char in value)
             or "?" in value
