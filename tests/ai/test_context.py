@@ -16,7 +16,14 @@ from app.core.config import Settings
 from app.core.errors import AppError
 from app.schemas.common import ErrorCode
 from app.schemas.risk import ReferenceCounts
-from tests.ai.context_helpers import query, response, use_risk
+from tests.ai.context_helpers import (
+    history_query,
+    history_row,
+    query,
+    response,
+    use_history,
+    use_risk,
+)
 from tests.ai.test_gemini import Clock, make_client, ok_body
 
 
@@ -390,3 +397,172 @@ def test_activity_service_errors_propagate_unchanged(monkeypatch):
     with pytest.raises(AppError) as exc:
         module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
     assert exc.value is failure
+
+
+def prepare_history(monkeypatch, rows, hq=None, result=None):
+    result = result or response()
+    use_risk(monkeypatch, module, result)
+    hq = hq or history_query()
+    location, server = use_history(monkeypatch, module, result, rows)
+    session = Mock()
+    output = module.prepare_risk_interpretation(
+        session, query(), Settings(_env_file=None), history=hq
+    )
+    assert location.call_count == 1 and location.call_args.args[0] is session
+    assert location.call_args.args[2] is hq
+    assert server.call_count == 1 and server.call_args.args == (session, hq)
+    return output
+
+
+MIXED = [
+    history_row("same_spot", "closed", 14, index=0),
+    history_row("same_spot", "closed", 30, index=1),
+    history_row("same_spot", "closed", None, index=2),
+    history_row("same_spot", "open", 5, index=3),
+    history_row(
+        "same_building", "closed", 50, category="restaurant", sub_category="korean", index=4
+    ),
+    history_row("unverified", "other", None, index=5),
+]
+
+
+def test_history_aggregates_without_row_identifiers(monkeypatch, caplog):
+    p = prepare_history(monkeypatch, MIXED)
+    h = p.json_context()["history"]
+    assert {k: v for k, v in h.items() if k != "methodology"} == {
+        "basis": "latest_data_all_supported_categories",
+        "data_updated_at": "2026-11-08",
+        "floor_unit_provided": True,
+        "same_spot_comparable": True,
+        "total": 6,
+        "same_category": 5,
+        "same_spot": 4,
+        "same_building": 1,
+        "unverified": 1,
+        "same_spot_open": 1,
+        "same_spot_closed": 3,
+        "same_spot_other": 0,
+        "same_spot_closed_period_count": 2,
+        "same_spot_closed_months_min": 14,
+        "same_spot_closed_months_max": 30,
+    }
+    text = p.request.user_content + caplog.text + repr(p)
+    for canary in ["PRIVATE-NAME", "PRIVATE-LICENSE", "PRIVATE-FLOOR", "마포구-서교동", "101호"]:
+        assert canary not in text
+    assert not set(walk_keys(p.json_context())) & FORBIDDEN_CONTEXT_KEYS
+
+
+def test_history_absent_keeps_null_and_skips_lookups(monkeypatch):
+    p = prepare(monkeypatch)
+    assert p.json_context()["history"] is None
+
+
+def test_floor_missing_or_floor_only_is_not_comparable(monkeypatch):
+    rows = [history_row("unverified", "closed", 10, index=0)]
+    p = prepare_history(monkeypatch, rows, history_query(floor_unit=None))
+    h = p.json_context()["history"]
+    assert (h["floor_unit_provided"], h["same_spot_comparable"], h["unverified"]) == (
+        False,
+        False,
+        1,
+    )
+    rows = [history_row("same_building", "closed", 10, index=0)]
+    p = prepare_history(monkeypatch, rows, history_query(floor_unit="2층"))
+    h = p.json_context()["history"]
+    assert (h["floor_unit_provided"], h["same_spot_comparable"], h["same_spot"]) == (True, False, 0)
+
+
+def test_empty_history_is_valid(monkeypatch):
+    p = prepare_history(monkeypatch, [])
+    h = p.json_context()["history"]
+    assert h["total"] == 0 and h["same_spot_closed_months_min"] is None
+
+
+def test_history_changes_hashes(monkeypatch):
+    without = prepare(monkeypatch)
+    a = prepare_history(monkeypatch, MIXED)
+    b = prepare_history(monkeypatch, MIXED[:-1])
+    assert a.data_version_hash != without.data_version_hash
+    assert a.data_version_hash == b.data_version_hash and a.context_hash != b.context_hash
+
+
+@pytest.mark.parametrize(
+    "path,value",
+    [
+        (("meta", "data_updated_at"), "2026-11-09"),
+        (("meta", "as_of"), "2026-11-07"),
+        (("meta", "denominator"), 5),
+        (("meta", "collected_at"), "2026-11-12"),
+        (("meta", "franchise_classification"), {"status": "estimate"}),
+        (("meta", "data_version", "stores_batch_ids"), ["00000000-0000-0000-0000-000000000099"]),
+        (("meta", "data_version", "rule_version"), "store-history-calendar-months-v0"),
+        (("meta", "data_version", "map_version"), "PRIVATE-CANARY"),
+        (("data", "total"), 5),
+        (("data", "error"), None),
+    ],
+)
+def test_history_drift_from_risk_is_rejected(monkeypatch, path, value, caplog):
+    result = response()
+    use_risk(monkeypatch, module, result)
+    _, server = use_history(monkeypatch, module, result, MIXED)
+    building = server.return_value
+    if path == ("data", "error"):
+        building.data = None
+    elif path[0] == "meta":
+        mutate(building.meta, path[1:], value)
+    else:
+        mutate(building.data, path[1:], value)
+    with pytest.raises(AppError) as exc:
+        module.prepare_risk_interpretation(
+            Mock(), query(), Settings(_env_file=None), history=history_query()
+        )
+    assert exc.value.code == ErrorCode.INTERNAL_ERROR and exc.value.__context__ is None
+    assert "PRIVATE" not in str(exc.value) + caplog.text
+
+
+def test_location_rule_mismatch_and_comparability_are_rejected(monkeypatch):
+    for hq, rows in [
+        (history_query(floor_unit=None), [history_row("same_building", index=0)]),
+        (history_query(floor_unit="2층"), [history_row("same_spot", index=0)]),
+    ]:
+        result = response()
+        use_risk(monkeypatch, module, result)
+        use_history(monkeypatch, module, result, rows)
+        with pytest.raises(AppError) as exc:
+            module.prepare_risk_interpretation(
+                Mock(), query(), Settings(_env_file=None), history=hq
+            )
+        assert exc.value.code == ErrorCode.INTERNAL_ERROR
+
+
+def test_far_building_is_invalid_param_and_skips_history(monkeypatch):
+    result = response()
+    use_risk(monkeypatch, module, result)
+    _, server = use_history(monkeypatch, module, result, MIXED)
+    far = AppError(ErrorCode.INVALID_PARAM)
+    monkeypatch.setattr(module, "check_history_location", Mock(side_effect=far))
+    with pytest.raises(AppError) as exc:
+        module.prepare_risk_interpretation(
+            Mock(), query(), Settings(_env_file=None), history=history_query()
+        )
+    assert exc.value is far and server.call_count == 0
+
+
+@pytest.mark.parametrize("nearest,ok", [(None, True), (0.0, True), (300.0, True), (300.01, False)])
+def test_check_history_location_threshold(nearest, ok):
+    session = Mock()
+    session.scalar.return_value = nearest
+    if ok:
+        assert module.check_history_location(session, query(), history_query()) is None
+    else:
+        with pytest.raises(AppError) as exc:
+            module.check_history_location(session, query(), history_query())
+        assert exc.value.code == ErrorCode.INVALID_PARAM
+    sql = str(session.scalar.call_args.args[0])
+    assert "building_key" in sql and "ST_Distance" in sql
+
+
+def test_floor_unit_normalization_is_idempotent():
+    for raw in ["1층 101호", "B1", "2층", "지하1층 B101호", "162C호"]:
+        once = history_query(floor_unit=raw).floor_unit
+        assert history_query(floor_unit=once).floor_unit == once

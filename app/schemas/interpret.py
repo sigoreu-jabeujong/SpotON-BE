@@ -1,17 +1,42 @@
 from datetime import datetime
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from app.schemas.risk import IndicatorId, RiskQuery
+from app.schemas.stores import HistoryQuery
 
 
 class InterpretModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
 
 
+class InterpretHistory(InterpretModel):
+    """Optional building context (#98). Used only as a server-side lookup key."""
+
+    building_key: str = Field(min_length=1, max_length=255, repr=False)
+    floor_unit: str | None = Field(default=None, max_length=100, repr=False)
+
+
 class InterpretRequest(InterpretModel):
     query: RiskQuery
+    history: InterpretHistory | None = None
+    _history_query: HistoryQuery | None = PrivateAttr(default=None)
+
+    @model_validator(mode="after")
+    def canonical_history(self) -> Self:
+        # Build the canonical query during request validation so malformed keys are 422
+        # before any database access (a later ValidationError would map to 500).
+        if self.history is not None:
+            self._history_query = HistoryQuery(
+                building_key=self.history.building_key,
+                floor_unit=self.history.floor_unit,
+                category=self.query.category,
+            )
+        return self
+
+    def history_query(self) -> HistoryQuery | None:
+        return self._history_query
 
 
 class CandidateSelection(InterpretModel):

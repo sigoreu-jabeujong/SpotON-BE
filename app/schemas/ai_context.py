@@ -132,6 +132,54 @@ class ContextActivity(ContextModel):
         return self
 
 
+class ContextHistoryMethodology(ContextModel):
+    period_basis: Literal["completed_calendar_months"] = "completed_calendar_months"
+    same_spot_rule: Literal["floor_and_unit_match_with_verified_location"] = (
+        "floor_and_unit_match_with_verified_location"
+    )
+    filters_applied: Literal[False] = False
+
+
+class ContextHistory(ContextModel):
+    """#98 건물 이력 집계. 최신 자료 기준·지원 업종 전체이며 행 원문을 담지 않는다."""
+
+    basis: Literal["latest_data_all_supported_categories"] = "latest_data_all_supported_categories"
+    data_updated_at: date
+    floor_unit_provided: bool
+    same_spot_comparable: bool
+    total: int = Field(ge=0)
+    same_category: int = Field(ge=0)
+    same_spot: int = Field(ge=0)
+    same_building: int = Field(ge=0)
+    unverified: int = Field(ge=0)
+    same_spot_open: int = Field(ge=0)
+    same_spot_closed: int = Field(ge=0)
+    same_spot_other: int = Field(ge=0)
+    same_spot_closed_period_count: int = Field(ge=0)
+    same_spot_closed_months_min: int | None = Field(ge=0)
+    same_spot_closed_months_max: int | None = Field(ge=0)
+    methodology: ContextHistoryMethodology = Field(default_factory=ContextHistoryMethodology)
+
+    @model_validator(mode="after")
+    def consistent_counts(self) -> Self:
+        low, high = self.same_spot_closed_months_min, self.same_spot_closed_months_max
+        period = self.same_spot_closed_period_count
+        if (
+            self.same_spot + self.same_building + self.unverified != self.total
+            or self.same_category > self.total
+            or self.same_spot_open + self.same_spot_closed + self.same_spot_other != self.same_spot
+            or period > self.same_spot_closed
+            or (period == 0) != (low is None)
+            or (period == 0) != (high is None)
+            or (low is not None and high is not None and low > high)
+            or (self.same_spot_comparable and not self.floor_unit_provided)
+            or (not self.floor_unit_provided and self.unverified != self.total)
+            or (not self.same_spot_comparable and self.same_spot != 0)
+        ):
+            raise ValueError("inconsistent history aggregates")
+        return self
+
+
 class RiskInterpretContext(ContextModel):
     category: Category
     sub_category: tuple[SubCategory, ...]
@@ -151,6 +199,7 @@ class RiskInterpretContext(ContextModel):
     flags: ContextFlags
     methodology: ContextMethodology = Field(default_factory=ContextMethodology)
     activity: ContextActivity = Field(repr=False)
+    history: ContextHistory | None = Field(default=None, repr=False)
 
     @model_validator(mode="after")
     def activity_scope(self) -> Self:
@@ -159,4 +208,6 @@ class RiskInterpretContext(ContextModel):
             or self.activity.space != f"radius_{self.radius_m}m"
         ):
             raise ValueError("activity scope mismatch")
+        if self.history is not None and self.history.data_updated_at != self.data_updated_at:
+            raise ValueError("history reference mismatch")
         return self

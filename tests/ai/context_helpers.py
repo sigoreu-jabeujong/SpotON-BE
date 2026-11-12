@@ -13,6 +13,7 @@ from app.schemas.market_activity import (
     SubCategoryActivity,
 )
 from app.schemas.risk import ReferenceCounts, Risk, RiskFlags, RiskMarket, RiskQuery, RiskQueryEcho
+from app.schemas.stores import HistoryQuery, HistoryStore, StoreHistory
 from app.services.market_activity import year_cutoff
 from app.services.risk import pending_indicator, period, reference_indicators
 
@@ -171,10 +172,78 @@ def activity_response(risk, q=None, *, opened=3, months=41):
 
 
 def use_risk(monkeypatch, module, result, q=None, **activity):
-    """Patch both server recalculations of the AI context module; returns the two mocks."""
+    """Patch both server recalculations of the AI context module; returns the two mocks.
+
+    History lookups fail loudly unless a test enables them with use_history().
+    """
     risk = result if isinstance(result, Mock) else Mock(return_value=result)
     source = risk.return_value if isinstance(result, Mock) else result
     server = Mock(return_value=activity_response(source, q, **activity))
     monkeypatch.setattr(module, "get_risk", risk)
     monkeypatch.setattr(module, "get_activity", server)
+    guard = Mock(side_effect=AssertionError("history must not be recalculated"))
+    monkeypatch.setattr(module, "get_history", guard)
+    monkeypatch.setattr(module, "check_history_location", guard)
     return risk, server
+
+
+def history_row(
+    location_match="same_spot",
+    store_status="closed",
+    months=14,
+    *,
+    category="cafe",
+    sub_category="cafe",
+    index=0,
+):
+    """Synthetic HistoryStore. Names/licence numbers are canaries that must never leak."""
+    closed = store_status == "closed"
+    return HistoryStore(
+        source="rest_cafe" if category == "cafe" else "general_restaurant",
+        license_no=f"PRIVATE-LICENSE-{index}",
+        name=f"PRIVATE-NAME-{index}",
+        category=category,
+        sub_category=sub_category,
+        open_date=date(2020, 1, 1),
+        close_date=date(2021, 3, 1) if closed else None,
+        operating_months=months,
+        operating_period_status="fact" if months is not None else "no_data",
+        operating_period_reason=None if months is not None else "missing_close_date",
+        store_status=store_status,
+        franchise="unknown",
+        floor_unit="PRIVATE-FLOOR",
+        location_match=location_match,
+    )
+
+
+def history_response(risk, rows):
+    version = copy.deepcopy(risk.meta["data_version"])
+    version["rule_version"] = "store-history-calendar-months-v1"
+    meta = {
+        "source": ["R5", "R6"],
+        "space": "point",
+        "denominator": len(rows),
+        "as_of": risk.meta["data_updated_at"],
+        "data_updated_at": risk.meta["data_updated_at"],
+        "collected_at": None,
+        "collection_reason": "source_completion_time_not_recorded",
+        "is_demo": False,
+        "data_version": version,
+        "franchise_classification": copy.deepcopy(risk.meta["franchise_classification"]),
+    }
+    return ApiResponse(
+        data=StoreHistory(total=len(rows), stores=list(rows), message=None), meta=meta
+    )
+
+
+def history_query(building_key="마포구-서교동-123-4", floor_unit="1층 101호", category="cafe"):
+    return HistoryQuery(building_key=building_key, floor_unit=floor_unit, category=category)
+
+
+def use_history(monkeypatch, module, risk, rows):
+    """Enable history recalculation; returns (location check, history) mocks."""
+    location = Mock(return_value=None)
+    server = Mock(return_value=history_response(risk, rows))
+    monkeypatch.setattr(module, "check_history_location", location)
+    monkeypatch.setattr(module, "get_history", server)
+    return location, server

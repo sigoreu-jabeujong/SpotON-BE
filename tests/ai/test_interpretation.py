@@ -10,7 +10,10 @@ from app.ai.client import LlmError, LlmErrorKind, LlmResult, LlmUsage
 from app.ai.context import prepare_risk_interpretation
 from app.ai.interpretation import build_catalog, render_interpretation
 from app.core.config import Settings
+from app.core.errors import AppError
+from app.db.dependencies import NO_STORE
 from app.main import create_app
+from app.schemas.common import ErrorCode
 from app.schemas.interpret import CandidateSelection
 from app.schemas.risk import ReferenceCounts
 from app.services import risk_interpret as service
@@ -305,3 +308,64 @@ def test_openapi_keeps_comparison_ids_narrow():
     sourced = json.dumps(schema["InterpretSourcedItem"]["properties"]["indicator_ids"])
     assert "recent_open_close" in fact and "avg_operating_months" in fact
     assert "recent_open_close" not in sourced and "avg_operating_months" not in sourced
+
+
+HISTORY_BODY = {"building_key": "마포구-서교동-123-4", "floor_unit": "1층 101호"}
+
+
+@pytest.mark.parametrize(
+    "history",
+    [
+        {"building_key": "private-canary"},
+        {"building_key": "마포구-서교동-123-4", "floor_unit": ""},
+        {"building_key": "마포구-서교동-123-4", "floor_unit": "private-canary"},
+        {**HISTORY_BODY, "name": "private-canary"},
+        {"floor_unit": "1층"},
+        "마포구-서교동-123-4",
+        [],
+    ],
+)
+def test_malformed_history_is_rejected_before_preparation(monkeypatch, prepared, history, caplog):
+    provider = Client(choice(prepared))
+    app = app_with(monkeypatch, prepared, provider)
+    guard = Mock(side_effect=AssertionError("must not prepare"))
+    monkeypatch.setattr(service, "_prepare", guard)
+    body = {"query": query().model_dump(exclude={"include_unknown"}), "history": history}
+    with TestClient(app) as c:
+        r = c.post("/api/risk/interpret", json=body)
+    assert r.status_code == 422 and r.headers["cache-control"] == "no-store"
+    assert provider.calls == 0 and guard.call_count == 0
+    assert "private-canary" not in r.text + caplog.text
+
+
+@pytest.mark.parametrize("history", [None, HISTORY_BODY, {"building_key": "마포구-서교동-123-4"}])
+def test_history_reaches_preparation_as_canonical_query(monkeypatch, prepared, history):
+    provider = Client(choice(prepared))
+    app = app_with(monkeypatch, prepared, provider)
+    seen = []
+    monkeypatch.setattr(service, "_prepare", lambda *args: seen.append(args) or prepared)
+    body = {"query": query().model_dump(exclude={"include_unknown"})}
+    if history is not None:
+        body["history"] = history
+    with TestClient(app) as c:
+        r = c.post("/api/risk/interpret", json=body)
+    assert r.status_code == 200
+    sent = seen[0][4]
+    if history is None:
+        assert sent is None
+    else:
+        assert sent.building_key == history["building_key"] and sent.category == "cafe"
+        assert sent.floor_unit == history.get("floor_unit")
+
+
+def test_far_building_maps_to_422_without_provider_call(monkeypatch, prepared):
+    provider = Client(choice(prepared))
+    app = app_with(monkeypatch, prepared, provider)
+    monkeypatch.setattr(
+        service, "_prepare", Mock(side_effect=AppError(ErrorCode.INVALID_PARAM, headers=NO_STORE))
+    )
+    body = {"query": query().model_dump(exclude={"include_unknown"}), "history": HISTORY_BODY}
+    with TestClient(app) as c:
+        r = c.post("/api/risk/interpret", json=body)
+    assert r.status_code == 422 and r.json()["error"]["code"] == "INVALID_PARAM"
+    assert r.headers["cache-control"] == "no-store" and provider.calls == 0

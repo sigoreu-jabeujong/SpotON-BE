@@ -17,6 +17,7 @@ from app.db.dependencies import NO_STORE, DatabaseResources, read_only_session
 from app.schemas.common import ApiMeta, ApiResponse, ErrorCode
 from app.schemas.interpret import CandidateSelection, RiskInterpretation
 from app.schemas.risk import RiskQuery
+from app.schemas.stores import HistoryQuery
 from app.services.risk_cache import query_parts
 
 MIN_REGENERATION_SECONDS = 1.0
@@ -47,6 +48,7 @@ def _prepare(
     query: RiskQuery,
     deadline: float,
     stop: threading.Event,
+    history: HistoryQuery | None = None,
 ) -> PreparedRiskInterpretation:
     def check(*_args: object) -> None:
         if stop.is_set() or time.monotonic() >= deadline:
@@ -58,7 +60,11 @@ def _prepare(
         event.listen(connection, "before_cursor_execute", check)
         try:
             result = prepare_risk_interpretation(
-                session, query, resources.database.settings, cache=resources.database.cache
+                session,
+                query,
+                resources.database.settings,
+                cache=resources.database.cache,
+                history=history,
             )
             check()
             return result
@@ -67,7 +73,7 @@ def _prepare(
 
 
 async def interpret_risk(
-    resources: InterpretationResources, query: RiskQuery
+    resources: InterpretationResources, query: RiskQuery, history: HistoryQuery | None = None
 ) -> ApiResponse[RiskInterpretation]:
     budget = resources.database.settings.llm_time_budget
     deadline = time.monotonic() + budget
@@ -77,7 +83,9 @@ async def interpret_risk(
         async with asyncio.timeout(budget):
             resources.limiter.acquire()
             async with resources.gate:
-                prepared = await asyncio.to_thread(_prepare, resources, query, deadline, stop)
+                prepared = await asyncio.to_thread(
+                    _prepare, resources, query, deadline, stop, history
+                )
             catalog = build_catalog(prepared)
             payload: dict[str, JsonValue] = {
                 "analysis": prepared.json_context(),
