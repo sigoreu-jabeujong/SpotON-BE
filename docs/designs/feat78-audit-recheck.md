@@ -106,3 +106,77 @@ Claude의 조건부 차단 지적을 채택해 §2의 쿼리 변경안은 적용
 출력 경로 재검사에서 진단서 main1·인쇄 이벤트·메모리 PDF1페이지는 확인했다. 같은 실행의 요약 PNG 생성은 확인되지 않았다. 이 실행에는 여러 API500이 섞였으므로 이를 별도 PNG 구현 결함으로 확정하지 않는다. 기존 감사의 정상 표본 PNG 통과 기록과 이번 실행을 구분한다.
 
 코드 변경이 없어 기존 일반1,166/격리146·정적 검사 결과는 재사용하며 이번에 재실행했다고 표시하지 않는다. 이번 변경은 검토 MD·요청서·감사보고서·작업계획에 한정하고 문서 diff/링크·staged 비밀값 검사를 수행한다. FE5종 수정·지도·BE 간헐500은 미완료 상태로 유지한다.
+
+## 7. 도메인 등록 후 지도 후속 검증
+
+사용자가 FE는 기존대로 BE 재검증·요청서 보완만 진행하라고 확정했고, JavaScript SDK 도메인 등록 완료를 알렸다. BE develop `4cf9ac4`에서 `feat#78-map-verification`을 만든다. SDK 단독 로딩은 실제200·Map 생성자 존재·네트워크 오류0을 확인했다. 이를 실제 앱 지도/마커 통과로 대신하지 않는다.
+
+기존 검증 계획의 지도 항목을 이어서 실제 읽기 API와 SDK로500m/300m 마커 수, 표 선택·지도 강조/정보창, 마커 선택·표 강조, 정보창 닫기를 확인한다. source가 다른 같은 관리번호 두 행은 BE Nearby 스키마를 통과하는 합성 응답으로 별도 대조한다. SQL 실패는 handle_error에서 종류·SQLSTATE와 고정 쿼리 분류만 수집해 BE 간헐500과 구분한다. FE/환경 파일·실제 DB·timeout 변경, 실LLM 호출, 원자료/키/지도 화면 원문 저장은 하지 않는다.
+
+실제 SDK200·타일 응답45건200·pageerror0을 관측했다. 실제500m 마커152개와300m 마커44개가 API count와 같았다. 표→마커 강조/해당 상호 정보창, 마커 DOM click 이벤트→표 선택, 닫기→선택 해제를 확인했다. 300m는 실제 라디오 레이블 클릭 후 조회 버튼으로 변경했다. 첫 harness의 sr-only radio 직접 check 타임아웃은 레이블 클릭으로 보정했으며 FE 결함으로 분류하지 않는다. 지도 이동/확대·모바일·모든 물리 마우스 hit test를 통과했다고 확대하지 않는다.
+
+BE `ApiResponse[NearbyStores]` 검증을 통과한 합성 두 행(source 다름/license_no 같음)에서 마커 DOM2개지만 선택 관리 마커1개, 두 표 행 동시 선택, 두 번째 행이 자기 정보창을 표시하지 못함을 확인했다. NearbyMap은 Map 키·클릭콜백·find, NearbyTable은 key/선택, NearbySection은 selectedId에 단독 관리번호를 사용한다. 기존 F4의 영향 범위를 지도까지 확대할 근거다. 단순 React key 교체만으로는 이 동작을 해결할 수 없다.
+
+이번 브라우저 실행의 실제 BE GET13건은 모두200, SQL 오류0, 실LLM 송신0이었다(합성 nearby 응답은 서버 GET 집계에서 제외). 500이 다시 관측되지 않았으므로 기존 간헐500의 원인/해결은 여전히 미확정이다. SDK 도메인 차단은 이번 테스트 origin에서 해제됐지만 FE 환경 파일에 키를 옮기거나 영구 설정하지 않았으므로 담당자 실제 실행 환경과 구분한다.
+
+## 8. 지도 후속 Claude Code 검토
+
+대조 소스(Read만): `app/schemas/nearby.py`, FE `src/components/map/NearbyMap.tsx`, `src/components/analysis/NearbySection.tsx`, `src/components/analysis/nearby/NearbyTable.tsx`, `src/types/stores.ts`, 이 MD와 FE 감사 요청서. FE는 수정하지 않았다. 브라우저·DB·네트워크·Bash·Git은 사용하지 않았으므로 아래는 §7의 Codex 관측을 소스로 설명할 수 있는지 확인한 정적 대조이며, Claude Code가 직접 재현한 결과가 아니다. 이 절 외의 문서는 Edit하지 않았다.
+
+### 8.1 §7 관측과 소스 대조 — 4종 모두 코드로 설명됨
+
+| 관측 | 소스 근거 | 판단 |
+|---|---|---|
+| 마커 DOM2개 | `NearbyMap.tsx:117-126`이 markers마다 `makeMarkerElement`와 `CustomOverlay({map})`를 만들어 지도에 바로 올린다 | 일치 |
+| 관리 마커1개 | `NearbyMap.tsx:127` `overlays.set(m.license_no, …)`가 같은 키를 덮어써서 **마지막(두 번째) 오버레이만** Map에 남는다 | 일치 |
+| 두 행 동시 선택 | `NearbyTable.tsx:58` `selected = m.license_no === selectedId`, `:62,77` 클릭 인자도 license_no. `NearbySection.tsx:30,73,115`의 selectedId는 단일 string | 일치 |
+| 두 번째 선택 시 첫 정보창 | `NearbyMap.tsx:141` `markers.find(m => m.license_no === selectedId)`가 첫 일치 행을 반환 → 정보창 내용·위치·panTo 모두 첫 점포 | 일치 |
+
+추가로 마커 클릭(`NearbyMap.tsx:119`)은 어느 DOM이든 같은 license_no를 보내므로 두 마커가 구별되지 않는다. §7의 "단순 React key 교체로 해결 불가" 판단은 맞다(key는 `NearbyTable.tsx:61` 한 곳뿐이고 선택·지도 경로는 별도).
+
+### 8.2 §7이 직접 서술하지 않은 소스상 결과 (미관측, 확인 요청)
+
+- **강조 대상 불일치**: 관리 마커가 두 번째 것이므로 첫 번째 행을 선택해도 `NearbyMap.tsx:134-138`은 두 번째 마커 DOM을 강조하고, 정보창은 첫 점포를 표시한다. 첫 번째 마커 DOM은 Map에 없어 영원히 강조되지 않는다.
+- **이전 마커 잔존**: 덮어써진 첫 오버레이는 Map에서 빠지므로 markers 갱신(`:115-116`)·언마운트 cleanup(`:86-88`) 어느 쪽에서도 `setMap(null)`되지 않는다. 같은 지도 인스턴스에서 반경·필터를 바꾸면 고아 마커가 남는 구조다. 요청서 4번의 "변경 후 이전 마커가 남지 않는지" 항목이 필요한 근거가 소스에 있다. 다만 `SectionErrorBoundary resetKey`나 상위 isPending 분기로 NearbyMap이 재마운트되는 경우에도 지도 객체는 정리되지만 고아 오버레이 자체는 해제되지 않는다. 실제 잔존 여부는 브라우저로 확인해야 한다.
+- 위 두 항목은 정적 추론이며 결함 확정으로 기록하지 않는다.
+
+### 8.3 수정 방향 검토 — 타당, 보완 2건
+
+- 요청서 4번의 NearbyMap(Map 키·클릭 콜백·강조·find), NearbySection(selectedId·콜백), NearbyTable(key·선택 비교·행/버튼 클릭 인자) 지정은 위 소스 지점을 빠짐없이 덮는다.
+- BE `NearbyMarker`는 `source: StoreSource`를 필수로 반환하고(`nearby.py:81`), 요청서 부록의 `UNIQUE(source, license_no)` 판단상 `${source}:${license_no}`는 응답 안에서 유일하다. BE 계약 변경은 필요 없다.
+- 보완①: FE `stores.ts:48-62` `NearbyMarker` 타입에 **source가 없다**. 복합 식별자를 쓰려면 타입에 source 추가가 선행돼야 하므로 요청서 4번에 명시를 권장한다. 같은 타입은 BE와 달리 `name`·`operating_months`를 non-null로 두고 `operating_period_status/reason`이 없다(`nearby.py:83,90-92`).
+- 보완②: 식별자 생성은 한 helper로 통일하고, NearbySection의 콜백 인자와 NearbyMap/NearbyTable 비교가 같은 함수를 쓰도록 권장한다. 오버레이 정리는 키 유일성에 의존하지 않게(생성한 오버레이를 모두 해제) 하면 비정상 응답에서도 잔존이 없다. 이는 FE 담당자 선택 사항이며 요구 계약이 아니다.
+
+### 8.4 완료/한계 구분 — 타당
+
+- §7·요청서 §6의 "SDK/타일/마커 건수/정상 표본 선택은 통과, 복합 식별은 미완료" 구분과 완료 기준 체크(정상 표본만 [x], 복합 식별 [ ])는 소스와 모순이 없다.
+- "마커 DOM click 이벤트"를 물리 hit test와 구분하고 모바일·확대/이동을 범위 밖으로 둔 표현도 적절하다. 합성 응답이 실제 자료의 중복 발견이 아니라는 단서도 유지돼 있다.
+
+### 8.5 추가 관찰 (지도 nullable, 우선순위 낮음)
+
+BE `NearbyMarker.name`은 nullable이다. 현재 `NearbyMap.tsx:208` title은 `${m.name}`이라 null이면 문자열 "null"이 되고, 정보창 제목(`:224`)과 표 셀(`NearbyTable.tsx:82`)은 빈칸, 버튼 aria-label(`:74`)도 "null …"이 된다. `operating_months=null`은 정보창 `—`, 표 빈칸이다. 요청서 5번(이력 중심)의 결측 표시 원칙을 nearby 표·정보창에도 적용할지 요청서에 범위로 적어 둘 것을 제안한다. 화면 장애가 아니라 표시 보완으로 분류한다.
+
+### 8.6 제안 회귀 기준 (FE 수정 후 FE 담당자 확인용, FE 코드 직접 수정 없음)
+
+같은 BE 스키마 통과 합성 2행(source 다름·license_no 같음·좌표 다름)으로:
+
+1. 두 번째 행 클릭 → 그 행만 `aria-pressed=true`, 정보창 제목·위치가 두 번째 점포, 두 번째 마커 DOM만 `data-selected=true`
+2. 첫 번째 행 클릭 → 첫 번째 마커 DOM이 강조됨(현재 소스상 실패 예상 지점)
+3. 각 마커 DOM 클릭 → 대응 행만 선택
+4. 반경/필터 변경 후 지도 내 점포 마커 DOM 수 = 새 응답 count, 언마운트 후0(고아 없음)
+5. React 중복 key 경고0, 정보창 닫기 → 선택 해제
+6. 정상 실데이터 500m/300m 건수·선택은 §7 결과와 같음(회귀 없음)
+
+BE 쪽은 공개 API·응답을 유지하며, 필요하면 같은 license_no·다른 source 두 마커가 `ApiResponse[NearbyStores]`를 통과함을 단위 테스트로 고정하는 정도만 제안한다(이번 범위에서 추가하지 않음).
+
+### 8.7 결론
+
+§7의 지도 관측 4종은 모두 FE 소스로 설명된다. 기존 F4를 지도 선택·정보창까지 확장하는 방향과 테스트 완료/한계 구분은 타당하다. 차단 지적은 없고 요청서 보완 권장은 ① NearbyMarker 타입 source 추가 명시 ② 강조 불일치·고아 마커는 소스상 예상이므로 회귀 기준 1~4로 확인 ③ nearby nullable 표시 범위 명시 세 가지다. Codex가 요청서 반영 여부를 최종 판단한다.
+
+## 9. 지도 후속 Codex 최종 판단
+
+- Claude의 NearbyMarker.source 타입·선택 상태/콜백/Map/find 전체 복합 식별·서로 다른 좌표의 회귀·주변 nullable 표시 보완을 채택했다. 요청서에 반영했으며, 코드만으로 추론한 고아 오버레이 잔존과 nullable 지도 표시는 실제 브라우저 확정 결함으로 쓰지 않았다. FE 코드는 수정하지 않는다.
+- Claude CLI는 실제 MD를 수정했고 오류없음/권한거절0을 확인했다. Codex가 실제 diff와 소스를 대조했다. 이번 검토는 소스 정합성 확인이며 Claude가 SDK/DB를 직접 실행한 것은 아니다.
+- 지도 실행 후 별도 출력 재검사에서 이력·주변·활동·Risk500이 재발했다. PostgreSQL 로그의 같은 시각 ERROR와 동일 backend PID STATEMENT를 연결해 출처 연결 배치 조회4건의 `canceling statement due to statement timeout`을 확인했다. 원문 SQL/파라미터를 출력·보고서·커밋하지 않고 고정 쿼리 분류와 건수만 남겼다. 이 실행의 직접 원인은 DB statement_timeout이며, SQLSTATE 자체는 직접 수집하지 않았다. 과거 모든500의 원인을 확정하지 않는다.
+- §7의 지도 실행(모든BE GET200/SQL오류0)과 별도 출력 실행(500/timeout4건)은 구분한다. 후자의 PNG는 미확인, 진단서main/인쇄 이벤트/메모리 PDF1페이지는 통과다. 지도 도메인 차단은 이번 origin에서 해소됐지만 전체 시스템 정상은 아니다.
+- 출처 쿼리의 LIMIT 임시안은 여전히 미적용이다. 성능 수정은 미사용 배치 누적과 동시 조회를 포함해 설계·검증해야 하며 #78의 BE 후속으로 남긴다. FE 수정범위/로컬환경 변경은 확대하지 않고 요청서·감사·작업계획을 갱신한다.
