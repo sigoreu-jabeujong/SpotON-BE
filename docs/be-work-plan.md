@@ -652,4 +652,4 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - 요청 형식은 그대로 두고 같은 세션에서 활동 집계를 재계산해 허용 필드만 AI 문맥에 넣는다. Risk와 기준일·배치·분류·모집단 크기·동종업체 수·폐업 분모/분자를 교차 검증하며 불일치는 안전한 500이다. official_values에 서버 참고 계산 문장과 활동 식별자 2종을 추가하고 비교 후보 ID는 기존 범위를 유지한다. prompt v6·선택 cache rule v2다.
 - 일반 1,373 passed(기준선 1,347+신규 26)·ruff/format·mypy 154 files 통과. 최장 조합(음식점·1000m·include 2종·비교3·checklist3·큰 수) 서버 문장은 1,169자(활동 315자)로 verifier 2,000자 안이다. 격리 PostGIS 통합 테스트(활동 대조 1·필터 7조합·과거/빈 업종 보강)는 이 PC에 Docker가 없어 CI에서 실행한다.
 - 이력 문맥(building_key/floor_unit 요청)·연도별 추이·활동 기반 판정 후보는 제외했다. FE 저장소는 수정하지 않고 [FE AI 요청서](fe-risk-interpret-api-request.md)에 칩 라벨·반복 ID 처리를 요청한다.
-- **실제 개발 DB 읽기 전용 검증(활동 문맥=`/api/market/activity`, 교차 검증, cold/warm SQL 수·준비 시간, 빈 license_no 확인, 행/hash 보존)은 DB 연결 후 진행하며 그 전에는 PR을 만들지 않는다.**
+- 2026-11-13 이 PC에 Docker·WSL을 설치하고 팀원 덤프로 `spoton_dev`(head 0011, 기록과 같은 건수)를 복원해 실제 개발 DB 읽기 전용 검증을 마쳤다. 6조합 모두 활동 문맥=활동 API·영업 수 합=competitor, cold/warm SQL 15/8, 준비 0.082~0.713초(SLA 아님), 빈 license_no 0건, 모의 공급자 API 200·실제 LLM 0회, 20개 테이블 행 hash 보존. 상세는 설계 §13이다. PR·CI/CodeQL 후 develop Squash한다.

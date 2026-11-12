@@ -190,4 +190,4 @@ as_of/data_updated_at/space·배치 집합/map_version·franchise_classification
 
 `official_values`에 서버 참고 계산 문장(최근 구간 개폐업1개+선택 세부 업종마다1개)을 Risk 사실 문장 뒤에 추가한다. 문맥에 없는 숫자(12개월 등)는 쓰지 않는다. 사실 항목의 indicator_ids는 `recent_open_close`·`avg_operating_months`를 추가로 허용하며 반복될 수 있다. favorable/unfavorable의 indicator_ids는 기존 IndicatorId만 허용한다. 모델 후보·선택 구조는 그대로이며 활동 기반 유리/불리 후보는 만들지 않는다. prompt는 규칙14를 더한 risk-interpret-v6, data_version_hash에 활동 rule_version, 선택 cache rule은 selection-current-validation-v2다.
 
-설계·Claude Code 재검토·구현 기록은 docs/designs/feat96-ai-activity-context.md, FE 칩 라벨·반복 ID 처리는 docs/fe-risk-interpret-api-request.md로 요청하며 담당자 반영 대기다. 이력 추가문맥은 후속이다. **실제 개발 DB 읽기 전용 검증 전에는 PR을 만들지 않는다.**
+설계·Claude Code 재검토·구현 기록은 docs/designs/feat96-ai-activity-context.md, FE 칩 라벨·반복 ID 처리는 docs/fe-risk-interpret-api-request.md로 요청하며 담당자 반영 대기다. 이력 추가문맥은 후속이다. 실제 개발 DB 읽기 전용 검증(6조합 일치·SQL cold15/warm8·빈 license_no 0건·행 hash 보존)은 설계 §13에 기록했다.

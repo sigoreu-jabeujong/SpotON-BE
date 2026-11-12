@@ -232,4 +232,8 @@ Risk 캐시 적중 시에도 활동은 캐시 없이 재계산된다. Risk 캐�
   - 일반 pytest 1,373 passed / 203 deselected(기준선 1,347 + 신규 26), ruff check·format, mypy 154 files 통과. 경고는 기존 Starlette 1건.
   - 최장 조합 서버 문장 1,169자(활동 315자), 큰 수 쉼표·0건 그룹 3개 포함 verifier 통과.
   - 격리 PostGIS 통합(test_ai_context 11건 수집, test_analysis_flow ID 단언 갱신)은 이 PC에 Docker가 없어 로컬 미실행. CI에서 확인한다.
-  - 실제 개발 DB 읽기 전용 검증: **미실행(DB 연결 대기)**. §10에 따라 PR 생성 전 수행한다.
+  - 실제 개발 DB 읽기 전용 검증(2026-11-13): 이 PC에 Docker Desktop·WSL을 설치하고 팀원의 `spoton_dev` 덤프(pg_dump custom, 2026-11-12 08:15 UTC)를 `spoton_app` 소유로 단일 트랜잭션 복원했다. PostGIS 확장·topology 항목은 새 DB에 이미 있어 제외했다. head 0011, 앱 테이블 소유자 전부 spoton_app, stores 689,440·경계 1,650·점포 통계 24,810·매출 14,391·생활인구 531,922·상권변화 6,600·브랜드 11,167·추정 매칭 6,839건으로 기록과 일치했다. `alembic check`는 PostGIS 내부 테이블(layer·spatial_ref_sys·topology)만 보고했으며 앱 모델 차이는 없다. **빈 license_no 점포는 0건**이라 §12의 활동 500 위험은 현재 데이터에서 발생하지 않는다.
+  - 공개 고정점 3곳 × 카페/음식점 × 300/500/1000m 6조합: 활동 문맥 = 같은 세션 `get_activity` 결과(기간·개폐업·그룹·평균) 6/6 일치, 활동 영업 수 합 = competitor_count 6/6(112~1,706건). 교차 검증 실패 0건.
+  - SQL 수: 캐시 없음 13, 캐시 cold 15 → warm 8(설계 §8 예상과 같음). 준비 시간 cold 0.202~0.713초, warm 0.082~0.389초, 최장은 1000m 음식점(관측값이며 SLA 아님).
+  - 공개 API(TestClient, 모의 공급자) 3건 200·no-store·prompt risk-interpret-v6·official_values에 recent_open_close 1개·avg_operating_months 1/4개. 공급자 호출 3회, 실제 LLM 호출 0회.
+  - 검증 전후 앱 20개 테이블 전체 행 md5·건수 동일(READ ONLY RR). 실제 DB에 DML/DDL·VACUUM·파괴적 테스트는 하지 않았다. 검증 스크립트는 저장소 밖 임시 경로에 두고 좌표·식별자는 출력하지 않았다.
