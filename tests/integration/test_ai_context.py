@@ -135,3 +135,34 @@ def test_past_empty_and_source_not_ready_are_distinct(db):
     assert sum(g.open_count for g in past.context.activity.groups) == (
         past.context.indicators[-1].value
     )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {},
+        {"sub_category": "japanese"},
+        {"sub_category": "korean,western"},
+        {"radius": 300},
+        {"area": "lt33", "include_unknown_area": False},
+        {"franchise": "independent", "include_unknown_franchise": False},
+        {"include_unknown": False},
+    ],
+)
+def test_activity_context_matches_independent_activity_under_filters(db, changes):
+    seed(db)
+    config = Settings(_env_file=None)
+    with Session(db) as s, s.begin():
+        s.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
+        q = RiskQuery(**PARAMS, **changes)
+        activity = get_activity(s, ActivityQuery(**PARAMS, **changes))
+        risk = get_risk(s, q, config)
+        prepared = prepare_risk_interpretation(s, q, config)
+    groups = prepared.context.activity.groups
+    assert [(g.sub_category, g.open_count, g.avg_operating_months) for g in groups] == sorted(
+        (g.sub_category, g.open_count, g.avg_operating_months)
+        for g in activity.data.by_sub_category
+    )
+    assert prepared.context.activity.recent_closed == activity.data.recent_12m.closed
+    assert sum(g.open_count for g in groups) == risk.data.indicators[5].value
+    assert prepared.context.activity.space == f"radius_{q.radius}m"
