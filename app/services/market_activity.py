@@ -24,6 +24,7 @@ from app.schemas.market_activity import (
     YearlyActivity,
 )
 from app.schemas.stores import SubCategory
+from app.services.franchise import brand_context, enrich_meta
 from app.services.spatial_stores import (
     NO_COORD_SCOPE,
     PREFILTER_MARGIN_M,
@@ -187,7 +188,7 @@ def _get_activity(session: Session, query: ActivityQuery) -> ApiResponse[MarketA
         "excluded_no_coord": excluded,
         "excluded_no_coord_scope": NO_COORD_SCOPE,
         "excluded_no_coord_cohort": "opened_by_as_of",
-        "franchise_classification": {"status": "pending", "reason": "brand_mapping_blocked"},
         "optional_data": optional,
     }
+    enrich_meta(meta, brand_context(session))
     return ApiResponse(data=data, meta=meta)

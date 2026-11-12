@@ -75,7 +75,7 @@ def source(temporary_database, monkeypatch):
 
     def check(c):
         assert c.scalar(text("SELECT current_database()")).startswith("spoton_it_")
-        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0010"
+        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0011"
         state = tuple(
             c.execute(
                 text(

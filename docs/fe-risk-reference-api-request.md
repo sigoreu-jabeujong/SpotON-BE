@@ -77,7 +77,7 @@ n=1/3일 때 진입 코호트는 `(T-(n+1)년, T-n년]`에 개업한 점포입�
 
 `flags.insufficient_sample`은 로컬 참고 폐업률/생존율 중 표본 미달이 있으면 true입니다. 공식·선택 항목의 pending이나 서울 비교만으로 켜지지 않습니다. `flags.missing`은 필수 공식 폐업률에 필요한 검증 경계와 요청된 선택 항목만 포함하며, 단순 소표본 지표나 미요청 항목을 추가하지 않습니다.
 
-가맹 분류는 meta.franchise_classification=pending입니다. 현재 실제 is_franchise는 미확인이라 가맹/개인 필터에서 unknown을 제외해 생긴0건을 실제 점포 부재로 단정하지 않습니다.
+가맹 분류는 미적용pending 또는 명시 적용 후estimate/partial입니다. [추가 계약](fe-franchise-classification-api-request.md)의 목록명 일치/기준년도/역사적 선택 편향·data_version.brand_mapping·한계 사유를 함께 표시해 주세요. 원본 is_franchise는 보존하고 현재 원문과 일치한 별도 근거를 조회에 반영합니다. unknown배제0건을 실제 점포 부재로 단정하지 않습니다.
 
 ## 5. 합성 지표 예시와 meta
 

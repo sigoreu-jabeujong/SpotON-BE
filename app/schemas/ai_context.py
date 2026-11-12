@@ -24,6 +24,7 @@ Limit = Literal[
     "ownership_transfer_not_separated",
     "historical_intervals_from_current_snapshot",
     "coordinate_selection_bias_possible",
+    "franchise_name_match_not_contract_or_history",
 ]
 
 
@@ -97,7 +98,9 @@ class RiskInterpretContext(ContextModel):
         "source_completion_time_not_recorded"
     )
     market_status: Literal["unverified"] = "unverified"
-    franchise_classification: Literal["pending"] = "pending"
+    franchise_classification: Literal["pending", "estimate"] = "pending"
+    franchise_reference_year: int | None = Field(default=None, ge=2000, le=9999)
+    franchise_basis: Literal["reference_catalog_name_match"] | None = None
     indicators: tuple[ContextIndicator, ...] = Field(repr=False)
     flags: ContextFlags
     methodology: ContextMethodology = Field(default_factory=ContextMethodology)

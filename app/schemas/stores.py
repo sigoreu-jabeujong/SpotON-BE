@@ -4,6 +4,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.franchise import FranchiseBasis
 from app.schemas.geocode import Category
 from etl.address.building_key import build_from_parts
 from etl.address.floor_unit import parse_floor_unit
@@ -67,6 +68,8 @@ class HistoryStore(BaseModel):
     operating_period_reason: PeriodReason | None
     store_status: StoreStatus
     franchise: Literal["franchise", "independent", "unknown"]
+    franchise_basis: FranchiseBasis | None = None
+    franchise_reference_year: int | None = Field(default=None, ge=2000, le=9999)
     floor_unit: str | None
     location_match: Literal["same_spot", "same_building", "unverified"]
 
