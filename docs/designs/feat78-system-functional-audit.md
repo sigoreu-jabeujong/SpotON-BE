@@ -147,3 +147,17 @@ Claude 실제 수정 diff와 CLI 결과(is_error=false,3turns,permission_denials
 실제 API/ETL dry-run의 읽기전용 세션을 코드에서 확인하고, 검사 전후 schema/인덱스·14테이블 hash를 비교한다. 불일치하면 실제 DB 작업을 중단하고 원인 확인 전 쓰기 복구를 하지 않는다. R18은 host/port/dbname 각각이 다르다는 뜻으로 적용하지 않는다. loopback host가 같아도 연결 대상 tuple이 개발 DB와 다르고 fixture DB 이름을 확인하면 분리된다. 새 테스트 컨테이너의 정확한 ID/name을 확인해 중단하고 기존 볼륨은 건드리지 않는다. 현재 FE checkout과 원격 develop은21ec13f로 일치하며 lint/build 전후 추적파일 변경이 없다.
 
 브라우저 trace/video/HAR/스크린샷을 만들지 않고 console/response는 query를 제외한 path/status·오류 종류/고정 fingerprint만 남긴다. Chrome은 Playwright가 만든 임시 프로필을 닫아 정리한다. 실제 주소는 공개 건물만 사용하고 파손 입력은 합성값만 사용한다. 브라우저를 못 실행하면 해당 행을 차단으로 남기며 API 통과로 대체하지 않는다. R6.8의 DB/원천 실패503 권고는 현행 계약과 달라 채택하지 않는다. DB/서버는500, upstream502, AI한도/실패503을 실제 코드에 맞게 확인한다. 직접 BE 결함이 확인될 때만 최소 수정/회귀를 추가한다.
+
+## 8. 이번 실행 결과와 조치
+
+BE 일반1,166개·일회용 PostGIS146개, ruff check/format·mypy135files가 통과했다. FE21ec13f의 lint/build도 통과했으나 실제 브라우저에서5종 결함을 재현했다. 앱코드나 API계약을 바꾸어 우회하지 않고 docs/fe-system-audit-request.md에 FE 수정 요청을 정리했다. 전체 기능별 판정/근거와 미완료는 docs/be-system-audit.md를 따른다.
+
+- 실제 원천 dry-run은6개 실행기/7회(인허가 두원천) 모두 통과했다. 일반541,169·휴게148,271·경계1,650(보정6)·공식점포24,810·매출14,391·변화6,600·생활인구531,922/격자10,125행이며 affected/inserted0이다. 실제 개발DB에 migration/적재/수정은 하지 않았다.
+- 실제 API18개 판정(연결12조건)에서 D/T·집합·반경/면적/가맹·과거윤년월말·분해/active수·원천/공식pending을 확인했다. 입력/범위/변조/라우팅 오류7개·CORS 허용/비허용도 확인했다. meta의 invalid category가 CATEGORY_REQUIRED인 현행 계약을 잘못 INVALID_PARAM으로 기대했던 검증 코드를 바로잡았고, 셸 stdin으로 한국어를 주입하다 생긴 probe 인코딩 오류도 감사 helper에서만 수정했다. 앱 결함으로 보고하지 않았다.
+- 실제 Gemini 모델은 카페/음식점각1회200·검증통과·재생성0, warm2회는 실제추가송신0이다. 누적ledger2/4회·제한시간2.985/2.469초를 기록했다. 브라우저용 앱의 실제LLM송신은0회다. 검증숫자출현39개는 정확도점수가 아니다.
+- FE에서 실제 AI버튼422, unverified를outside로 표시함을 확인했다. 유효 BE 스키마로 검증한 합성 데이터에서 null날짜의 표/진단서 파손, source별같은번호key충돌, nullable상호/기간빈칸을 재현했다. 실제 단순 이력5행·빈입력2경고/요청0·과거월반경snapshot200은 정상이다. VITE_KAKAO_JS_KEY가 없어 지도 검증은 중단·설정요청했고 사용자는 설정하겠다고 답했다. 완료/SDK성공을 미리 주장하지 않는다.
+- 개인정보 로그 기반은 실제 기본uvicorn HTTP10/API이벤트10·합성ETL이벤트6, canary비노출/affected0과 기본access억제를 재확인했다. 지원기관4개 HTTPS GET도200이었다. public인덱스 정의·head0009·모델차이0·14테이블 전체행/geometry hash를 보존했고 FE추적파일변경0이다.
+- 별도 실원천probe에서 휴게음식점100행200/3.91초·total5,573을 확인했다. 일반음식점은100행/20초 및1행/30초에 ReadTimeout이어서 응답/인증 검증은 미완료다. 최초15초probe를 포함해3회 후 중단했고 키 오류로 단정하거나 수집조건/timeout을 앱에서 임의 변경하지 않았다. snapshot 경로 통과와 실제 최신수집 미확인을 구분한다.
+- 정상 표본의 요약 PNG Blob 생성/저장 클릭 경로·인쇄 버튼의window.print·Chrome PDF메모리렌더1페이지도 확인했다. 실제 파일/이미지는 저장하지 않았고 일반 표본의 출력 성공을 null날짜 진단서 파손/F2 오표시 해결로 취급하지 않는다. 지도키는 해당 검사 시점에도 미설정이라 외부SDK/마커 검증은 계속 중단했다.
+
+실제 .env/Docker·원본·의존성·FE 파일은 바꾸지 않았고 Playwright만 OS임시폴더에 준비했다. 이번에는 BE에서 수정할 확정 결함이 없어 신규 구현/가짜 회귀를 추가하지 않는다. 이슈78은 FE결함·지도/외부응답 후속 추적을 남기며 전체 정상/완료로 닫지 않는다. 감사 보고서 PR은 Ref로 연결하고 CI/CodeQL 후 정상 develop Squash 병합한다.

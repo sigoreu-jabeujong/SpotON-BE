@@ -474,3 +474,5 @@ uv run --locked --extra dev pytest -m integration -rA --junitxml=integration.xml
 통합 검사는 PostGIS 미설치 임시 DB에서 upgrade·공간 함수·세션 commit/rollback·권한 부족·관리자 사전 설치 후 일반 계정 migration·downgrade/재upgrade와 인허가 stores upsert의 멱등성·geometry·source 분리·전체 rollback을 검증합니다. 로컬 DB가 없으면 CI 결과로 실제 검증 여부를 확인하며, CI도 실행할 수 없으면 PR과 다음 작업을 중단합니다.
 
 주소검색 결과부터 이력·월범위·주변/과거·활동/Risk·AI·지원링크까지 연결하는 검사는 `tests/integration/test_analysis_flow.py`입니다. 합성 snapshot을 실제 ETL 실행기로 임시 DB에 적재하고, 외부 지오코딩/모델만 모의 처리합니다. CI는 고유 시나리오10종·총22개 연결 검사의 실행을 확인하며 필수 시나리오가 빠지면 실패합니다. 실제 카카오+개발 DB 읽기 결과·API별 모집단 차이·FE 대기는 [BE API 검증 보고서](docs/be-api-verification.md)를 확인합니다. FE 화면이나 전체 프로젝트 완료를 뜻하지 않습니다.
+
+현재 기능별 실원천 dry-run·실제 모델·FE 브라우저 결과는 [전체 시스템 감사](docs/be-system-audit.md)를 확인합니다. BE 검사 통과와 별개로 FE결함5종·지도설정·일반음식점 원천 API지연이 남아 전체 정상 판정은 보류했습니다. FE 변경은 [수정 요청 보고서](docs/fe-system-audit-request.md)로 전달하며 BE에서 FE를 직접 수정하지 않습니다.
