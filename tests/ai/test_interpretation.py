@@ -93,7 +93,7 @@ def test_all_comparisons_required_and_server_rendering(prepared):
     output = render_interpretation(
         prepared, catalog, CandidateSelection(**selected), model="fake", regenerated=False
     )
-    assert len(output.official_values) == 4 and len(output.missing_data) >= 5
+    assert len(output.official_values) == 6 and len(output.missing_data) >= 5
     assert output.verification.passed and output.verification.checked_numbers > 0
     assert output.favorable[0] == catalog.favorable[selected["favorable"][0]]
 
@@ -232,3 +232,76 @@ def test_no_regeneration_with_too_little_time_and_template_failure_500(monkeypat
         and r.headers["cache-control"] == "no-store"
         and "private-canary" not in r.text
     )
+
+
+def test_activity_facts_follow_risk_facts_with_activity_ids(prepared):
+    output = render_interpretation(
+        prepared,
+        build_catalog(prepared),
+        CandidateSelection(**choice(prepared)),
+        model="fake",
+        regenerated=False,
+    )
+    risk_ids = [item.indicator_ids for item in output.official_values[:4]]
+    assert all(ids[0] not in {"recent_open_close", "avg_operating_months"} for ids in risk_ids)
+    recent, average = output.official_values[4:]
+    assert recent.indicator_ids == ["recent_open_close"]
+    assert recent.text == (
+        "참고 계산: 최근 구간 (2025-11-08, 2026-11-08]에 반경 500m의 "
+        "개업 인허가 기록은 3건, 폐업 기록은 1건입니다."
+    )
+    assert average.indicator_ids == ["avg_operating_months"]
+    assert average.text == (
+        "참고 계산: 2026-11-08 기준 카페 영업 기록 9건의 개업 후 평균 경과 기간은 41개월입니다."
+    )
+    assert all(
+        "recent_open_close" not in item.indicator_ids
+        for item in output.favorable + output.unfavorable
+    )
+
+
+def test_longest_restaurant_combination_passes_verifier_with_large_counts(monkeypatch):
+    local = ReferenceCounts(
+        cohort_size=30000,
+        active=12345,
+        closure_num=1234,
+        closure_den=13579,
+        survival_1_num=400,
+        survival_1_den=500,
+        survival_3_num=100,
+        survival_3_den=300,
+    )
+    seoul = ReferenceCounts(
+        cohort_size=900000,
+        active=400000,
+        closure_num=20000,
+        closure_den=420000,
+        survival_1_num=9000,
+        survival_1_den=20000,
+        survival_3_num=3000,
+        survival_3_den=10000,
+    )
+    q = query(category="restaurant", include="market_change,day_night_ratio", radius=1000)
+    use_risk(monkeypatch, context_module, response(q, local, seoul), q, opened=2345, months=1234)
+    p = prepare_risk_interpretation(Mock(), q, Settings(_env_file=None))
+    catalog = build_catalog(p)
+    assert len(catalog.favorable) + len(catalog.unfavorable) == 3
+    selected = CandidateSelection(
+        favorable=list(catalog.favorable),
+        unfavorable=list(catalog.unfavorable),
+        checklist=["time_flow", "access", "visibility"],
+    )
+    output = render_interpretation(p, catalog, selected, model="fake", regenerated=False)
+    texts = [i.text for i in output.official_values]
+    assert "개업 인허가 기록은 2,345건, 폐업 기록은 1,234건입니다." in texts[4]
+    assert any("한식 영업 기록 12,345건의 개업 후 평균 경과 기간은 1,234개월" in t for t in texts)
+    assert sum("영업 기록이 없어 평균 경과 기간을 산정하지 않았습니다" in t for t in texts) == 3
+    assert [i.indicator_ids for i in output.official_values[5:]] == [["avg_operating_months"]] * 4
+
+
+def test_openapi_keeps_comparison_ids_narrow():
+    schema = create_app(Settings(_env_file=None)).openapi()["components"]["schemas"]
+    fact = json.dumps(schema["InterpretItem"]["properties"]["indicator_ids"])
+    sourced = json.dumps(schema["InterpretSourcedItem"]["properties"]["indicator_ids"])
+    assert "recent_open_close" in fact and "avg_operating_months" in fact
+    assert "recent_open_close" not in sourced and "avg_operating_months" not in sourced

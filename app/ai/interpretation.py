@@ -8,6 +8,7 @@ from pydantic import JsonValue
 
 from app.ai.context import PreparedRiskInterpretation
 from app.ai.verifier import NUMBER_PATTERN, verify_output
+from app.schemas.ai_context import RiskInterpretContext
 from app.schemas.interpret import (
     CandidateSelection,
     ChecklistItem,
@@ -39,6 +40,13 @@ TITLES = {
     "closure_rate_12m": "최근 기간 참고 폐업률",
     "survival_rate_1y": "개업 1주년 생존율",
     "survival_rate_3y": "개업 3주년 생존율",
+}
+ACTIVITY_LABELS = {
+    "cafe": "카페",
+    "korean": "한식",
+    "chinese": "중식",
+    "japanese": "일식",
+    "western": "양식",
 }
 MISSING_TITLES = {
     "official_closure_rate": "공식 폐업률",
@@ -90,6 +98,35 @@ class InterpretationCatalog:
         return schema
 
 
+def _activity_facts(c: RiskInterpretContext) -> list[InterpretItem]:
+    """#60 활동 집계의 참고 계산 문장. 문맥에 없는 숫자(기간 길이 등)는 쓰지 않는다."""
+    a = c.activity
+    facts = [
+        InterpretItem(
+            text=(
+                f"참고 계산: 최근 구간 {a.recent_period}에 반경 {c.radius_m}m의 "
+                f"개업 인허가 기록은 {a.recent_opened:,}건, "
+                f"폐업 기록은 {a.recent_closed:,}건입니다."
+            ),
+            indicator_ids=["recent_open_close"],
+        )
+    ]
+    for g in a.groups:
+        label = ACTIVITY_LABELS[g.sub_category]
+        if g.avg_operating_months is None:
+            text = (
+                f"참고 계산: {c.as_of.isoformat()} 기준 {label} 영업 기록이 없어 "
+                "평균 경과 기간을 산정하지 않았습니다."
+            )
+        else:
+            text = (
+                f"참고 계산: {c.as_of.isoformat()} 기준 {label} 영업 기록 {g.open_count:,}건의 "
+                f"개업 후 평균 경과 기간은 {g.avg_operating_months:,}개월입니다."
+            )
+        facts.append(InterpretItem(text=text, indicator_ids=["avg_operating_months"]))
+    return facts
+
+
 def build_catalog(prepared: PreparedRiskInterpretation) -> InterpretationCatalog:
     c = prepared.context
     facts = []
@@ -135,6 +172,7 @@ def build_catalog(prepared: PreparedRiskInterpretation) -> InterpretationCatalog
             sources=list(row.source),
         )
         (positive if favorable else negative)[row.id + "_comparison"] = item
+    facts.extend(_activity_facts(c))
     missing.extend(
         [
             MissingItem(
