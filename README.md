@@ -2,7 +2,7 @@
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해·기본 상권 활동·Risk 참고지표·검증 후보 기반 AI 해석·상담/지원기관 공통 링크 API와 인허가/상권/생활인구 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 점포 689,440건·상권 경계 1,650건·2025년 점포 통계 24,810행·추정매출 14,391행·공식 상권변화 유형 6,600행과 2026-11-07 생활인구 531,922행·공식 250m 격자 10,125개를 적재했습니다. migration `0009`가 현재 head입니다. 원천별 시점을 혼합하지 않으며 브랜드 매핑·공식 지표 연결·조건부 매출/인구 수치와 FE 반영은 후속 작업입니다.
+현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해·기본 상권 활동·Risk 참고지표·검증 후보 기반 AI 해석·상담/지원기관 공통 링크 API와 인허가/상권/생활인구 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 점포 689,440건·상권 경계 1,650건·2025년 점포 통계 24,810행·추정매출 14,391행·공식 상권변화 유형 6,600행과 2026-11-07 생활인구 531,922행·공식 250m 격자 10,125개를 적재했습니다. migration `0010`가 현재 head입니다. 원천별 시점을 혼합하지 않으며 브랜드 매핑·공식 지표 연결·조건부 매출/인구 수치와 FE 반영은 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -266,7 +266,7 @@ uv run --locked --extra dev --no-editable python -m etl.localdata --source gener
 - `--from-csv --write`는 허용하지 않습니다. CSV dry-run으로 만든 snapshot을 확인한 뒤
   같은 파일을 `--from-snapshot --write`로 적재합니다. 원본 CSV·보고서는 수정하지 않습니다.
 - `--write`는 localhost의 `spoton_dev`·`spoton_app`만 허용합니다. 연결 후 계정·권한·revision
-  `0009`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
+  `0010`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
 - 같은 snapshot으로 다시 실행하면 기존 `(source, license_no)`를 갱신합니다. `affected`는
   성공적으로 처리한 입력 수이고, 값이 실제로 변경된 행 수를 뜻하지 않습니다.
 - 실제 원천은 성공 코드 `0`, 날짜 `YYYY-MM-DD`, 갱신시각 `YYYY-MM-DD hh:mm:ss`를 사용합니다.
@@ -475,4 +475,20 @@ uv run --locked --extra dev pytest -m integration -rA --junitxml=integration.xml
 
 주소검색 결과부터 이력·월범위·주변/과거·활동/Risk·AI·지원링크까지 연결하는 검사는 `tests/integration/test_analysis_flow.py`입니다. 합성 snapshot을 실제 ETL 실행기로 임시 DB에 적재하고, 외부 지오코딩/모델만 모의 처리합니다. CI는 고유 시나리오10종·총22개 연결 검사의 실행을 확인하며 필수 시나리오가 빠지면 실패합니다. 실제 카카오+개발 DB 읽기 결과·API별 모집단 차이·FE 대기는 [BE API 검증 보고서](docs/be-api-verification.md)를 확인합니다. FE 화면이나 전체 프로젝트 완료를 뜻하지 않습니다.
 
-현재 기능별 실원천 dry-run·실제 모델·FE 브라우저 결과는 [전체 시스템 감사](docs/be-system-audit.md)를 확인합니다. BE 검사 통과와 별개로 FE결함5종·지도설정·일반음식점 원천 API지연이 남아 전체 정상 판정은 보류했습니다. FE 변경은 [수정 요청 보고서](docs/fe-system-audit-request.md)로 전달하며 BE에서 FE를 직접 수정하지 않습니다.
+현재 기능별 실원천 dry-run·실제 모델·FE 브라우저 결과는 [전체 시스템 감사](docs/be-system-audit.md)를 확인합니다. FE결함5종·일반음식점 원천 API지연이 남아 전체 정상 판정은 보류했습니다. 지도 기본 연결과 아래 출처 조회 인덱스의 적용 범위는 각각의 최신 검증 결과를 확인합니다. FE 변경은 [수정 요청 보고서](docs/fe-system-audit-request.md)로 전달하며 BE에서 FE를 직접 수정하지 않습니다.
+
+## 출처 조회 인덱스와 대량 인허가 적재 후 관리
+
+현재 migration head는 `0010`입니다. `ix_stores_provenance`는 `(batch_id, source, category, sub_category)`의 partial B-tree이며 삭제·검토대기 행을 제외합니다. 기존 출처 검증 SQL과 API 계약을 유지하면서 전역 출처 조회의 heap 읽기를 줄입니다. ETL의 DB 준비 검사는 `0010`을 요구합니다.
+
+일반 CREATE INDEX는 생성 중 쓰기를 대기시킬 수 있습니다. downgrade의 DROP INDEX는 읽기도 대기시킬 수 있으므로 migration·롤백은 트래픽을 정리한 시점에 실행합니다. 두 방향 모두 트랜잭션의 `lock_timeout=5s`를 사용하며, 잠금 실패 시 전체 트랜잭션 롤백을 확인한 뒤 재실행합니다. 이 값은 인덱스 생성 시간이나 API SQL3초 제한을 늘리는 설정이 아닙니다.
+
+**대량 인허가 재적재 시에는 분석 조회를 중지하고**, ETL 커밋 후 테이블 소유자 또는 적절한 유지관리 권한을 가진 계정의 **별도 autocommit 세션**에서 다음을 실행한 뒤 API 정상 응답을 확인하고 조회를 재개합니다.
+
+```sql
+VACUUM (ANALYZE) public.stores;
+```
+
+VACUUM은 ETL·migration의 트랜잭션 블록 안에서 실행할 수 없습니다. ETL 커밋과 원자적이지 않으며, 실패해도 이미 적재한 데이터가 롤백되지는 않습니다. 완료 전에는 조회500이 발생할 수 있어 조회 중지를 유지하고 원인을 확인합니다. migration과 동시에 실행하지 않습니다. 자동 VACUUM이나 자동 조회 차단 기능을 추가한 것은 아니며 운영자가 수행하는 절차입니다.
+
+합성 전체 재적재 직후에는 이 인덱스에서도 배치조회가3초를 초과했습니다. 현재 정적 데이터의 읽기 개선과 이 제한을 구분하며, 비용·회귀·실제 검증은 [설계 및 Claude 검토](docs/designs/feat82-store-provenance-index.md)를 확인합니다.

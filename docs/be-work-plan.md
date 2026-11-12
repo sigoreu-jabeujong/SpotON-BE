@@ -585,3 +585,11 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - 유효 Nearby 합성2행(다른 source/같은 관리번호)에서 마커DOM2/관리1·표2행동시선택·두번째선택시첫정보창을 재현했다. Claude 실제 소스/MD 검토 후 기존F4 요청에 타입source와 Map/selectedId/콜백/find 전체 복합식별·변경후정리 회귀를 보완했다. FE 직접 수정은 없다.
 - 지도 실행은 브라우저 실제GET13건200·SQL오류0·실LLM0이었으나 별도출력 실행에서4개 API500이 재발했다. PostgreSQL 같은시각/동일PID 로그로 **출처 연결 배치 조회 statement_timeout4건**을 확인했다. SQLSTATE 자체·과거모든500의원인은 확정하지 않는다. PNG는미확인·PDF메모리1페이지/인쇄이벤트통과다.
 - [감사보고서7절](be-system-audit.md)·[설계7~9절](designs/feat78-audit-recheck.md)·[FE 요청서](fe-system-audit-request.md)를 갱신한다. 코드/계약/실제DB/.env/migration/timeout은 바꾸지 않고 성능개선은 #78의 BE후속으로 유지한다. 전체정상 판정은 보류한다.
+
+## 33. 출처 배치 조회 인덱스 개선 (#82)
+
+- #78의 출처조회 statement_timeout을 다음작업으로 선택해 [Codex설계·Claude실제2회검토·최종판단](designs/feat82-store-provenance-index.md) 후 partial B-tree ix_stores_provenance를 추가했다. 키는batch_id/source/category/sub_category이며 삭제/검토대기행을제외한다. 기존서비스SQL·고아/전역기준일·3초제한·API계약은유지한다.
+- migration0010·ORM·ETLhead검사와회귀를맞췄다. 일반1166·격리155(신규9)·ruff/format·mypy136files통과. 실제dev에는writer부재후indexDDL만적용했고14테이블전체행/geometry hash/건수·기존index·5API응답digest를보존했다. 실제head0010·모델차이0이다.
+- 실제동시5API×3세트15건200/31~157ms·SQL오류0, 기존출처EXPLAIN0.096ms를확인했다. 정상출력PNG생성·인쇄이벤트·PDF메모리1페이지도통과했고실LLM추가호출0·FE변경0이다. 캐시warm/단발측정을포함하므로운영SLA보장은아니다.
+- 합성689440행의전체재적재직후에는B에서도배치조회5.759초로3초를넘었다. 이구간은미해결이며, 인허가대량적재동안읽기중지→커밋→별도autocommit수동VACUUM(ANALYZE)stores→API확인→읽기재개를필수운영절차로README에남겼다. 자동VACUUM/자동차단·ETL원자성변경은없다. 쓰기비용/DDL잠금·과거배치누적한계도설계에기록했다.
+- 코드/검증PR은#82를종료하되#78은FE5종·원천지연·대량적재후경계추적용으로유지한다. 브랜드#57승인·조건부데이터/API연결·AI추가문맥·지원맞춤정렬·로그30일삭제는후속이다. FE/.env/Docker·원본파일은수정/커밋하지않는다.

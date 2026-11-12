@@ -115,6 +115,7 @@ def assert_database_schema(engine: Engine) -> None:
         assert set(index_by_name) == {
             "pk_stores",
             "uq_stores_source_license_no",
+            "ix_stores_provenance",
             *INDEX_SPECS,
         }
         for name, (method, columns) in INDEX_SPECS.items():
@@ -145,7 +146,7 @@ def test_stores_migration_schema_and_constraints(
     database = temporary_database
     migrate(database, "head")
     with database.engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0009"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0010"
     assert_database_schema(database.engine)
 
     insert = (

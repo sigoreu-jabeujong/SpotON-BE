@@ -59,7 +59,7 @@ def check_local_database(connection: Connection) -> None:
     ).one()
     if tuple(identity) != ("spoton_dev", "spoton_app", False, True):
         raise ImportConfigurationError("import:database_identity")
-    if list(connection.scalars(text("SELECT version_num FROM alembic_version"))) != ["0009"]:
+    if list(connection.scalars(text("SELECT version_num FROM alembic_version"))) != ["0010"]:
         raise ImportConfigurationError("import:migration")
     definition = connection.scalar(
         text(

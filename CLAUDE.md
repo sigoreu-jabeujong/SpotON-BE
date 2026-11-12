@@ -30,7 +30,7 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 
 ## 상권 경계 적재 기준 (BE #47)
 
-현재 migration head는 0009다. `python -m etl.market_areas`는 공식 OA-15560 ZIP의 hash·첨부 수정일을 받아 기본 읽기 전용 dry-run, --write일 때 일반 로컬 앱 계정에서 원자적으로 적재한다. EPSG:5181 원본의 무효 도형만 linework 보정 후 유효 MULTIPOLYGON 4326·GIST로 저장한다. 원본 면적·hole/multipart·타입/5자리 구 코드를 보존하고 버전/데이터 digest를 검증한다. 같은 원본/규칙 재실행은 불변 버전을 재사용하며 기존 버전 수정/삭제·최신 자동 선택은 하지 않는다. source_file_date는 첨부 수정일이고 boundary_as_of는 미확인 null이다. 후속 통계 분기와의 코드/경계 호환 전에는 지표에 자동 적용하지 않는다. 현재 1,650행·6개 보정, 기존 stores 689,440건이다. 상세는 docs/designs/feat47-market-areas-import.md를 따른다. API 응답/FE 변경은 없다.
+현재 migration head는 0010다. `python -m etl.market_areas`는 공식 OA-15560 ZIP의 hash·첨부 수정일을 받아 기본 읽기 전용 dry-run, --write일 때 일반 로컬 앱 계정에서 원자적으로 적재한다. EPSG:5181 원본의 무효 도형만 linework 보정 후 유효 MULTIPOLYGON 4326·GIST로 저장한다. 원본 면적·hole/multipart·타입/5자리 구 코드를 보존하고 버전/데이터 digest를 검증한다. 같은 원본/규칙 재실행은 불변 버전을 재사용하며 기존 버전 수정/삭제·최신 자동 선택은 하지 않는다. source_file_date는 첨부 수정일이고 boundary_as_of는 미확인 null이다. 후속 통계 분기와의 코드/경계 호환 전에는 지표에 자동 적용하지 않는다. 현재 1,650행·6개 보정, 기존 stores 689,440건이다. 상세는 docs/designs/feat47-market-areas-import.md를 따른다. API 응답/FE 변경은 없다.
 
 ## 공식 점포 통계 적재 기준 (BE #49)
 
@@ -133,3 +133,9 @@ tests/integration/test_analysis_flow.py는 합성 snapshot→기존 runner→격
 docs/be-system-audit.md에 기능별 상태와 실제/격리·모의/정적/기존재사용 근거를 분리했다. 이번 일반1,166/격리146·실원천dry-run7회·실모델2건은 통과했으나 실제FE의 AI422·미확인상권오표시·유효null날짜파손·복합key충돌·빈결측셀을 재현했다. 수정 요청은 docs/fe-system-audit-request.md이며 FE 파일/설정/문서/이슈/PR은 직접 수정하지 않는다. 실제 지도는 JS키 설정 완료 후 검증해야 하며 일반음식점 원천API 응답지연도 미해결이다.
 
 실제DB읽기전용·14테이블/geometry hash·인덱스·head0009·모델차이0·FE추적파일변경0을 확인했다. 원문/키/실제.env/Docker·의존성을 커밋하지 않았고 브라우저실제LLM송신0·실제별도모델2회/재생성0과 warm재사용을 구분한다. 전체정상/FE완료/외부원천최신수집을 주장하지 않는다. 감사문서PR은 Ref#78로 연결하고 CI/CodeQL 후 정상 develop Squash하되 이슈는 후속수정/지도/외부응답 추적용으로 열린상태를 유지한다.
+
+## 출처 연결 배치 조회 인덱스 (BE #82)
+
+현재 head0010의 ix_stores_provenance는 batch_id/source/category/sub_category 네 컬럼 key와 deleted_at IS NULL AND category_review_flag IS NOT TRUE predicate를 사용한다. SQL/공개 계약·3초 제한·고아 검증은 유지한다. ETL head guard도0010이다. 일반1166·격리155·mypy136files, 실제14테이블전체행/geometry hash·기존인덱스/응답보존과 실제동시15건200을 확인했다. 실제dev에는 인덱스 migration만 적용했고 데이터DML은 하지 않았다.
+
+대량 인허가 재적재 직후는 미해결 경계다. 읽기를 중지하고 커밋 후 별도autocommit 세션의 수동 VACUUM(ANALYZE)stores·API확인 후 읽기를 재개한다. ETL과원자적이지 않고 자동VACUUM/자동조회차단은 없다. 생성/삭제 DDL의 잠금 영향을 고려하며 rollback은 읽기 트래픽이 없는 시점에 실행한다. 상세 Claude2회 검토·측정/쓰기비용·최종판단은 docs/designs/feat82-store-provenance-index.md, 절차는 README를 따른다. FE수정·API응답변경은 없다.
