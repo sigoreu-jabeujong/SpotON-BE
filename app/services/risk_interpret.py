@@ -20,7 +20,7 @@ from app.schemas.risk import RiskQuery
 from app.services.risk_cache import query_parts
 
 MIN_REGENERATION_SECONDS = 1.0
-SELECTION_CACHE_RULE = "selection-current-validation-v1"
+SELECTION_CACHE_RULE = "selection-current-validation-v2"
 
 
 class _CachedSelection(BaseModel):

@@ -75,7 +75,7 @@ def test_allowlist_and_original_risk_numbers_and_statuses(monkeypatch):
     for before, after in zip(original.data.indicators, p.context.indicators, strict=True):
         assert after.value == before.value and after.source == tuple(before.source)
         assert after.status == before.status and after.denominator == before.denominator
-    assert p.prompt_version == "risk-interpret-v5"
+    assert p.prompt_version == "risk-interpret-v6"
     assert hashlib.sha256(serialize_context(safe).encode()).hexdigest() == p.context_hash
     assert serialize_context(safe) in p.request.user_content
 
