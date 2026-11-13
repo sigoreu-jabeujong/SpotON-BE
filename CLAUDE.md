@@ -180,6 +180,10 @@ load_input·read_source 성공 뒤, 설정/DB 전에 etl_quality를1회 남긴�
 
 6개 유효 정수 카운터가 모두 있을 때 completed, 계산/검증 실패는 counts 없이 failed/quality_summary_unavailable이다. source=living_pop 유효 run UUID만 허용하고 scope=source_day_all_sources·spatial_compatibility=unverified·aggregation_status=pending을 고정한다. completed는 적재/공간 검증 성공이 아니며 뒤에 import failed가 올 수 있다. 로그는 실패해도 ETL 결과를 바꾸지 않고 취소는 전파한다. 공식 근거·30일 보관/삭제·#57/#78은 대기다. 설계·실제 Claude 검토·Codex 판단·검증은 docs/designs/feat90-population-quality-logs.md를 따른다.
 
+## 생활인구 원천 검증과 독립 계산 기반 (BE #115)
+
+생활인구 #115는 공식 파일 재확인 보고서·미제출 문의 초안과 독립 산술 기반만 추가했다. `app.analysis.day_night`는 검증된 동일 모집단의24시간 총계를 받는 순수 함수이며 현재 DB/API/AI/품질 진단기에는 연결하지 않는다. 06~17/나머지 구간·Decimal·비중/배수·0분모를 구분한다. None이 있으면 모든 수치가null, 잘못된 입력은고정오류다. 원천상태·완전성·날짜를 이 함수가 검증하지 않는다. 공식근거3건 미확정으로 공개pending과head0011을 유지하고 #115를열어둔다. [원천 검증·문의 초안](docs/population-source-verification.md), [설계·검토](docs/designs/feat115-population-time-basis.md)를 따른다.
+
 ## 브랜드 원천 기반·판정 적용의 경계 (BE #57)
 
 2026-11-12 사용자 승인 화면 및 실제 인증 성공으로 이전 브랜드 승인 대기 서술을 대체한다. `python -m etl.brands --year YYYY --output <workspace밖새파일> [--compare-local]` 또는 `--snapshot <기존파일> [--compare-local]`를 제공한다. 순차1000행·재시도/연도대체없음·페이지/전체/연도/브랜드·본부복합키 중복 검증과 첫페이지 재확인, 원문base64/hash·규칙v2·이번 실제수집완료시각을 저장한다. 브랜드번호단독반복행은보존하고모든관련이름을repeated_brand_id로격리한다. 대표자/사업자/법인명은 정규화·대조·로그/LLM에 사용하지 않는다. 기존파일 덮기/원문출력 금지이며 offline은키/HTTP 없이 재검증한다.

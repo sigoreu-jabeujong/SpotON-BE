@@ -579,3 +579,9 @@ uv run --locked --extra dev python -m etl.living_pop.quality --population-versio
 원천 중심점 속성(EPSG5179)을 기준으로 타원체 거리≤반경인 격자를 선택합니다. 72개 원천·시각 칸에서 `observed_zero`, `observed_nonzero`, `suppressed`, `missing` 행과 행이 있는/없는 격자를 구분합니다. 미좌표 행은 버전 전체 통계로만 별도 표시합니다. 저장 건수와 metadata를 대조하지만 content hash를 재검증하는 도구는 아닙니다.
 
 **행 없음은0명이 아닙니다.** 복수행정동 행의 합산 의미·행정동 구성 완전성·격자의 관측일 적용 여부가 미확인이므로 인구 합계·완전성·제공률로 해석하지 않습니다. 공개 activity/Risk의 인구 pending 상태도 유지합니다. [설계·Claude 검토·실행 결과](docs/designs/feat84-population-quality-diagnostic.md)를 확인합니다.
+
+## 생활인구 원천 검증과 주야간 계산 기반
+
+2026-11-14 공식 정의서·두 매뉴얼·SHP를 재확인했지만 행정동 행의 합산·행 부재·관측일별 격자 적용의 공식 근거는 미확정입니다. [검증 보고서와 제공기관 문의 초안](docs/population-source-verification.md)을 확인합니다. 문의는 아직 제출하지 않았으며 #115는 후속 추적용으로 열어 둡니다.
+
+`app.analysis.day_night.calculate_day_night`는 같은 날짜·공간·모집단의 검증된 시간별 총계24개를 향후 입력받는 내부 순수 계산 기반입니다. 주간06~17·야간나머지의 비중/평균/배수를 Decimal로 구분하고 결측이면 부분합을 반환하지 않습니다. 실제 원천 합산·DB 조회·activity/Risk/AI에는 미연결이며 **현재 공개 인구 pending을 유지**합니다. 산술 성공은 원천 검증이나 하루 고유 방문자 수가 아닙니다. [설계·Claude 검토](docs/designs/feat115-population-time-basis.md)를 따릅니다.
