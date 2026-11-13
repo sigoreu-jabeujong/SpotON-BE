@@ -1,8 +1,8 @@
-# FE 전달: Render 검증용 BE 연결
+# FE 전달: Render 무료 BE 연결
 
 - 확인일: 2026-11-14
 - BE 배포·대표 API 검증 완료. FE 저장소·환경변수·배포는 수정하지 않았다.
-- 상세 검증: [무료 전환 결과](render-free-validation.md). 기존 유료 BE·DB는 삭제됐으며 이전 URL을 사용하지 않는다.
+- 상세 검증: [현재 무료 환경 안내](render-free-validation.md). 기존 유료 BE·DB는 삭제됐으며 이전 URL을 사용하지 않는다.
 
 ## 1. 연결 설정
 

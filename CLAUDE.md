@@ -6,15 +6,13 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 
 [BE 개발 기준 및 작업계획](docs/be-work-plan.md)
 
-## Render 검증 배포 기준 (BE #106)
+## Render 무료 검증 배포 기준
 
-최신 상태는 [#109 무료 전환](docs/render-free-validation.md)이다. 2026-11-14 기존 유료 BE·DB를 삭제하고 Free 웹 spoton-be-free·DB spoton-db-free만 유지한다. Free는 SQL10초·풀1/overflow0/대기15초·워커1·예산8이고 ready2.5초/750ms·LLM 미설정을 유지한다. 앱 모델/head0011·원래50인덱스와 별도 ops_free_risk_cover1개를 구분한다. 이 Free DB를 autogenerate 대상으로 쓰지 않는다. 로컬 .env/기본3초·FE 파일은 변경하지 않았다. 아래는 최초 유료 배포 기록이다.
+현재 Free 웹 spoton-be-free와 DB spoton-db-free를 같은 workspace·Singapore에서 사용한다. SQL10초·풀1/overflow0/대기15초·워커1·예산/reader8이며, 별도 ready 연결을 포함한 교체 상한은4개다. ready는 HTTP2.5초/SQL750ms·성공10초/실패1초 캐시를 유지한다. DB는 내부 TLS require/조회 역할만 사용하며 관리자/ETL/LLM 키를 BE에 넣지 않는다.
 
-PR #107을 develop에 병합한 commit56e174e를 Render `spoton-be-check`에 수동 배포했다. 공개 API24건·경계3건·동시3의6요청·주소 검색·CORS·내부 API 풀 TLSv1.3을 검증했다. 자세한 실제 상태와 남은 범위는 [배포 결과](docs/render-be-validation-deployment.md), FE 담당 연결은 [전달 문서](docs/fe-render-validation-api-request.md)를 따른다. 문서만 추가된 develop은 자동 배포하지 않는다.
+Docker app.runtime·PORT10000·비root 실행이며 시작 시 migration/ETL은 하지 않고, 검증한 commit을 수동 배포한다. 앱 모델/head0011·기준50인덱스와 별도 ops_free_risk_cover1개를 구분한다. 이 Free DB를 autogenerate 대상으로 쓰지 않는다. 로컬 .env·기본3초·FE 파일은 변경하지 않는다.
 
-Docker 진입점은 app.runtime이며 PORT 기본10000·명시적 WEB_CONCURRENCY=1·비root 실행이다. 시작 시 migration/ETL은 실행하지 않는다. `/api/health`는 기존 liveness, `/api/ready`는 DB/revision 및 staging·production 조회 역할 권한 검사다. 준비 검사는 별도 단일 연결·성공10초/실패1초 캐시·HTTP2.5초·SQL750ms이며 실패는 기존 INTERNAL_ERROR500/no-store다.
-
-풀 기본3·overflow0·대기2초·예산8이고 교체 상한은 `2 * workers * (pool_size + overflow + 1 readiness) <= budget`이다. 단일 Render 인스턴스만 가정하며 추가 인스턴스·외부 reader는 예산을 다시 계산한다. 검증 서비스는 같은 계정·싱가포르 DB의 내부 TLS require/조회 역할을 사용하고 관리자/ETL/LLM 키는 전달하지 않는다. FE 저장소는 수정하지 않는다. 상세는 [설계·Claude 검토·최종 결정](docs/designs/feat106-render-validation-deploy.md)을 따른다.
+Render 전용 MD는 [현재 구성·복원·만료 안내](docs/render-free-validation.md)와 [FE 연결 안내](docs/fe-render-validation-api-request.md) 두 개로 관리한다. DB 만료일은2026-12-13이다. 설정을 갱신할 때 두 문서와 이 기준의 불일치를 함께 정리한다.
 
 ## 상세 위치 파서 지명 오인 수정 (BE #102)
 

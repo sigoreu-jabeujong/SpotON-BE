@@ -1,84 +1,121 @@
-# Render 무료 검증 환경 전환
+# Render 무료 검증 환경 안내
 
-- 요청일: 2026-11-13 (Asia/Seoul)
-- 이슈: [#109](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/109)
-- 설계·실제 Claude 검토·최종 결정: [설계 문서](designs/feat109-render-free-migration.md)
-- 완료 확인: **2026-11-14 (Asia/Seoul), 카드 없는 Free DB·BE 생성·데이터/API 검증·이전 유료 자원 삭제 완료.**
+마지막 구성·데이터·API 검증일은 **2026-11-14 (Asia/Seoul)**이다. 현재 Render 기준은 이 문서와 [FE 연결 안내](fe-render-validation-api-request.md)에서 관리한다.
 
-## 1. 카드 없는 상태에서의 생성 확인
+## 1. 현재 구성
 
-사용자가 Billing에서 카드 삭제 완료를 확인했다. API에는 카드 등록 여부 조회 기능이 없어 이 확인과 실제 리소스 생성 결과를 구분한다. 이후 plan=free로 PostgreSQL17 생성 요청을 보내 성공했다. 유료 플랜으로의 재생성·카드 재등록·유료 리소스 재개는 수행하지 않았다.
-
-| 항목 | 실제 상태 |
+| 항목 | 설정 |
 |---|---|
-| 신규 DB | spoton-db-free / dpg-dbrhh4rm8hqs73d2mlgg-a |
-| DB plan | free |
-| 리전 | Singapore, 기존과 같은 workspace |
-| PostgreSQL | 17 |
-| 생성 | 2026-11-13 23:02:59 KST |
-| 만료 | **2026-12-13 23:02:59 KST** |
-| DB 이름 | spoton_free_check |
-| 신규 BE | spoton-be-free / srv-dbri09k9v7es73clfpl0 / free |
 | API | https://spoton-be-free.onrender.com |
+| API 문서 / 준비 상태 | [/docs](https://spoton-be-free.onrender.com/docs) / [/api/ready](https://spoton-be-free.onrender.com/api/ready) |
+| BE | spoton-be-free / Free / srv-dbri09k9v7es73clfpl0 |
+| DB | spoton-db-free / Free / dpg-dbrhh4rm8hqs73d2mlgg-a |
+| 리전 | 같은 workspace의 Singapore |
+| DB 버전 / 이름 | PostgreSQL17·PostGIS3.6.2 / spoton_free_check |
+| DB 생성 / 만료 | 2026-11-13 23:02:59 / **2026-12-13 23:02:59 KST** |
+| DB 크기 | 검증 당시721,131,187 bytes, 약721MB |
+| Migration | 0011 |
 | 배포 commit | d449c5f0e86778a15fddac28722d0d6833fe8779 |
-| 현재 DB 크기 | 721,131,187 bytes, 약721MB |
-| 이전 유료 BE/DB | 모두 삭제, 기존 두ID 조회404 |
-| 남은 자원 | 무료 BE1·무료 DB1, 유료 컴퓨팅0·지속 디스크0·Key Value0 |
+| 자동 배포 | off, 검증한 commit을 수동 배포 |
 
-기존 BE와 DB는 사용자 설명과 달리 API상 삭제가 아닌 user suspended 상태였다. BE의 유료→free 직접 변경 요청은 Render가400 `cannot change between free and paid plans`로 거절했다. 따라서 새 무료 웹 서비스를 생성하고 검증 뒤 이전 자원을 삭제하는 방식을 사용한다.
+검증 당시 남은 자원은 Free BE1개·Free DB1개이며, 유료 컴퓨팅·별도 지속 디스크·Key Value는0개다. 카드 삭제는 사용자가 확인했고, 이후 Free BE·DB 생성이 실제 성공했다. API로 카드나 청구 내역을 조회한 것은 아니다. DB를 새로 만들면 ID·내부 호스트·접속정보·만료일이 바뀐다.
 
-## 2. 데이터 보존과 복원
+## 2. BE 실행과 환경변수
 
-보존 덤프97,881,270 bytes의 SHA256 `dad8925acc3479cf4755aaba3fa00034f8037a98f47c0c038ba755e05b117b56`와 새 작업 디렉터리 사본의 SHA가 일치했다. `pg_restore --list`에서20개 TABLE DATA 항목을 확인했다. 로컬 개발DB의20테이블 전체 비공간 행/geometry 지문이 이 덤프의 검증 baseline과 일치했다.
+Docker 이미지는 `docker build -t spoton-be .`로 만든다. 고정 Python·uv digest와 uv.lock, 비root UID10001을 사용하며 `python -m app.runtime`으로 실행한다. `.env`·덤프·Git·개발 의존성은 이미지에 포함하지 않는다. 시작 시 migration/ETL은 실행하지 않는다.
 
-사용자가 중지한 유료 DB는 재개하지 않았다. 중지 이후의 새 원격 지문은 조회하지 못했으며, 선행 [유료 DB 복원 검증](render-postgres-restore-validation.md)·보존 덤프·일치하는 로컬 원본을 기준으로 사용한다. 서로 다른 물리 디스크에 분산된 재해 백업은 보장하지 않는다.
+Render 환경변수에는 아래 Free 전용 값을 명시한다. 로컬 `.env`와 코드 기본 SQL3초·풀3/대기2초 설정은 그대로 둔다.
 
-새 DB의 빈 스키마·대상·버전을 확인한 뒤 PostGIS3.6.2를 설치했다. 원래 검토한 TOC로 앱 스키마·데이터·인덱스·제약·시퀀스를 외부 TLS verify-full, single-transaction/exit-on-error로 복원했다. 복원1068.92초·20개 테이블 VACUUM/ANALYZE를 완료했고 크기는675,092,147 bytes다. 데이터나 인덱스를 줄이지 않았고 새로운 가상 수치를 만들지 않았다.
+```dotenv
+APP_ENV=staging
+PORT=10000
+WEB_CONCURRENCY=1
+DATABASE_STATEMENT_TIMEOUT_MS=10000
+DATABASE_POOL_SIZE=1
+DATABASE_MAX_OVERFLOW=0
+DATABASE_POOL_TIMEOUT=15
+DATABASE_CONNECTION_BUDGET=8
+DATABASE_EXPECTED_REVISION=0011
+CORS_ORIGINS=http://localhost:5173
+```
 
-전체 행/geometry 해시 계산은120초 유지보수 제한을 초과했고,600초로 확대한 서버 정렬은 임시 디스크 공간 부족으로 중단됐다. 원본 데이터는 변경되지 않았고 DB 상태도 available을 유지했다. 이를 해결하기 위해 같은 PostgreSQL 행별 MD5와 EWKB별 MD5를 named cursor/10,000행 단위로 스트리밍해 로컬에서 ASCII(C) 순서 정렬·연결 MD5를 계산했다. 원문 행을 전송하지 않고 해시만 전송했으며, 원래 baseline의20테이블 전체 count/rows_md5/NULL 수/EWKB MD5와 정확히 일치했다. 원래 baseline·덤프는 수정하지 않았다.
+`DATABASE_URL`은 **새 DB의 내부 호스트·spoton_api 조회 역할·sslmode=require**로 구성해 Render 비밀 환경변수로 주입한다. 내부 TLS는 암호화를 요구하며 서버 인증서 검증을 보장하지 않는다. 외부 관리자 검증/복원은 verify-full과 CA를 사용하고, 외부 DB 접근은 검증 PC /32만 허용한다. 비밀번호·실제 DB URI·인증 토큰·외부 IP는 문서나 저장소에 넣지 않는다.
 
-원래50인덱스·110제약·3시퀀스·head0011과 모델 차이0을 확인했다. PostGIS3.7→3.6 CHECK 표현15개는 원래 복원 시험과 같이 대상에서 재파싱한 정의의 동등성을 검증했다. reader의 SELECT20개 및 READ WRITE 상태의 INSERT/CREATE/TEMP/소유 역할 SET ROLE 거절4개도 확인했다. 기본READONLY·jit off·SQL10초·연결8 설정이며 새 비밀번호는 별도 Windows DPAPI에만 보관했다.
+주소 조회용 `KAKAO_REST_API_KEY`, `JUSO_SEARCH_KEY`, `JUSO_COORD_KEY`만 별도로 설정한다. DB 소유 계정·정부 ETL·LLM 키는 BE에 전달하지 않는다. 현재 AI 해석은503 AI_UNAVAILABLE이다.
 
-Free에서 기존 SQL3초로 snapshot/Risk 요청이500을 반환했고 실제 SQLSTATE57014를 확인했다. JIT off만으로 해소되지 않았다. **무료 검증 서버만 SQL10초·API 풀1·overflow0·pool 대기15초**로 설정하고 전체 API를 다시 검증한다. 워커1·별도 ready1·교체2배 상한4개는 예산/역할 제한8 안이다. 로컬 .env·기본3초·데이터·응답 형식은 유지한다. readiness의2.5초/750ms 제한은 그대로다.
+`/api/health`는 프로세스 검사다. Render health check는 `/api/ready`로 지정한다. 준비 검사는 head0011·조회 역할 권한을 확인하며 API 풀과 별도 연결1개, HTTP2.5초·SQL750ms·성공10초/실패1초 캐시·단일 실행 잠금을 사용한다. 실패는 기존 INTERNAL_ERROR500/no-store다.
 
-## 3. 조회 최적화와 최종 검증
+인스턴스1·워커1에서 교체 상한은 `2 * workers * (pool + overflow + 1 readiness) = 4`로 예산/reader 제한8 안이다. 외부 reader 도구·추가 인스턴스는 따로 합산한다. Free는 맞춤 maxShutdownDelaySeconds 설정을 지원하지 않아 플랫폼 기본 종료 대기를 사용한다.
 
-SQL10초에서도 음식점 Risk가57014로 실패했다. 실제 실패 SQL의 서울 전체 비교 집계가 기존 ix_stores_provenance Index Scan으로 원본 heap을 많이 읽는 것을 확인했다. JIT off만으로 해결되지 않았다.
+## 3. 운영 인덱스와 스키마
 
-Claude의 추가 문서 검토 후 SQL 원문·predicate·컬럼을 직접 확인하고, 사전 용량 추정 및 실제 EXPLAIN ANALYZE/BUFFERS를 확인했다. [운영 인덱스 SQL](sql/render-free-risk-cover.sql)의 ops_free_risk_cover를 이 Free 복제본에만 추가했다. 실제 인덱스45,883,392 bytes이고 생성21.88초, 생성 후 전체 DB 약721MB로800MB 게이트를 통과했다.
+앱19개 테이블과 alembic_version을 합쳐20테이블이다. 기준50인덱스·110제약·3시퀀스·head0011을 유지하며, Free DB에만 [ops_free_risk_cover](sql/render-free-risk-cover.sql) 운영 인덱스1개를 추가해 총51개다. 데이터·계산식·API SQL·앱 모델을 변경하지 않는다.
 
-| 동일 집계의 단일 관측 | 이전 | 추가 후 |
-|---|---:|---:|
-| 실행 시간 | 12,588.909ms | 2,777.128ms |
-| 계획 | 기존 Index Scan | ops_free_risk_cover Index Only Scan |
-| shared read blocks | 65,665 | 3,327 |
-| Heap Fetches | heap 접근 필요 | 0 |
+이 인덱스는 서울 전체 Risk 집계에 필요한 컬럼을 커버한다. 실제 크기45,883,392 bytes이며 동일 집계의 단일 측정이12.589초에서2.777초로 줄었다. Index Only Scan·Heap Fetches0을 확인했다. 성능 보장이나 전체 HTTP 시간 상한은 아니다.
 
-데이터·계산식·API SQL·앱 모델·migration head는 변경하지 않았다. 원래50개 인덱스와 별도 운영1개, 총51개다. catalog의 key3/include6·partial predicate·valid/ready/live를 검증했다. 모델 비교에서 이 정확한 운영 인덱스1개만 예상 차이로 제외하면 예상하지 않은 차이는0개다. 이 Free DB를 autogenerate 대상으로 사용하면 drop_index가 생성될 수 있으므로 사용하지 않는다. 향후 컬럼/타입 변경 때 운영 인덱스를 재검토한다. 새 Free DB는 원래 덤프 복원·기준 정합성 확인 후 이 운영 SQL을 별도로 적용한다. 효과 없음·용량 초과·응답 회귀 때의 DROP 롤백은 SQL 파일 주석과 설계를 따른다.
+이 Free DB를 `alembic revision --autogenerate` 대상으로 쓰면 운영 인덱스 삭제가 제안될 수 있으므로 사용하지 않는다. 모델 비교에서 예외를 둘 때는 이름뿐 아니라 정확한 key/include·predicate·valid/ready/live를 확인하고 이1개만 구분한다. 컬럼/타입 변경이나 새로운 migration을 적용할 때 운영 인덱스도 재검토한다.
 
-| 공개 검증 | 실제 결과 |
+효과가 없거나 정의가 다름·생성 후800MB 초과·API 응답 회귀가 확인되면 소유 계정으로 `DROP INDEX public.ops_free_risk_cover;`를 실행하고 기준50개 상태를 확인한다. 다른 데이터·인덱스를 임의로 줄여 맞추지 않는다.
+
+## 4. DB 복원·만료 대응
+
+검증 PC의 백업은 `%USERPROFILE%\SpotON-private-backups\render-free-20261113\`에 보관한다. source.dump, baseline.json, 검토된 toc.reviewed.list와 검증 증빙이 있으며 자격증명은 Windows 사용자 DPAPI로 암호화돼 있다. 다른 PC에서는 운영자로부터 접근 가능한 백업 사본을 확보한다. 이 보관을 서로 다른 물리 디스크의 재해 백업으로 간주하지 않는다.
+
+현재 검증 덤프는97,881,270 bytes이며 SHA256은 `dad8925acc3479cf4755aaba3fa00034f8037a98f47c0c038ba755e05b117b56`이다. 이 값은 해당 검증 스냅샷의 기준이지 미래 데이터의 최신성을 뜻하지 않는다.
+
+1. 만료 전에 검증을 종료하거나 새 Free PostgreSQL17 DB를 같은 workspace·리전에 만든다. 빈 대상·Free plan·DB/소유자·실제 확장 버전·저장공간을 확인한다. 유료 자원을 자동 생성하거나 증설하지 않는다.
+2. 덤프 SHA와 `pg_restore --list`를 확인하고 대상에 맞는 PostGIS를 설치한다. 검토한 TOC에서 public 스키마 중복 생성과 확장 내부 객체를 제외한다. 소유자·확장·ACL을 무조건 덮어쓰지 않는다.
+3. 소유 계정의 별도 연결에서 아래 방식으로 앱 스키마/데이터를 복원한다. PGHOST/PGPORT/PGUSER/PGPASSWORD/PGSSLMODE/PGSSLROOTCERT를 대상 Free DB와 외부 verify-full 연결에 맞게 설정하고 기존 로컬 연결을 상속하지 않는다. 암호는 명령행에 넣지 않는다. 유지보수 시간 제한은 대량 복원에 맞추고 API 제한과 구분한다.
+
+   ```text
+   pg_restore --single-transaction --exit-on-error --no-owner --no-privileges --use-list=toc.reviewed.list --dbname=spoton_free_check source.dump
+   ```
+
+4. 소유 계정으로 VACUUM/ANALYZE 후20테이블 전체 행·좌표 지문, 기준50인덱스·110제약·3시퀀스·모델·head0011을 대조한다. Free에서 서버 해시 정렬은 임시 공간을 넘길 수 있다. 검증한 방법은 PostgreSQL 행별/EWKB별 MD5를 named cursor10,000행씩 받아 로컬에서 ASCII(C) 순서 정렬·연결 MD5를 계산해 원래 baseline과 비교하는 것이다. baseline이나 비교 규칙을 결과에 맞춰 바꾸지 않는다.
+5. 별도 조회 역할을 설정한다. 아래는 소유자 psql 세션용 예시다. 비밀번호는 `\password`의 숨김 입력으로 설정하고 안전하게 보관한다. 기존 역할이 있으면 덮어쓰지 말고 먼저 정의·멤버십을 확인한다.
+
+   ```sql
+   CREATE ROLE spoton_api LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
+     NOINHERIT NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 8;
+   \password spoton_api
+   REVOKE CREATE, TEMPORARY ON DATABASE spoton_free_check FROM PUBLIC;
+   REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+   GRANT CONNECT ON DATABASE spoton_free_check TO spoton_api;
+   GRANT USAGE ON SCHEMA public TO spoton_api;
+   SELECT format('GRANT SELECT ON TABLE public.%I TO spoton_api', tablename)
+   FROM pg_tables WHERE schemaname = 'public'
+   \gexec
+   ALTER ROLE spoton_api SET default_transaction_read_only = on;
+   ALTER ROLE spoton_api IN DATABASE spoton_free_check SET statement_timeout = '10s';
+   ALTER ROLE spoton_api IN DATABASE spoton_free_check SET jit = off;
+   ```
+
+   복원한 앱 테이블과 spatial_ref_sys의 SELECT를 확인한다. READONLY/NOINHERIT만을 권한 경계로 삼지 않고, 소유자 역할의 멤버가 아니며 READ WRITE 상태에서도 INSERT/CREATE/TEMP/SET ROLE이 거절되는지 검증한다. 향후 테이블에 SELECT를 자동 부여하는 default privileges는 설정하지 않았다.
+
+6. 인덱스 생성 전에 행 수·avg_width로 최종/임시 크기를 추정하고 여유를 확인한다. 현재 기준은 최종 DB800MB 이내, temp/WAL 포함 추정900MB 이내다. [운영 SQL](sql/render-free-risk-cover.sql)은 소유자 연결에서 일반 CREATE INDEX, lock_timeout5초·maintenance_work_mem16MB·statement_timeout1200초로 실행한다. 전체 해시 검사와 동시에 실행하지 않는다. 추가 후 크기·정의·실행 계획·API를 다시 검증한다.
+7. Render의 DATABASE_URL만 새 내부 reader 연결로 갱신하고 다른 환경변수를 지우지 않는다. 검증한 develop commit을 명시해 수동 배포한다. migration이 필요하면 소유자의 별도 세션에서 수행하며 reader나 앱 시작 시 실행하지 않는다. head가 바뀌면 DATABASE_EXPECTED_REVISION도 맞춘다.
+8. /api/ready, 대표 API 전체 JSON, 경계·동시 요청, 주소 검색/CORS/AI503을 검증한다. 대체 DB의 복원·권한·연결을 확인하기 전에 유일한 유효 사본을 삭제하지 않는다. 새 ID·만료일·검증 결과를 이 문서에 갱신한다.
+
+새 DB 자동 생성이나 예약은 구현하지 않았다. 복원·데이터 대조는 Free의 CPU/디스크 제한 때문에 오래 걸릴 수 있다. 로컬 개발DB는 기존 Docker를 계속 사용하며 로컬 .env를 Render용으로 바꾸지 않는다.
+
+## 5. 검증된 범위
+
+| 검사 (2026-11-14) | 결과 |
 |---|---|
-| API24건 | 정상22건200·오류2건422, 로컬 DB API와 전체 JSON 일치 |
-| 반경 경계3건 | 499.999/500m 포함, 500.001m 제외, 로컬과 일치 |
-| 동시 요청 | 동시3으로 카페 Risk6건, 모두200·동일 결과, 최장6.985초 |
-| 절전 후 첫 health | 22.593초,200 |
-| 준비 후24개 중 health 제외 최장 | 8.656초, 단일 관측이며 SLA 아님 |
-| 실제 주소 검색 | 서울시청 주소200 |
-| CORS | localhost5173 허용200, 미허용 origin400 |
-| 준비 검사 | /api/ready200 |
-| 내부 API DB 연결 | spoton_api·내부 대상·TLSv1.3, 풀 연결1개 확인 |
-| AI | LLM 키 생략, 실제503 AI_UNAVAILABLE·모델 호출 없음 |
+| 20테이블 전체 행/geometry 지문 | 원본과 일치 |
+| API24건 | 정상22건200·오류2건422, 로컬과 전체 JSON 일치 |
+| 반경 경계3건 | 499.999/500m 포함, 500.001m 제외 |
+| 카페 Risk 동시3·총6요청 | 모두200·동일 결과, 최장6.985초 |
+| 주소 검색 / CORS | 200 / localhost5173 허용200·미허용 origin400 |
+| 내부 DB 연결 | reader·TLSv1.3, 풀1 확인 |
+| AI | LLM 키 생략,503 AI_UNAVAILABLE |
 
-검증 후 이전 BE srv-dbrh4tutlv9c738h2ku0와 DB dpg-dbrgd70u01pc73b653sg-a만 삭제했다. 삭제 직전 백업SHA·새 DB/BE Free·내부 reader 대상·전체 지문·공개 API 결과를 검사했고, 삭제 후 두ID404와 남은 무료 웹1/DB1·지속 디스크0·Key Value0을 확인했다. 유료 자원을 중지 상태로 방치하지 않았다. 과거 리소스의 연결정보는 유효한 현재 설정이 아니다.
+기존 코드 검증은 일반1595건·PostGIS251건을 통과했다. 이전·Claude 설계 검토 원문은 [PR #110](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/110)과 Git 이력에 남아 있다. 현재 기준에는 과거 유료 설정을 적용하지 않는다.
 
-실행·데이터 검증 증빙과 암호화된 자격증명은 저장소 밖 비공개 디렉터리에 보존했다. 비밀번호·DB URI·인증 토큰·외부 IP 원문은 저장소에 포함하지 않았다. 앱 코드·로컬 .env·개발DB·FE 파일은 변경하지 않았다. 선행 코드의 일반1595건·PostGIS251건 검증에 더해 이번 전환의 실데이터/실제 HTTP 검증을 수행했다.
+## 6. 무료 제한과 FE 연결
 
-## 4. 무료 한계와 복구
+Free BE는15분 무요청 후 절전하며 workspace 전체의 무료 웹750시간을 공유한다. Free DB는1GB 고정·생성30일 후 만료이고 관리형 자동 백업은 없다. [Render 무료 정책](https://render.com/docs/free)
 
-무료 BE는15분 무요청 시 절전하고 다음 접속 때 시작 지연이 있다. workspace 전체 무료 웹750시간 한도를 공유한다. 무료 DB는1GB 고정·생성30일 후 만료이며 관리형 자동 백업이 없다. [Render 무료 정책](https://render.com/docs/free)
+절전 후 첫 health는22.593초, 준비 후24건 중 health 제외 최장은8.656초였다. 단일 관측이며 SLA가 아니다. SQL10초·풀 대기15초는 HTTP 전체 시간의 상한이 아니고, 동시 요청이 많으면 지연/오류가 발생할 수 있다. FE의 현재15초 제한에 대해 무료 검증에서는 첫 요청60초 정도 대기 또는 재시도 안내가 필요하다. [FE 연결 설정](fe-render-validation-api-request.md)
 
-카드가 없는 무료 계정은 포함량 초과 시 서비스나 새 빌드가 중단될 수 있다. 기존에 발생한 요금은 무료 전환으로 취소되지 않는다. API로 Billing/청구 내역을 확인할 수 없어 미납0·과거 요금 환불을 주장하지 않는다. [과금 안내](https://render.com/docs/faq), [결제 약관](https://render.com/terms)
-
-만료 전에 검증을 종료하거나 보관 덤프에서 새로운 무료 검증 DB를 만들고 동일한 복원·권한·API 검증을 반복해야 한다. 자동 재생성/예약/영구 무료 운영은 구현하지 않았다. 로컬 개발DB와 .env는 계속 로컬을 사용하며 FE 저장소는 수정하지 않는다. LLM 키는 검증 서버에서 생략한다.
-
-현재 FE 기본 요청 제한은15초인데 이번 절전 후 첫 요청은약23초였다. 무료 검증 환경에서는 첫 호출을60초 정도 기다리거나 오류/재시도 안내를 제공하도록 FE 담당자가 조정해야 한다. FE 연결·공개 도메인 CORS 추가는 [FE 전달 문서](fe-render-validation-api-request.md)를 따른다. SQL10초·pool 대기15초는 전체 HTTP 요청 시간의 상한이 아니며 동시 요청이 많으면 지연/오류가 발생할 수 있다.
+카드 없는 무료 계정은 포함량 초과 시 서비스/새 빌드가 중단될 수 있다. 과거 발생 요금은 무료 전환으로 취소되지 않으며, 미납0이나 영구 무료를 보장하지 않는다. [과금 안내](https://render.com/docs/faq)
