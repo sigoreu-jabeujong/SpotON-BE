@@ -2,7 +2,7 @@
 
 ## Render 검증 배포
 
-검증용 [API 문서](https://spoton-be-check.onrender.com/docs)와 [DB 준비 상태](https://spoton-be-check.onrender.com/api/ready)를 사용할 수 있다. 실제 배포 commit·검증·제약은 [배포 결과](docs/render-be-validation-deployment.md), FE 연결은 [전달 문서](docs/fe-render-validation-api-request.md)를 따른다.
+현재 무료 검증용 [API 문서](https://spoton-be-free.onrender.com/docs)와 [DB 준비 상태](https://spoton-be-free.onrender.com/api/ready)를 사용할 수 있다. 기존 유료 BE·DB는 삭제했다. 전체 데이터/API 검증·Free 전용 SQL10초/풀1·운영 인덱스1개·2026-12-13 만료는 [무료 전환 결과](docs/render-free-validation.md), FE 연결과 절전 후 대기는 [전달 문서](docs/fe-render-validation-api-request.md)를 따른다. 아래 풀3/SQL 기본 기준은 최초 유료 배포 기준이며 Free 전용 설정이 우선한다.
 
 배포 이미지는 `docker build -t spoton-be .`로 만든다. 고정 Python·uv digest와 uv.lock을 사용하고 비root 계정에서 `python -m app.runtime`으로 실행한다. `.env`·데이터·덤프·Git·개발 의존성은 이미지에 포함하지 않는다. 환경변수로 설정을 주입하며 PORT 기본값은10000이다. 시작 시 migration/ETL은 실행하지 않는다.
 

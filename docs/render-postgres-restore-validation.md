@@ -1,5 +1,7 @@
 # Render PostgreSQL 덤프 복원·호환성 검증 결과
 
+> 이후 무료 DB로 전체 데이터를 복원·대조하고 이 문서의 유료 DB는 삭제했다. 현재 리소스·추가 운영 인덱스·만료일은 [무료 전환 결과](render-free-validation.md)를 따른다. 이전 ID로 이 복원 절차를 그대로 재실행하지 않는다.
+
 > 이 문서는 DB 복원 당시 기록이다. 이후 BE 검증 배포와 내부 TLS·공개 API 확인을 완료했다. 최신 배포 상태는 [BE 배포 결과](render-be-validation-deployment.md)를 따른다.
 
 - 확인일: 2026-11-13 (Asia/Seoul)

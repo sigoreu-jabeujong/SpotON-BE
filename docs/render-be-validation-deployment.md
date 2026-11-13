@@ -1,5 +1,7 @@
 # Render BE 검증 배포 결과
 
+> 이 문서는 최초 유료 검증 당시 기록이다. 2026-11-14 무료 전환·전체 데이터/API 검증 후 기존 유료 BE와 DB를 삭제했다. 현재 API는 https://spoton-be-free.onrender.com 이며 [최신 무료 전환 결과](render-free-validation.md)를 따른다.
+
 - 확인일: 2026-11-13 (Asia/Seoul)
 - 결과: **공개 HTTPS 배포, 내부 조회 전용 DB 연결, API 대조 통과**
 - API 문서: https://spoton-be-check.onrender.com/docs
