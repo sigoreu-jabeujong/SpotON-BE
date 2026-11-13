@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -269,7 +270,13 @@ def test_success_after_monotonic_deadline_is_rejected() -> None:
 
 
 def event_client(
-    handler, *, request_timeout=1, time_budget=0.01, max_retries=0, sleep=asyncio.sleep
+    handler,
+    *,
+    request_timeout=1,
+    time_budget=0.01,
+    max_retries=0,
+    sleep=asyncio.sleep,
+    monotonic=time.monotonic,
 ):
     return GeminiClient(
         api_key=SECRET_KEY,
@@ -279,6 +286,7 @@ def event_client(
         max_output_tokens=10,
         transport=httpx.MockTransport(handler),
         sleep=sleep,
+        monotonic=monotonic,
         rng=lambda: 1,
     )
 
@@ -332,7 +340,15 @@ def test_attempt_timeout_retries_when_overall_budget_remains() -> None:
     asyncio.run(scenario())
 
 
-def test_overall_budget_cancels_retry_sleep() -> None:
+@pytest.mark.parametrize("first_response_delay", [0.0, 0.05])
+def test_overall_budget_cancels_retry_sleep(first_response_delay: float) -> None:
+    """The asyncio budget must cancel a retry sleep that is already in progress.
+
+    The deadline clock is frozen so the first 429 always reaches the retry sleep, however long
+    it takes to answer (#100: a 10ms real budget expired before the sleep under load). Only the
+    real asyncio budget can then end the blocked sleep.
+    """
+
     async def scenario():
         entered = asyncio.Event()
         cancelled = asyncio.Event()
@@ -344,14 +360,20 @@ def test_overall_budget_cancels_retry_sleep() -> None:
             finally:
                 cancelled.set()
 
+        async def throttled(_request):
+            await asyncio.sleep(first_response_delay)
+            return httpx.Response(429)
+
         with pytest.raises(LlmError) as caught:
             await asyncio.wait_for(
                 event_client(
-                    lambda _: httpx.Response(429),
+                    throttled,
                     max_retries=2,
+                    time_budget=0.5,
                     sleep=blocked_sleep,
+                    monotonic=lambda: 0.0,
                 ).generate(request()),
-                timeout=2,
+                timeout=5,
             )
         assert caught.value.kind is LlmErrorKind.TIMEOUT
         assert entered.is_set() and cancelled.is_set()
