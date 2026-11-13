@@ -39,3 +39,21 @@ def test_one_bad_timestamp_does_not_silently_expand_or_truncate_source_date() ->
         replace(original.rows[1], update_point="invalid-update-canary"),
     )
     assert source_reference_date(replace(original, rows=rows)) == (None, "invalid_source_update")
+
+
+def test_floor_fix_versions_normalization_but_preserves_raw_provenance() -> None:
+    from etl.localdata.snapshot import rows_digest
+
+    original = collection()
+    source = replace(
+        original, rows=tuple(replace(row, update_point="20261110000000") for row in original.rows)
+    )
+    batch = import_batch(source, uuid4())
+    assert batch.rule_version == "localdata-normalization-v2"
+    assert batch.map_version == "localdata-mapping-v1"
+    assert batch.rows_sha256 == rows_digest(source.rows)
+    assert batch.input_sha256 == source.input_sha256
+    assert batch.data_updated_at == date(2026, 11, 10)
+    assert batch.recorded_at.replace(tzinfo=None) == source.collected_at
+    assert batch.collection_basis == source.as_of_basis
+    assert batch.update_reason is None
