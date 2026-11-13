@@ -585,3 +585,5 @@ uv run --locked --extra dev python -m etl.living_pop.quality --population-versio
 2026-11-14 공식 정의서·두 매뉴얼·SHP를 재확인했지만 행정동 행의 합산·행 부재·관측일별 격자 적용의 공식 근거는 미확정입니다. [검증 보고서와 제공기관 문의 초안](docs/population-source-verification.md)을 확인합니다. 문의는 아직 제출하지 않았으며 #115는 후속 추적용으로 열어 둡니다.
 
 `app.analysis.day_night.calculate_day_night`는 같은 날짜·공간·모집단의 검증된 시간별 총계24개를 향후 입력받는 내부 순수 계산 기반입니다. 주간06~17·야간나머지의 비중/평균/배수를 Decimal로 구분하고 결측이면 부분합을 반환하지 않습니다. 실제 원천 합산·DB 조회·activity/Risk/AI에는 미연결이며 **현재 공개 인구 pending을 유지**합니다. 산술 성공은 원천 검증이나 하루 고유 방문자 수가 아닙니다. [설계·Claude 검토](docs/designs/feat115-population-time-basis.md)를 따릅니다.
+
+후속 직접 검증에서는 원자료/DB531,922행과격자10,125개를 전수 대조했고, 공식 행정동 Sheet의 비교 가능894집계가 원자료 합과 정확히 일치했습니다. 당일 관측 쌍을 기준으로 행이 없는 시간 조합34,046개와 미매칭 비공개24행도 확인했습니다. 행정동별 소계와 현재 코드/도형 정합을 확인한 것이며, 한 격자 안 행정동 간 가산성·개인 비중복·전체 행 부재 의미·공식 관측일 적용은 확정하지 않습니다. 최신 판단과 제한은 [원천 검증 보고서7절](docs/population-source-verification.md), [실증 설계·검토](docs/designs/feat115-population-empirical-validation.md)를 따릅니다. DB/provenance·공개pending·Render 배포는 그대로 유지합니다.

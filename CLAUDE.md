@@ -184,6 +184,8 @@ load_input·read_source 성공 뒤, 설정/DB 전에 etl_quality를1회 남긴�
 
 생활인구 #115는 공식 파일 재확인 보고서·미제출 문의 초안과 독립 산술 기반만 추가했다. `app.analysis.day_night`는 검증된 동일 모집단의24시간 총계를 받는 순수 함수이며 현재 DB/API/AI/품질 진단기에는 연결하지 않는다. 06~17/나머지 구간·Decimal·비중/배수·0분모를 구분한다. None이 있으면 모든 수치가null, 잘못된 입력은고정오류다. 원천상태·완전성·날짜를 이 함수가 검증하지 않는다. 공식근거3건 미확정으로 공개pending과head0011을 유지하고 #115를열어둔다. [원천 검증·문의 초안](docs/population-source-verification.md), [설계·검토](docs/designs/feat115-population-time-basis.md)를 따른다.
 
+후속 직접 실증에서 원자료/DB531922행·격자10125개 전수 지문과 독립 공간 산식/공식 뷰어를 대조했다. 공식 행정동 Sheet 비교가능894집계는 원자료 합과 정확히 일치했고 당일 관측쌍 기준 부재시간34046개·미매칭 비공개24행을 확인했다. 행정동별 소계 처리·현재 코드/도형 정합과 한 격자 안 행정동 간 가산성·공식 역사 버전/행정동 귀속 보장은 구분한다. 개인 비중복·모든 행 부재0은 확정하지 않고 공개pending/immutable provenance를 유지한다. 최신 근거는 [실증 설계·검토](docs/designs/feat115-population-empirical-validation.md)와 원천 보고서7절이다.
+
 ## 브랜드 원천 기반·판정 적용의 경계 (BE #57)
 
 2026-11-12 사용자 승인 화면 및 실제 인증 성공으로 이전 브랜드 승인 대기 서술을 대체한다. `python -m etl.brands --year YYYY --output <workspace밖새파일> [--compare-local]` 또는 `--snapshot <기존파일> [--compare-local]`를 제공한다. 순차1000행·재시도/연도대체없음·페이지/전체/연도/브랜드·본부복합키 중복 검증과 첫페이지 재확인, 원문base64/hash·규칙v2·이번 실제수집완료시각을 저장한다. 브랜드번호단독반복행은보존하고모든관련이름을repeated_brand_id로격리한다. 대표자/사업자/법인명은 정규화·대조·로그/LLM에 사용하지 않는다. 기존파일 덮기/원문출력 금지이며 offline은키/HTTP 없이 재검증한다.
