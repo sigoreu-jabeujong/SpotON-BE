@@ -8,6 +8,8 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 
 ## 상세 위치 파서 지명 오인 수정 (BE #102)
 
+기적재 데이터의 후속 검증·개발 DB 보정은 [#104](docs/designs/feat104-floor-location-backfill.md)에서 수행했다. `python -m etl.localdata.floor_backfill --source ... --snapshot ...`은 기본 READ ONLY이며 쓰기는 `--write --expected-plan`이 필요하다. 원본·대상·계획·전체 비위치 값/EWKB가 다르면 중단하고, source별 원자적 UPDATE·새 v2 배치·과거 출처/브랜드/삭제/sequence 보존을 검증한다. stores INSERT·원문/날짜/좌표/업종 교체는 하지 않는다. 현재 PC 개발 DB는 24,738행(지원 업종 등 조건 11,468행) 복구와 재실행 no_op·API 전후 검증을 완료했다. 팀원 DB 자동 적용이나 원천 최신화·모든 NULL 복구는 아니다.
+
 공통 층·호 파서는 `중구`·`중랑구`·`중계동`·`중앙로` 등 정상 지명을 중간층으로 거절하지 않는다. `중`/`중간`/`중층` 및 `중[간]` 뒤가 숫자·알파벳·구분자 등 한글 음절이 아니거나 알려진 층 표현으로 이어지는 모호한 입력은 계속 거절한다. 층만 같은 경우와 기존 저장 신뢰 수준이 미확인인 경우는 same_spot으로 승격하지 않는다. 새 ETL 배치는 `localdata-normalization-v2`, 기존 map version을 사용한다. 과거 v1 배치·기존 NULL 상세 위치는 자동 보정하지 않으며 별도 검증·재처리가 필요하다. API schema·FE 계약·모델·migration은 변경하지 않았다. 설계·실제 Claude 검토·검증은 [#102 설계](docs/designs/feat102-address-place-floor-parser.md), 수정 전 피드백 분석은 [분석 보고서](docs/be-fe-integration-feedback-review.md)를 따른다.
 
 ## 점포 이력 API 계약 (BE #36)

@@ -668,4 +668,14 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - `중구`·`중랑구`·`중계동`·`중앙로` 등 지명을 정상 처리하고 실제 중간층 표현의 모호 판정은 유지한다. 같은 공통 파서를 쓰는 주소 검색과 새 ETL 변환에 적용된다. 대표/후보 수는 원인이 아니며, 층만 같거나 저장 위치가 미확인이면 same_spot으로 승격하지 않는다.
 - 파서와 같은 커밋에서 정규화 규칙을 `localdata-normalization-v2`로 증가시켰다. 원문 hash·기준일·기존 map version은 유지하며 과거 배치와 기존 NULL 상세 위치는 수정하지 않았다. 실제 개발 DB 보정은 원본·원래 날짜·비위치 업무 값 보존을 검증하는 별도 후속이다.
 - 일반 1,548 passed(기준 1,415 + 신규 133), 최종 격리 PostGIS 218 passed(기준 212 + 신규 6, skip 0), ruff check/format·mypy 154 files 통과. 최신 앱 TestClient와 실제 Kakao의 12개 읽기 요청도 모두 200이며 축약/전체 주소의 층·호와 no-store를 확인했다. Claude 구현 재검토는 PASS였고 추가 모호 표현·ETL 충돌·DB 저장 버전 확인을 보강한 후 전체 검사를 다시 통과했다. 이는 기존 실행 서버 재시작·배포 확인이 아니며 실제 LLM은 호출하지 않았다.
-- FE·API schema·모델·migration·실제 .env·로컬 Docker 설정은 변경하지 않는다. 한식 원천/상호 불일치·첫 조회 지연·공정위 미등록 브랜드는 분석 보고서의 개별 후속으로 남긴다. 구현 재검토와 PR/CI는 설계 8절에서 관리한다.
+- FE·API schema·모델·migration·실제 .env·로컬 Docker 설정은 변경하지 않는다. 한식 원천/상호 불일치·첫 조회 지연·공정위 미등록 브랜드는 분석 보고서의 개별 후속으로 남긴다. 구현 재검토와 PR/CI는 설계 8절에서 관리한다. 기존 개발 DB 보정의 후속 결과는43절이다.
+
+## 43. BE-10/12 기적재 점포 상세 위치 복구 및 검증 (#104)
+
+- 브랜치 `feat#104-floor-location-backfill`(develop `bd952e5`). [Codex 설계·실제 Claude Code 직접 검토/수정·구현 재검토 및 최종 PASS](designs/feat104-floor-location-backfill.md)를 거쳐 전용 `etl.localdata.floor_backfill`을 구현했다. 그림자 스키마 차단·1,001행 실제 청크·건물 키 신뢰 가드를 보강했다.
+- 기본 READ ONLY이며 쓰기는 `--write --expected-plan`이 필요하다. 전체 원본·원래 변환 기준일·배치·키·비위치 값·EWKB를 대조하고, source 잠금 후 최신 상태를 재확인해 원천별 원자적으로 복구한다. stores INSERT 없이 sequence·id·브랜드·삭제 표시·원문 hash·D를 보존한다.
+- 두 원본 전체 689,440행의 비위치 차이 0을 확인했다. 최종 코드로 전체 백업을 별도 DB에 재복원하고 적용·재실행 no_op·보호 hash·다른 17개 모델 테이블/sequence를 대조한 뒤 실제 개발 DB에 적용했다. 일반음식점 16,941·휴게음식점 7,797, 합계 **24,738행** 복구이며 그중 지원 업종·검토/삭제 제외는 **11,468행**이다. 전체 원천 배치 연결/updated_at은 v2로 갱신했고 과거 v1 배치는 보존했다.
+- 일반 **1,564 passed**(신규16), 격리 PostGIS **249 passed**(신규31, skip0), ruff check/format332 files·mypy155 files 통과. 전체 1차의 기존 AI 캐시 가정 실패는 기준 코드에 무관한 MVCC commit을 주입해 재현하고, 동일 키 재사용/다른 키 miss를 구분하도록 검사만 수정했다. 제품 캐시 로직은 바꾸지 않았다.
+- 실제 DB 전후 6개 조회 흐름과 원천별 복구 표본의 주소→이력→AI 문맥을 최신 TestClient로 확인했다(88요청 모두200, 실제 Kakao·모의 AI4회·실제 LLM0). 비위치 API data hash·as_of/D·collected_at=null은 같고 새 batch ids·risk 캐시 키·AI 문맥/버전 hash는 바뀌었다. 로컬 BE 재시작 후 실제 HTTP8건도 새 배치와 층·호 전달을 확인했다.
+- 개발 DB는 head0011·689,440행을 유지하고 source별 새 v2 활성 배치로 연결된다. 위치 외 보호 값·다른 모델 테이블·과거 배치·브랜드 근거·sequence는 전후 동일하며 재실행은 no_op이다. 기존 명령의 커밋 후 VACUUM/ANALYZE·출처 검증도 통과했다. 백업/갱신 덤프는 저장소 밖에 보관하고 갱신 덤프 재복원본의 19개 모델 테이블 전체 내용·건수/sequence/head 동등성도 확인했다.
+- 원본상 결측·모호 값은 그대로다. 다른 팀원 DB 자동 적용·원천 최신화·FE 브라우저/진단서 검증·운영 배포 완료를 뜻하지 않는다. 한식 품질·브랜드 범위·첫 조회 성능은 별도 후속이다. API schema·모델·migration·FE·실제 .env·로컬 Docker 설정은 변경하지 않았다.
