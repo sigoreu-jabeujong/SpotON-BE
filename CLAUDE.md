@@ -8,6 +8,8 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 
 ## Render 검증 배포 기준 (BE #106)
 
+최신 상태는 [#109 무료 전환](docs/render-free-validation.md)이다. 2026-11-14 기존 유료 BE·DB를 삭제하고 Free 웹 spoton-be-free·DB spoton-db-free만 유지한다. Free는 SQL10초·풀1/overflow0/대기15초·워커1·예산8이고 ready2.5초/750ms·LLM 미설정을 유지한다. 앱 모델/head0011·원래50인덱스와 별도 ops_free_risk_cover1개를 구분한다. 이 Free DB를 autogenerate 대상으로 쓰지 않는다. 로컬 .env/기본3초·FE 파일은 변경하지 않았다. 아래는 최초 유료 배포 기록이다.
+
 PR #107을 develop에 병합한 commit56e174e를 Render `spoton-be-check`에 수동 배포했다. 공개 API24건·경계3건·동시3의6요청·주소 검색·CORS·내부 API 풀 TLSv1.3을 검증했다. 자세한 실제 상태와 남은 범위는 [배포 결과](docs/render-be-validation-deployment.md), FE 담당 연결은 [전달 문서](docs/fe-render-validation-api-request.md)를 따른다. 문서만 추가된 develop은 자동 배포하지 않는다.
 
 Docker 진입점은 app.runtime이며 PORT 기본10000·명시적 WEB_CONCURRENCY=1·비root 실행이다. 시작 시 migration/ETL은 실행하지 않는다. `/api/health`는 기존 liveness, `/api/ready`는 DB/revision 및 staging·production 조회 역할 권한 검사다. 준비 검사는 별도 단일 연결·성공10초/실패1초 캐시·HTTP2.5초·SQL750ms이며 실패는 기존 INTERNAL_ERROR500/no-store다.

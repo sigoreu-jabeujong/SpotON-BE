@@ -2,6 +2,8 @@
 
 ## Render 검증 배포 추가 기준 (#106)
 
+최신 #109: 2026-11-14 카드 없는 Free BE/DB 생성·전체20테이블 행/geometry 지문·기존50인덱스/110제약/3시퀀스·공개24API/경계3/동시3의6건을 검증하고 기존 유료 BE/DB를 삭제했다. 현재는 Free 웹1/DB1·유료 컴퓨팅/지속 디스크/Key Value0이다. Free 전용 SQL10초·풀1/overflow0/대기15초·운영 커버링 인덱스1개(총51, 앱 모델/head0011 유지)와2026-12-13 만료를 [최신 결과](render-free-validation.md), FE URL·15초 기본 대기/절전 지연 대응을 [전달 문서](fe-render-validation-api-request.md)에 기록했다. 로컬3초·.env·개발DB·FE는 변경하지 않는다. 아래는 최초 유료 구성 당시 기록이다.
+
 2026-11-13 PR #107/commit56e174e를 Render 검증 BE에 배포했다. 일반1595건·CI PostGIS251건, 공개24API 전체 JSON·경계3건·동시3의6건, 실제 주소 검색·CORS 및 내부 풀 TLSv1.3을 확인했다. 공개 URL·실배포 SHA·연결 예산·미완료 범위는 [결과](render-be-validation-deployment.md), FE 연결 설정은 [전달 문서](fe-render-validation-api-request.md)를 따른다. FE 저장소는 변경하지 않았다.
 
 DB 덤프 복원·조회 역할·실데이터 API24건 대조는 [복원 검증](render-postgres-restore-validation.md), Docker 배포와 실제 Claude 검토는 [#106](designs/feat106-render-validation-deploy.md)을 따른다. 운영 전환·원격 ETL은 별도이며 기존 API 계약과 .env·로컬 개발 DB를 유지한다.

@@ -1,18 +1,21 @@
 # FE 전달: Render 검증용 BE 연결
 
-- 확인일: 2026-11-13
+- 확인일: 2026-11-14
 - BE 배포·대표 API 검증 완료. FE 저장소·환경변수·배포는 수정하지 않았다.
-- 상세 검증: [Render 배포 결과](render-be-validation-deployment.md)
+- 상세 검증: [무료 전환 결과](render-free-validation.md). 기존 유료 BE·DB는 삭제됐으며 이전 URL을 사용하지 않는다.
 
 ## 1. 연결 설정
 
-검증 환경의 API base URL은 `https://spoton-be-check.onrender.com`이다. FE 담당자가 사용할 검증 환경에 다음 값을 설정하고 FE를 다시 실행/빌드한다.
+검증 환경의 API base URL은 `https://spoton-be-free.onrender.com`이다. FE 담당자가 사용할 검증 환경에 다음 값을 설정하고 FE를 다시 실행/빌드한다.
 
 ```dotenv
-VITE_API_BASE_URL=https://spoton-be-check.onrender.com
+VITE_API_BASE_URL=https://spoton-be-free.onrender.com
+VITE_USE_MOCK=false
 ```
 
-현재 FE 클라이언트가 `/api`를 붙이므로 값 끝에 `/api`를 추가하지 않는다. API 문서는 https://spoton-be-check.onrender.com/docs 이다.
+현재 FE 클라이언트가 `/api`를 붙이므로 값 끝에 `/api`를 추가하지 않는다. API 문서는 https://spoton-be-free.onrender.com/docs 이다. 실제 API 검증에서는 목업 모드를 끈다.
+
+무료 BE는15분 무요청 후 절전한다. 이번 첫 health 요청은22.593초였고 현재 FE 기본 요청 제한15초를 넘었다. 무료 검증 환경의 첫 요청은60초 정도 대기하거나 재시도 안내를 제공하도록 담당자가 조정한다. Free의 SQL 제한10초·풀1/대기15초는 전체 HTTP 시간 상한이 아니며, AI503은 계속 별도로 처리한다. 이 BE 작업에서는 FE 코드를 수정하지 않았다.
 
 현재 허용된 브라우저 origin은 `http://localhost:5173` 한 개다. FE를 다른 포트나 공개 도메인에 배포하면 담당자가 정확한 origin을 전달하고 BE의 CORS_ORIGINS에 추가한 뒤 배포해야 한다. 경로·와일드카드·DB 주소를 FE 설정에 넣지 않는다. 브라우저는 BE만 호출한다.
 
