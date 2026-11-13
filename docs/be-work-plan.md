@@ -659,5 +659,5 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - 브랜치 `feat#98-ai-history-context`(develop `bb30668`). [Claude Code 설계·별도 Claude Code 재검토/MD 직접 수정](designs/feat98-ai-history-context.md)에서 HistoryQuery 생성 위치(서비스 생성 시 500), 위치 422 경로, 반경 대신 고정 300m, 층만 입력 시 comparable, 커밋 배치·흐름 테스트 확장 방식을 바로잡았다.
 - 요청 선택 필드 `history`로 같은 세션의 이력을 재계산하고 위치·Risk 교차 검증 뒤 식별정보 없는 집계와 서버 문장만 추가한다. prompt v7·선택 cache rule v3다.
 - 일반 1,414 passed, 로컬 일회용 PostGIS 통합 212 passed, ruff/format·mypy 154 files 통과. 기존 `test_gemini::test_overall_budget_cancels_retry_sleep`이 전체 실행 1회 실패 후 단독 5회·전체 재실행 통과해 시간 의존 불안정 테스트로 기록한다(이번 변경과 무관한 파일).
-- 실제 개발 DB 읽기 전용: 5사례 집계=이력 API 파생값, 1km 밖 422, 이력 포함 SQL cold19/warm12·준비 0.21~0.49초(SLA 아님), 모의 공급자 API 200·건물키 노출0·실제 LLM0, 테이블 hash 보존. 건물키 121,182개 중 좌표 점포 없는 키 11,988개(9.9%)는 위치 검증을 생략한다. 실제 geocode 좌표와 점포 거리 분포는 카카오 키 부재로 미측정이다.
+- 실제 개발 DB 읽기 전용: 5사례 집계=이력 API 파생값, 1km 밖 422, 이력 포함 SQL cold19/warm12·준비 0.21~0.49초(SLA 아님), 모의 공급자 API 200·건물키 노출0·실제 LLM0, 테이블 hash 보존. 건물키 121,182개 중 좌표 점포 없는 키 11,988개(9.9%)는 위치 검증을 생략한다. 이후 팀 키 설정 후 실제 Kakao geocode 30건(300m 초과 0건, 최대 103.8m)과 실제 Gemini 2회(200·검증 통과·재생성 0)를 추가 확인했다.
 - FE 저장소는 수정하지 않고 FE AI 요청서에 history 전송·floor_unit null·위치 422·이력 ID 칩·missing reason을 요청한다.
