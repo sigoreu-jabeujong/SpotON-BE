@@ -26,8 +26,9 @@ _SPLITTABLE_DETAIL_RE = re.compile(
 _RANGE_RE = re.compile(r"[0-9]+(?:[~,/\-·][0-9]+)+(?:층|[Ff]|호)", re.ASCII)
 _UNIT_HYPHEN_RE = re.compile(r"[0-9]+-[0-9]+호", re.ASCII)
 _INVALID_SUFFIX_RE = re.compile(r"(?:제|지상|지하|[Bb])?[0-9A-Za-z.\-]+(?:층|[Ff]|호)", re.ASCII)
+_MIDDLE_DETAIL_RE = re.compile(r"중(?:간)?(?:[0-9BbFf층제,/~·\-]|지하|지상)", re.ASCII)
 _COMPLEX_FLOOR_TOKENS = frozenset(
-    {"반지하", "지층", "지하층", "옥탑", "옥상", "중층", "M층", "메자닌"}
+    {"반지하", "지층", "지하층", "옥탑", "옥상", "중", "중간", "중층", "중간층", "M층", "메자닌"}
 )
 _SINGLE_BUILDING_RE = re.compile(r"(?:[0-9]{1,4}|[A-Za-z])동", re.ASCII)
 
@@ -203,7 +204,12 @@ def _candidate_failure(token: str) -> FloorUnitFailure | None:
         return FloorUnitFailure.INVALID
     if _SINGLE_BUILDING_RE.fullmatch(token):
         return FloorUnitFailure.AMBIGUOUS
-    if token in _COMPLEX_FLOOR_TOKENS or token.startswith(("반지하", "옥탑", "중")):
+    # 중구·중랑구 같은 지명은 통과시키고 실제 중간층/호수 표현만 모호하게 남긴다.
+    if (
+        token in _COMPLEX_FLOOR_TOKENS
+        or token.startswith(("반지하", "옥탑"))
+        or _MIDDLE_DETAIL_RE.match(token)
+    ):
         return FloorUnitFailure.AMBIGUOUS
     if _INVALID_SUFFIX_RE.fullmatch(token):
         return FloorUnitFailure.INVALID

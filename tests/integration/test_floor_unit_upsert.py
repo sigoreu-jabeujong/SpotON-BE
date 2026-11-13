@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -7,11 +8,17 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import select, text
+from sqlalchemy.orm import Session
 
 from app.models import Store
+from app.schemas.stores import HistoryQuery
+from app.services.store_history import get_history
+from etl.localdata.collection import CollectedSource
 from etl.localdata.constants import Source
-from etl.localdata.pipeline import StoreRecord
+from etl.localdata.pipeline import StoreRecord, transform_rows
+from etl.localdata.provenance import import_batch
 from etl.localdata.repository import upsert_records
+from tests.etl.test_localdata_pipeline import raw
 from tests.integration.conftest import TemporaryDatabase
 
 pytestmark = pytest.mark.integration
@@ -121,3 +128,69 @@ def test_floor_unit_upsert_updates_etl_key_and_preserves_deleted_at(
     assert location_level == "unverified"
     assert building_key == "마포구-서교동-123-4"
     assert stored_deleted_at == deleted_at
+
+
+@pytest.mark.parametrize(
+    "gu,code,dong", [("중구", "3010000", "중림동"), ("중랑구", "3060000", "중화동")]
+)
+@pytest.mark.parametrize("detail", ["", "2층", "2층 201호"])
+def test_place_detail_survives_transform_postgis_and_history_without_promoting_legacy(
+    temporary_database: TemporaryDatabase, gu: str, code: str, dong: str, detail: str
+) -> None:
+    migrate(temporary_database)
+    row = raw(
+        "PLACE-HISTORY-1",
+        OPN_ATMY_GRP_CD=code,
+        ROAD_NM_ADDR=f"서울특별시 {gu} 테스트로 1 {detail}".strip(),
+        LOTNO_ADDR=f"서울특별시 {gu} {dong} 1-1 {detail}".strip(),
+    )
+    batch_id = UUID("00000000-0000-0000-0000-000000000002")
+    collection = CollectedSource(
+        source=Source.GENERAL_RESTAURANT,
+        collected_at=datetime(2026, 11, 10),
+        authorities=(),
+        rows=(row,),
+    )
+    normalized = transform_rows(
+        collection.source, collection.rows, batch_id=batch_id, today=collection.collected_at.date()
+    ).records[0]
+    engine = temporary_database.engine
+    with engine.connect() as connection:
+        assert (
+            upsert_records(
+                connection,
+                collection.source,
+                [normalized],
+                batch=import_batch(collection, batch_id),
+            )
+            == 1
+        )
+    with Session(engine) as session:
+        session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+        session.execute(text("SET TRANSACTION READ ONLY"))
+        stored = session.scalar(select(Store).where(Store.license_no == "PLACE-HISTORY-1"))
+        assert stored is not None
+        assert stored.floor_unit == (detail or None)
+        assert stored.building_key == f"{gu}-{dong}-1-1"
+        assert session.scalar(select(Store.bzstat_nm)) == "한식"
+        assert session.scalar(select(Store.open_date)) == date(2020, 1, 1)
+        assert session.scalar(select(Store.geom.is_not(None))) is True
+        history = get_history(
+            session,
+            HistoryQuery(building_key=stored.building_key, floor_unit="2층 201호", category="cafe"),
+        )
+        assert history.data.total == 1
+        assert history.data.stores[0].location_match == (
+            "same_spot" if detail == "2층 201호" else "unverified"
+        )
+    # A new, detailed query never upgrades a pre-backfill NULL/unverified row.
+    legacy = replace(normalized, floor_unit=None, location_level="unverified")
+    with engine.connect() as connection:
+        upsert_records(connection, collection.source, [legacy])
+    with Session(engine) as session:
+        session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+        session.execute(text("SET TRANSACTION READ ONLY"))
+        history = get_history(
+            session, HistoryQuery(building_key=f"{gu}-{dong}-1-1", floor_unit="2층 201호")
+        )
+        assert history.data.stores[0].location_match == "unverified"

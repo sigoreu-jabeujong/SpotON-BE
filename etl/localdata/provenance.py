@@ -10,7 +10,7 @@ from etl.localdata.dates import parse_source_timestamp
 from etl.localdata.snapshot import rows_digest
 
 MAP_VERSION = "localdata-mapping-v1"
-ETL_RULE_VERSION = "localdata-normalization-v1"
+ETL_RULE_VERSION = "localdata-normalization-v2"
 
 
 def source_reference_date(collection: CollectedSource) -> tuple[date | None, str | None]:
