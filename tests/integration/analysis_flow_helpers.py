@@ -218,6 +218,19 @@ def ok(response):
     return value
 
 
+def track_ai_cache_keys(app, monkeypatch):
+    keys = []
+    cache = app.state.database.cache.ai
+    original_get = cache.get
+
+    def get(key):
+        keys.append(key)
+        return original_get(key)
+
+    monkeypatch.setattr(cache, "get", get)
+    return keys
+
+
 def start(client, category="restaurant"):
     road = ok(
         client.get("/api/geocode", params={"query": ROAD + " 2층 201호", "category": category})

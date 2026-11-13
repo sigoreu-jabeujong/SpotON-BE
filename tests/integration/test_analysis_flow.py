@@ -21,6 +21,7 @@ from tests.integration.analysis_flow_helpers import (
     ok,
     query_flow,
     start,
+    track_ai_cache_keys,
     updated_rows,
 )
 from tests.integration.test_localdata_upsert import migrate
@@ -104,8 +105,9 @@ def test_geocode_etl_identity_and_history_scope(database, caplog, capfd):
         ("restaurant", {"sub_category": "japanese"}, 0),
     ],
 )
-def test_query_flow_counts_and_dates(database, category, changes, expected):
+def test_query_flow_counts_and_dates(database, category, changes, expected, monkeypatch):
     app, provider = application(database)
+    cache_keys = track_ai_cache_keys(app, monkeypatch)
     with TestClient(app) as client:
         result = query_flow(client, start(client, category), **changes)
         assert assert_consistent(result) == expected
@@ -129,7 +131,10 @@ def test_query_flow_counts_and_dates(database, category, changes, expected):
         ai_query = {**result["query"], "include": "market_change,day_night_ratio"}
         ai = ok(client.post("/api/risk/interpret", json={"query": ai_query}))
         again = ok(client.post("/api/risk/interpret", json={"query": ai_query}))
-        assert provider.calls == 1
+        # PostgreSQL's global MVCC snapshot can advance without changing this DB's data.
+        # Reuse is required for identical cache keys; a different snapshot must miss.
+        assert len(cache_keys) == 2 and all(cache_keys)
+        assert provider.calls == len(set(cache_keys))
         assert ai["data"]["verification"]["passed"] is True
         assert again["data"]["verification"]["regenerated"] is False
         assert ai["meta"]["as_of"] == result["risk"]["meta"]["as_of"]
