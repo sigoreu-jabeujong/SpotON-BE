@@ -17,7 +17,15 @@ VITE_USE_MOCK=false
 
 무료 BE는15분 무요청 후 절전한다. 이번 첫 health 요청은22.593초였고 현재 FE 기본 요청 제한15초를 넘었다. 무료 검증 환경의 첫 요청은60초 정도 대기하거나 재시도 안내를 제공하도록 담당자가 조정한다. Free의 SQL 제한10초·풀1/대기15초는 전체 HTTP 시간 상한이 아니며, AI503은 계속 별도로 처리한다. 이 BE 작업에서는 FE 코드를 수정하지 않았다.
 
-현재 허용된 브라우저 origin은 `http://localhost:5173` 한 개다. FE를 다른 포트나 공개 도메인에 배포하면 담당자가 정확한 origin을 전달하고 BE의 CORS_ORIGINS에 추가한 뒤 배포해야 한다. 경로·와일드카드·DB 주소를 FE 설정에 넣지 않는다. 브라우저는 BE만 호출한다.
+현재 허용된 브라우저 origin은 다음 세 개다. 기존5173을 유지하고 FE 담당자가 요청한 로컬5180·배포 도메인을 추가했다.
+
+- `http://localhost:5173`
+- `http://localhost:5180`
+- `https://spot-on-fe.vercel.app`
+
+Vercel production 도메인만 허용하며 preview 배포 URL·추가 도메인·다른 포트는 자동 허용하지 않는다. 필요하면 정확한 origin을 전달하고 BE의 CORS_ORIGINS에 추가한 뒤 재배포해야 한다. 경로·와일드카드·DB 주소를 FE 설정에 넣지 않는다. 브라우저는 BE만 호출한다. 이 설정은 Render BE에 적용하며 로컬 BE의 `.env`·코드 기본값은 별도로 유지한다.
+
+2026-11-14 Render 재배포 후 세 origin 각각의 GET/POST preflight와 실제 GET200·Access-Control-Allow-Origin 정확 일치를 확인했다. 미허용 도메인·유사 도메인·localhost5181은 preflight400과 실제 GET의 허용 헤더 부재를 확인했다. `/api/ready`도200이다. FE 담당자는 위 base URL과 목업 해제 설정으로 브라우저 통합을 확인한다.
 
 ## 2. 적용 범위
 

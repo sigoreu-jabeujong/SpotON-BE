@@ -36,12 +36,14 @@ DATABASE_MAX_OVERFLOW=0
 DATABASE_POOL_TIMEOUT=15
 DATABASE_CONNECTION_BUDGET=8
 DATABASE_EXPECTED_REVISION=0011
-CORS_ORIGINS=http://localhost:5173
+CORS_ORIGINS=http://localhost:5173,http://localhost:5180,https://spot-on-fe.vercel.app
 ```
 
 `DATABASE_URL`은 **새 DB의 내부 호스트·spoton_api 조회 역할·sslmode=require**로 구성해 Render 비밀 환경변수로 주입한다. 내부 TLS는 암호화를 요구하며 서버 인증서 검증을 보장하지 않는다. 외부 관리자 검증/복원은 verify-full과 CA를 사용하고, 외부 DB 접근은 검증 PC /32만 허용한다. 비밀번호·실제 DB URI·인증 토큰·외부 IP는 문서나 저장소에 넣지 않는다.
 
 주소 조회용 `KAKAO_REST_API_KEY`, `JUSO_SEARCH_KEY`, `JUSO_COORD_KEY`만 별도로 설정한다. DB 소유 계정·정부 ETL·LLM 키는 BE에 전달하지 않는다. 현재 AI 해석은503 AI_UNAVAILABLE이다.
+
+브라우저 CORS는 로컬5173·5180과 배포 FE `https://spot-on-fe.vercel.app`의 세 origin을 명시적으로 허용한다. Vercel preview·다른 포트·추가 도메인은 자동 허용되지 않으며 정확한 origin을 별도로 추가해야 한다. 이 목록은 Render 서비스 환경변수이며 로컬 `.env`나 코드 기본값을 바꾸지 않는다.
 
 `/api/health`는 프로세스 검사다. Render health check는 `/api/ready`로 지정한다. 준비 검사는 head0011·조회 역할 권한을 확인하며 API 풀과 별도 연결1개, HTTP2.5초·SQL750ms·성공10초/실패1초 캐시·단일 실행 잠금을 사용한다. 실패는 기존 INTERNAL_ERROR500/no-store다.
 
@@ -106,11 +108,14 @@ CORS_ORIGINS=http://localhost:5173
 | API24건 | 정상22건200·오류2건422, 로컬과 전체 JSON 일치 |
 | 반경 경계3건 | 499.999/500m 포함, 500.001m 제외 |
 | 카페 Risk 동시3·총6요청 | 모두200·동일 결과, 최장6.985초 |
-| 주소 검색 / CORS | 200 / localhost5173 허용200·미허용 origin400 |
+| 주소 검색 | 200 |
+| CORS 추가 검증 | 세 origin의 GET/POST preflight6건·실제 GET3건200, 미허용 origin3개 preflight400·GET 허용 헤더 없음 |
 | 내부 DB 연결 | reader·TLSv1.3, 풀1 확인 |
 | AI | LLM 키 생략,503 AI_UNAVAILABLE |
 
 기존 코드 검증은 일반1595건·PostGIS251건을 통과했다. 이전·Claude 설계 검토 원문은 [PR #110](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/110)과 Git 이력에 남아 있다. 현재 기준에는 과거 유료 설정을 적용하지 않는다.
+
+2026-11-14 FE 요청의 CORS 두 주소를 추가하고 같은 commit으로 재배포했다. 배포 `dep-dbrisp4ipgvc73fojbt0`의 live·기존 commit 유지·ready200을 확인했다. CORS 이외 환경변수와 키 목록은 변경 전후 일치하며 Free 요금제·자동 배포 off를 유지한다. preflight는 Content-Type·GET/POST·Vary: Origin을 확인했고 credentials 허용은 추가하지 않았다. 이번에는 앱 코드·DB·로컬 `.env`·FE 저장소를 변경하지 않았으며 FE 브라우저 전체 통합 완료를 의미하지 않는다.
 
 ## 6. 무료 제한과 FE 연결
 
