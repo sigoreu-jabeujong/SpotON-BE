@@ -6,6 +6,8 @@
 - 선행 분석: [FE 연동 피드백 BE 재검증 보고서](../be-fe-integration-feedback-review.md)
 - 상태: Claude Code 설계 검토·MD 직접 수정 → Codex 구현 → Claude 구현 재검토(PASS)·보강 반영 → Codex 최종 로컬 검증 완료. PR/CI는 이슈에 연결된 PR에서 확인한다.
 
+후속 상태: 이 PR의 기존 DB 미보정 경계는 유지하며, 이후 [#104 원본 검증·상세 위치 복구](feat104-floor-location-backfill.md)에서 현재 PC 개발 DB를 별도로 보정했다. 아래의 미완료 설명은 #102 작업 당시 범위이며 팀원 DB에는 자동 적용되지 않는다.
+
 ## 1. 문제와 목표
 
 `etl/address/floor_unit.py::_candidate_failure()`의 `token.startswith("중")` 때문에 `중구`·`중랑구`·`중계동`·`중곡동`·`중림동`·`중화동`·`중앙로` 등 정상 지명이 AMBIGUOUS가 된다. `서울 중구 명동길 14 2층`은 null, 지명 없는 `명동길 14 2층`은 2층이다.
