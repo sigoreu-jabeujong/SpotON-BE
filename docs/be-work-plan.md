@@ -1,16 +1,10 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
-## Render 검증 배포 추가 기준 (#106)
+## Render 무료 검증 배포 기준
 
-최신 #109: 2026-11-14 카드 없는 Free BE/DB 생성·전체20테이블 행/geometry 지문·기존50인덱스/110제약/3시퀀스·공개24API/경계3/동시3의6건을 검증하고 기존 유료 BE/DB를 삭제했다. 현재는 Free 웹1/DB1·유료 컴퓨팅/지속 디스크/Key Value0이다. Free 전용 SQL10초·풀1/overflow0/대기15초·운영 커버링 인덱스1개(총51, 앱 모델/head0011 유지)와2026-12-13 만료를 [최신 결과](render-free-validation.md), FE URL·15초 기본 대기/절전 지연 대응을 [전달 문서](fe-render-validation-api-request.md)에 기록했다. 로컬3초·.env·개발DB·FE는 변경하지 않는다. 아래는 최초 유료 구성 당시 기록이다.
+현재 Free 웹 spoton-be-free·DB spoton-db-free만 사용한다. SQL10초·풀1/overflow0/대기15초·워커1·reader/연결 예산8, 별도 ready 연결 포함 교체 상한4개다. ready의 HTTP2.5초/SQL750ms·캐시는 유지한다. 앱 모델/head0011·기준50인덱스와 별도 운영 인덱스1개를 구분하며 Free DB를 autogenerate 대상으로 쓰지 않는다.
 
-2026-11-13 PR #107/commit56e174e를 Render 검증 BE에 배포했다. 일반1595건·CI PostGIS251건, 공개24API 전체 JSON·경계3건·동시3의6건, 실제 주소 검색·CORS 및 내부 풀 TLSv1.3을 확인했다. 공개 URL·실배포 SHA·연결 예산·미완료 범위는 [결과](render-be-validation-deployment.md), FE 연결 설정은 [전달 문서](fe-render-validation-api-request.md)를 따른다. FE 저장소는 변경하지 않았다.
-
-DB 덤프 복원·조회 역할·실데이터 API24건 대조는 [복원 검증](render-postgres-restore-validation.md), Docker 배포와 실제 Claude 검토는 [#106](designs/feat106-render-validation-deploy.md)을 따른다. 운영 전환·원격 ETL은 별도이며 기존 API 계약과 .env·로컬 개발 DB를 유지한다.
-
-단일 인스턴스·명시적 WEB_CONCURRENCY=1·풀3/overflow0·별도 준비 연결1·역할 제한8에서 구/신 교체 피크8을 가정한다. Settings에서 이 예산을 검사하며 추가 인스턴스·외부 reader는 자동 계산하지 않는다. `/api/ready`는 독립 단일 연결/캐시, revision0011과 조회 권한을 확인한다. 기존 health·오류 외피를 유지하며 Docker 시작 시 migration/ETL을 실행하지 않는다.
-
-검증 서비스는 같은 계정·싱가포르 DB의 내부 TLS require/조회 역할을 사용하며 LLM 키를 생략한다. 주소 조회 키만 메모리로 전달한다. FE origin과 연결 설정은 담당자 확정 후 BE 측 전달 문서로 안내한다. FE 수정·실제 AI 해석·운영 전환 완료를 주장하지 않는다. 배포 결과와 URL은 실제 성공 후 별도로 기록한다.
+구성·환경변수·권한·데이터 검증·운영 SQL·복원과2026-12-13 만료는 [현재 Render 안내](render-free-validation.md), FE URL·CORS·절전 후 대기는 [FE 연결 안내](fe-render-validation-api-request.md)를 따른다. Render 전용 MD는 이 두 개만 유지한다. 로컬 .env·기본3초·개발DB·FE 파일은 변경하지 않는다. 시작 시 migration/ETL과 자동 배포는 실행하지 않으며 검증한 commit을 수동 배포한다.
 
 이 문서 하나에서 BE의 범위·개발 순서·데이터 규칙·API 보완·작업 방식을 관리한다. 공통 기준 변경은 해당 절을 수정한다. 기능별 설계·Claude 검토·커밋 계획은 `docs/designs/`에 별도로 기록하되 공통 규칙을 복제하지 않는다.
 
