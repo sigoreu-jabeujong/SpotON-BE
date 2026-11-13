@@ -74,4 +74,4 @@ async def interpret(
     request: Request, body: InterpretRequest, response: Response
 ) -> ApiResponse[RiskInterpretation]:
     response.headers.update(NO_STORE)
-    return await interpret_risk(request.app.state.interpretation, body.query)
+    return await interpret_risk(request.app.state.interpretation, body.query, body.history_query())

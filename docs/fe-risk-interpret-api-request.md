@@ -24,7 +24,7 @@
 
 위 좌표는 형식 설명용입니다. 실제로는 주소 검색 결과로 Risk를 요청할 때 사용한 원본 조회조건을 사용합니다. Risk **응답**의 query를 그대로 전송하면 radius_m/일 단위 as_of 때문에422가 될 수 있습니다. 입력은 radius와 YYYY-MM이며, sub_category는 허용 코드 배열 또는 쉼표 문자열입니다. include는 market_change/day_night_ratio만 허용합니다.
 
-첫 버전은 building_key/floor_unit을 지원하지 않으며 전송하면422입니다. 원본의 선택 이력 문맥은 후속입니다. 이 필드를 받았다가 무시하지 않습니다. 사용자 주소·상호·프롬프트·숫자·상권 후보·경계 UUID도 보내지 않습니다. POST URL의 쿼리 인자, 중복 JSON 키·NaN·추가 필드·16KiB 초과 본문도 거절합니다.
+최상위 building_key/floor_unit은 전송하면422입니다. 선택 이력 문맥은 BE #98의 `history` 필드로 보냅니다(아래 절). 받았다가 무시하는 필드는 없습니다. 사용자 주소·상호·프롬프트·숫자·상권 후보·경계 UUID도 보내지 않습니다. POST URL의 쿼리 인자, 중복 JSON 키·NaN·추가 필드·16KiB 초과 본문도 거절합니다.
 
 ## 2. 이번 AI의 역할과 응답 의미
 
@@ -49,7 +49,7 @@ official_values의 각 항목은 text/indicator_ids, favorable/unfavorable은 te
 
 Risk의 최근 기간 폐업률·고정 개업 주년 생존율과 같은 필터의 좌표 확보 서울 비교를 사용합니다. 생존율은 현재 잔존율이 아니며 현재 폐업했어도 주년 이후 폐업이면 해당 주년 생존에 포함됩니다. [Risk 요청서](fe-risk-reference-api-request.md)의 계산 보완안을 함께 검토해 주세요.
 
-소표본/0분모·공식 지표/상권 적용/수집일 미확인은 그대로 안내합니다. 가맹 분류는 미적용DB의pending과 적용DB의estimate/partial을 구분하며, [프랜차이즈 추정 요청서](fe-franchise-classification-api-request.md)를 함께 반영해 주세요. 적용DB는 `missing_data`에 `reason=franchise_name_match_estimate`인 한계 안내를 반환합니다. 이는 이름 일치 추정이 실제 계약·과거 소속을 증명하지 않는다는 뜻이며 미적용 상태의 `classification_unverified`와 구분합니다. 반환 문구를 유지하고 기준년도를 점포 개업 당시 가맹 소속으로 바꾸지 않습니다. 현재 서버 prompt는risk-interpret-v6이며 FE에서 자체 프롬프트나 판정을 만들 필요는 없습니다.
+소표본/0분모·공식 지표/상권 적용/수집일 미확인은 그대로 안내합니다. 가맹 분류는 미적용DB의pending과 적용DB의estimate/partial을 구분하며, [프랜차이즈 추정 요청서](fe-franchise-classification-api-request.md)를 함께 반영해 주세요. 적용DB는 `missing_data`에 `reason=franchise_name_match_estimate`인 한계 안내를 반환합니다. 이는 이름 일치 추정이 실제 계약·과거 소속을 증명하지 않는다는 뜻이며 미적용 상태의 `classification_unverified`와 구분합니다. 반환 문구를 유지하고 기준년도를 점포 개업 당시 가맹 소속으로 바꾸지 않습니다. 현재 서버 prompt는risk-interpret-v7이며 FE에서 자체 프롬프트나 판정을 만들 필요는 없습니다.
 
 서울 비교값이 같으면 유리/불리 후보를 만들지 않으며, 동종업체 수에 임의로 많음/적음 등급을 붙이지 않습니다. 유리/불리 구역이 비어도 설명을 임의로 채우지 않습니다.
 
@@ -88,3 +88,12 @@ meta는 T/D/수집일null·반경·분모null·입력/데이터/프롬프트 has
 - `avg_operating_months`는 여러 항목에 반복됩니다. 목록 key로 ID를 쓰지 말고 지금처럼 문장 text나 배열 순서를 사용해 주세요.
 - 평균 경과 기간은 기준일에 영업 중인 기록의 개업 후 경과 개월 평균(버림)입니다. 점포 수명·생존 기간·영업 성과로 바꿔 표시하지 마세요. 서버 문장을 그대로 보여 주면 됩니다.
 - 활동 집계와 Risk 수치가 서로 맞지 않으면 서버가 500을 반환합니다. 기존 AI 실패 처리와 같으며 지표 카드는 계속 보여 주세요.
+
+## BE #98 선택 이력 문맥에 따른 요청
+
+- AI 해석 요청에 선택 필드 `history`를 보낼 수 있습니다. `{"query": {...}, "history": {"building_key": "<geocode의 building_key>", "floor_unit": "<geocode의 floor_unit 또는 null>"}}`. 결과 화면 URL의 `bk`·`floor` 값을 그대로 쓰면 됩니다. 값이 없으면 `history`를 생략하세요(#96과 같은 결과).
+- `floor_unit`이 없으면 빈 문자열 대신 `null`을 보내거나 생략하세요. 빈 문자열·비정규 값·추가 필드는 422입니다.
+- 요청 좌표에서 300m보다 먼 건물키를 보내면 422 `INVALID_PARAM`입니다. 같은 geocode 결과의 좌표와 건물키를 함께 보내면 정상입니다. 422여도 지표 카드는 그대로 보여 주세요.
+- `official_values`에 `building_history`(건물 전체 건수, 호수가 없으면 총계만)와 `same_spot_history`(같은 자리 영업·폐업과 기간 범위) 문장이 추가될 수 있습니다. 두 ID의 칩 이름(예: "건물 이력", "같은 자리 이력")을 추가하고, 이동 대상은 과거 점포 이력 섹션(`#history`)을 권장합니다.
+- `missing_data` reason이 4종 추가됩니다: `history_no_records`, `history_floor_unit_missing`, `history_detail_incomplete`, `history_latest_data_basis`. 서버 문장을 그대로 보여 주면 됩니다.
+- 건물 이력은 요청 기준 시점·필터와 무관한 최신 자료 기준이며 지원 업종 전체 기록입니다. 같은 자리 폐업 기록을 "위험한 자리" 같은 판정으로 바꾸지 마세요.

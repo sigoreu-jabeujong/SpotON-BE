@@ -9,6 +9,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import Field, JsonValue, model_validator
+from sqlalchemy import cast, func, select
 from sqlalchemy.orm import Session
 
 from app.ai.client import LlmRequest
@@ -18,11 +19,14 @@ from app.core.cache import CacheResources
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.dependencies import NO_STORE
+from app.models import Store
+from app.models.store import STORE_GEOGRAPHY
 from app.schemas.ai_context import (
     ContextActivity,
     ContextActivityGroup,
     ContextFilters,
     ContextFlags,
+    ContextHistory,
     ContextIndicator,
     ContextMethodology,
     ContextModel,
@@ -37,13 +41,18 @@ from app.schemas.franchise import (
 )
 from app.schemas.market_activity import ActivityQuery, MarketActivity
 from app.schemas.risk import Risk, RiskIndicator, RiskQuery
+from app.schemas.stores import HistoryQuery, StoreHistory
 from app.services.market_activity import RULE_VERSION as ACTIVITY_RULE_VERSION
 from app.services.market_activity import get_activity, year_cutoff
 from app.services.risk import RULE_VERSION, get_risk, percent, period
 from app.services.risk_cache import snapshot_token
 from app.services.spatial_stores import effective_date
 from app.services.store_cohort import MIN_OPEN_DATE
+from app.services.store_history import HISTORY_RULE_VERSION, SUPPORTED_STORES, get_history
+from etl.address.floor_unit import parse_floor_unit
 
+# #98: "이 건물" must be the analysed building; smallest radius choice, not the query radius.
+HISTORY_MAX_DISTANCE_M = 300
 FILTER_FIELDS = {
     "sub_category",
     "area",
@@ -87,8 +96,13 @@ def prepare_risk_interpretation(
     settings: Settings,
     *,
     cache: CacheResources | None = None,
+    history: HistoryQuery | None = None,
 ) -> PreparedRiskInterpretation:
-    """No client metrics, no provider invocation; caller supplies the read-only transaction."""
+    """No client metrics, no provider invocation; caller supplies the read-only transaction.
+
+    A building outside HISTORY_MAX_DISTANCE_M raises AppError(INVALID_PARAM) directly; it is
+    not a ValueError, so the generic 500 mapping below does not swallow it.
+    """
     try:
         checked = RiskQuery.model_validate(
             query.model_dump(exclude={"include_unknown"}, warnings="error")
@@ -105,7 +119,13 @@ def prepare_risk_interpretation(
                 checked.model_dump(exclude={"include", "include_unknown"}, warnings="error")
             ),
         )
-        context, data_version_hash = _extract_context(response, checked, activity)
+        building = None
+        if history is not None:
+            check_history_location(session, checked, history)
+            building = get_history(session, history)
+        context, data_version_hash = _extract_context(
+            response, checked, activity, building, history
+        )
         safe = context.model_dump(mode="json")
         serialized = serialize_context(safe)
         bundle = load_prompt_bundle()
@@ -167,6 +187,102 @@ def _indicator(row: RiskIndicator, target: date, radius: int) -> ContextIndicato
             "status": row.status,
             "reason": row.reason,
         }
+    )
+
+
+def check_history_location(session: Session, query: RiskQuery, history: HistoryQuery) -> None:
+    """Nearest located supported store of the building must lie within 300m (design §2.1).
+
+    Buildings without located stores (including empty history) cannot be checked and pass.
+    """
+    point = cast(func.ST_SetSRID(func.ST_MakePoint(query.lng, query.lat), 4326), STORE_GEOGRAPHY)
+    nearest = session.scalar(
+        select(func.min(func.ST_Distance(cast(Store.geom, STORE_GEOGRAPHY), point, True))).where(
+            SUPPORTED_STORES,
+            Store.building_key == history.building_key,
+            Store.geom.is_not(None),
+        )
+    )
+    if nearest is not None and float(nearest) > HISTORY_MAX_DISTANCE_M:
+        raise AppError(ErrorCode.INVALID_PARAM, headers=NO_STORE)
+
+
+def _same_spot_comparable(floor_unit: str | None) -> bool:
+    if floor_unit is None:
+        return False
+    parsed = parse_floor_unit(floor_unit).value
+    return parsed is not None and bool(parsed.floor) and bool(parsed.unit)
+
+
+def _history(
+    building: ApiResponse[StoreHistory],
+    risk_meta: dict[str, JsonValue],
+    history: HistoryQuery,
+    category: str,
+    reference: date,
+) -> ContextHistory:
+    """Same-session recomputation of #36 history; identifier-free aggregates only (§4·§5)."""
+    if building.error is not None or building.data is None:
+        raise ValueError("history result unavailable")
+    data = StoreHistory.model_validate(building.data.model_dump(warnings="error"))
+    meta = building.meta
+    updated = meta.get("data_updated_at")
+    if (
+        updated is None
+        or updated != risk_meta.get("data_updated_at")
+        or meta.get("as_of") != updated
+        or meta.get("franchise_classification") != risk_meta.get("franchise_classification")
+        or meta.get("collected_at") is not None
+        or meta.get("source") != ["R5", "R6"]
+        or type(meta.get("denominator")) is not int
+        or meta.get("denominator") != data.total
+        or data.total != len(data.stores)
+    ):
+        raise ValueError("history provenance mismatch")
+    version, risk_version = meta.get("data_version"), risk_meta.get("data_version")
+    if not isinstance(version, dict) or not isinstance(risk_version, dict):
+        raise ValueError("history data version mismatch")
+    batches, risk_batches = version.get("stores_batch_ids"), risk_version.get("stores_batch_ids")
+    if (
+        not isinstance(batches, list)
+        or not isinstance(risk_batches, list)
+        or len(batches) != len(set(map(str, batches)))
+        or set(map(str, batches)) != set(map(str, risk_batches))
+        or version.get("map_version") != risk_version.get("map_version")
+        or version.get("rule_version") != HISTORY_RULE_VERSION
+        or version.get("brand_mapping") != risk_version.get("brand_mapping")
+    ):
+        raise ValueError("history data version mismatch")
+    provided = history.floor_unit is not None
+    comparable = _same_spot_comparable(history.floor_unit)
+    rows = data.stores
+    matches = [r.location_match for r in rows]
+    if (not provided and any(m != "unverified" for m in matches)) or (
+        not comparable and "same_spot" in matches
+    ):
+        raise ValueError("history location rule mismatch")
+    spot = [r for r in rows if r.location_match == "same_spot"]
+    closed = [r for r in spot if r.store_status == "closed"]
+    months = [
+        r.operating_months
+        for r in closed
+        if r.operating_period_status == "fact" and r.operating_months is not None
+    ]
+    return ContextHistory(
+        data_updated_at=reference,
+        floor_unit_provided=provided,
+        same_spot_comparable=comparable,
+        total=data.total,
+        same_category=sum(r.category == category for r in rows),
+        same_spot=len(spot),
+        same_building=matches.count("same_building"),
+        unverified=matches.count("unverified"),
+        same_spot_open=sum(r.store_status == "open" for r in spot),
+        same_spot_closed=len(closed),
+        same_spot_other=sum(r.store_status == "other" for r in spot),
+        same_spot_closed_period_count=len(months),
+        same_spot_closed_months_min=min(months) if months else None,
+        same_spot_closed_months_max=max(months) if months else None,
     )
 
 
@@ -249,7 +365,11 @@ def _extract_context(
     response: ApiResponse[Risk],
     query: RiskQuery,
     activity: ApiResponse[MarketActivity],
+    building: ApiResponse[StoreHistory] | None = None,
+    history: HistoryQuery | None = None,
 ) -> tuple[RiskInterpretContext, str]:
+    if (building is None) != (history is None):
+        raise ValueError("history request mismatch")
     if response.error is not None or response.data is None:
         raise ValueError("risk result unavailable")
     data = Risk.model_validate(response.data.model_dump(warnings="error"))
@@ -311,6 +431,8 @@ def _extract_context(
         version_json.pop("brand_mapping")
     version_json["stores_batch_ids"] = sorted(str(v) for v in version.stores_batch_ids)
     version_json["activity_rule_version"] = ACTIVITY_RULE_VERSION
+    if history is not None:
+        version_json["history_rule_version"] = HISTORY_RULE_VERSION
     version_hash = hashlib.sha256(serialize_context(version_json).encode("utf-8")).hexdigest()
     sub = query.sub_category or (
         ("cafe",) if query.category == "cafe" else ("korean", "chinese", "japanese", "western")
@@ -337,5 +459,8 @@ def _extract_context(
         ),
         methodology=method,
         activity=_activity(activity, data, meta, ordered_sub, query.radius),
+        history=None
+        if building is None or history is None
+        else _history(building, meta, history, query.category, reference),
     )
     return context, version_hash

@@ -7,10 +7,13 @@ from sqlalchemy.orm import Session
 from app.ai.context import prepare_risk_interpretation
 from app.core.config import Settings
 from app.core.errors import AppError
+from app.schemas.common import ErrorCode
 from app.schemas.market_activity import ActivityQuery
 from app.schemas.risk import RiskQuery
+from app.schemas.stores import HistoryQuery
 from app.services.market_activity import get_activity
 from app.services.risk import get_risk
+from app.services.store_history import get_history
 from tests.integration.test_localdata_upsert import migrate
 from tests.integration.test_market_judgement import area, version
 from tests.integration.test_nearby import PARAMS, batch, store
@@ -166,3 +169,86 @@ def test_activity_context_matches_independent_activity_under_filters(db, changes
     assert prepared.context.activity.recent_closed == activity.data.recent_12m.closed
     assert sum(g.open_count for g in groups) == risk.data.indicators[5].value
     assert prepared.context.activity.space == f"radius_{q.radius}m"
+
+
+BUILDING = "마포구-서교동-123-4"
+FAR = "마포구-서교동-999-0"
+DARK = "마포구-서교동-777-0"
+
+
+def seed_buildings(db):
+    with Session(db) as s, s.begin():
+        b = batch(s, data_updated_at=date(2026, 11, 8))
+        for i in range(3):
+            store(s, b, f"context{i}", open_date=date(2025, 1, 1))
+        spot = dict(building_key=BUILDING, floor_unit="1층 101호", location_level="same_spot")
+        store(
+            s,
+            b,
+            "spot-closed",
+            50,
+            open_date=date(2020, 1, 1),
+            close_date=date(2021, 3, 1),
+            status="closed",
+            **spot,
+        )
+        store(s, b, "spot-open", 50, open_date=date(2023, 1, 1), **spot)
+        store(
+            s,
+            b,
+            "upstairs",
+            50,
+            building_key=BUILDING,
+            floor_unit="2층 201호",
+            location_level="same_spot",
+            open_date=date(2019, 1, 1),
+            close_date=date(2020, 6, 1),
+            status="closed",
+        )
+        store(s, b, "unknown-spot", None, building_key=BUILDING, location_level="unverified")
+        store(s, b, "far", 800, building_key=FAR, location_level="unverified")
+        store(s, b, "dark", None, building_key=DARK, location_level="unverified")
+
+
+def history_for(s, key, floor_unit, config):
+    hq = HistoryQuery(building_key=key, floor_unit=floor_unit, category="restaurant")
+    return (
+        hq,
+        get_history(s, hq),
+        prepare_risk_interpretation(s, RiskQuery(**PARAMS), config, history=hq),
+    )
+
+
+def test_history_context_matches_independent_history(db):
+    seed_buildings(db)
+    config = Settings(_env_file=None)
+    with Session(db) as s, s.begin():
+        s.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
+        _, actual, prepared = history_for(s, BUILDING, "1층 101호", config)
+    rows = actual.data.stores
+    h = prepared.context.history
+    spot = [r for r in rows if r.location_match == "same_spot"]
+    assert (h.total, h.same_spot, h.same_building, h.unverified) == (4, 2, 1, 1)
+    assert h.total == len(rows) and h.same_spot == len(spot)
+    assert (h.same_spot_open, h.same_spot_closed) == (1, 1)
+    assert (h.same_spot_closed_months_min, h.same_spot_closed_months_max) == (14, 14)
+    assert h.same_category == 4 and h.data_updated_at == date(2026, 11, 8)
+    content = prepared.request.user_content
+    for secret in [BUILDING, "101호", "spot-closed", "synthetic"]:
+        assert secret not in content
+
+
+def test_history_location_check_against_real_geometry(db):
+    seed_buildings(db)
+    config = Settings(_env_file=None)
+    with Session(db) as s, s.begin():
+        s.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
+        with pytest.raises(AppError) as exc:
+            history_for(s, FAR, None, config)
+        assert exc.value.code == ErrorCode.INVALID_PARAM
+    with Session(db) as s, s.begin():
+        s.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
+        _, _, dark = history_for(s, DARK, None, config)
+        _, _, empty = history_for(s, "마포구-서교동-1-0", None, config)
+    assert dark.context.history.total == 1 and not dark.context.history.floor_unit_provided
+    assert empty.context.history.total == 0
