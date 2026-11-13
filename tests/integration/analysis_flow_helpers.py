@@ -27,6 +27,7 @@ KEY = "마포구-서교동-123-4"
 PRIVATE = "CANARY_STORE_76"
 ENDPOINTS = {
     "/api/health",
+    "/api/ready",
     "/api/geocode",
     "/api/stores/history",
     "/api/meta/data-range",

@@ -1,5 +1,15 @@
 # SpotON-BE
 
+## Render 검증 배포
+
+배포 이미지는 `docker build -t spoton-be .`로 만든다. 고정 Python·uv digest와 uv.lock을 사용하고 비root 계정에서 `python -m app.runtime`으로 실행한다. `.env`·데이터·덤프·Git·개발 의존성은 이미지에 포함하지 않는다. 환경변수로 설정을 주입하며 PORT 기본값은10000이다. 시작 시 migration/ETL은 실행하지 않는다.
+
+`/api/health`는 프로세스 실행, `/api/ready`는 DB·revision·배포 조회 계정 준비 상태다. Render health check는 `/api/ready`를 사용한다. 준비 검사는 API 풀과 독립된 단일 연결·짧은 캐시를 사용하고 실패 시 기존 오류500/no-store를 반환한다.
+
+단일 인스턴스에서 WEB_CONCURRENCY=1, DATABASE_POOL_SIZE=3, DATABASE_MAX_OVERFLOW=0, DATABASE_POOL_TIMEOUT=2, DATABASE_CONNECTION_BUDGET=8을 명시한다. 교체 배포 상한은 `2 * workers * (pool_size + overflow + 1 readiness) <= budget`이다. 인스턴스 추가·외부 reader 연결은 예산을 다시 계산한다.
+
+설계·실제 Claude 검토와 최종 결정은 [#106](docs/designs/feat106-render-validation-deploy.md), 선행 DB 결과는 [복원 검증](docs/render-postgres-restore-validation.md)을 따른다. 검증 배포에는 LLM 키를 넣지 않으며 AI·FE 연결·운영 전환 완료로 보지 않는다.
+
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
 현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해·기본 상권 활동·Risk 참고지표·검증 후보 기반 AI 해석·상담/지원기관 공통 링크 API와 인허가/상권/생활인구 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 점포 689,440건·상권 경계 1,650건·2025년 점포 통계 24,810행·추정매출 14,391행·공식 상권변화 유형 6,600행과 2026-11-07 생활인구 531,922행·공식 250m 격자 10,125개를 적재했습니다. migration `0011`가 현재 head입니다. 원천별 시점을 혼합하지 않으며 브랜드명 기반 프랜차이즈 추정·필터를 제공하며, 공식 지표 연결·조건부 매출/인구 수치와 FE 반영은 후속 작업입니다.

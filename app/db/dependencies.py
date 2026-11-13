@@ -12,6 +12,7 @@ from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.session import DatabaseConfigurationError, create_db_engine
 from app.schemas.common import ErrorCode
+from app.services.readiness import ReadinessProbe
 
 NO_STORE = {"Cache-Control": "no-store"}
 
@@ -22,6 +23,7 @@ class DatabaseResources:
         self.engine: Engine | None = None
         self.lock = Lock()
         self.cache = CacheResources(settings)
+        self.readiness = ReadinessProbe(settings)
 
     def get_engine(self) -> Engine:
         with self.lock:
@@ -30,6 +32,7 @@ class DatabaseResources:
             return self.engine
 
     def close(self) -> None:
+        self.readiness.close()
         self.cache.close()
         with self.lock:
             if self.engine is not None:

@@ -62,6 +62,9 @@ def create_db_engine(settings: Settings | None = None) -> Engine:
         echo=False,
         hide_parameters=True,
         pool_pre_ping=True,
+        pool_size=config.database_pool_size,
+        max_overflow=config.database_max_overflow,
+        pool_timeout=config.database_pool_timeout,
         connect_args={"connect_timeout": config.database_connect_timeout},
     )
 
