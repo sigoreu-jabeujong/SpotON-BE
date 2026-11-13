@@ -6,6 +6,12 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 
 [BE 개발 기준 및 작업계획](docs/be-work-plan.md)
 
+## Render 검증 배포 기준 (BE #106)
+
+Docker 진입점은 app.runtime이며 PORT 기본10000·명시적 WEB_CONCURRENCY=1·비root 실행이다. 시작 시 migration/ETL은 실행하지 않는다. `/api/health`는 기존 liveness, `/api/ready`는 DB/revision 및 staging·production 조회 역할 권한 검사다. 준비 검사는 별도 단일 연결·성공10초/실패1초 캐시·HTTP2.5초·SQL750ms이며 실패는 기존 INTERNAL_ERROR500/no-store다.
+
+풀 기본3·overflow0·대기2초·예산8이고 교체 상한은 `2 * workers * (pool_size + overflow + 1 readiness) <= budget`이다. 단일 Render 인스턴스만 가정하며 추가 인스턴스·외부 reader는 예산을 다시 계산한다. 검증 서비스는 같은 계정·싱가포르 DB의 내부 TLS require/조회 역할을 사용하고 관리자/ETL/LLM 키는 전달하지 않는다. FE 저장소는 수정하지 않는다. 상세는 [설계·Claude 검토·최종 결정](docs/designs/feat106-render-validation-deploy.md)을 따른다.
+
 ## 상세 위치 파서 지명 오인 수정 (BE #102)
 
 기적재 데이터의 후속 검증·개발 DB 보정은 [#104](docs/designs/feat104-floor-location-backfill.md)에서 수행했다. `python -m etl.localdata.floor_backfill --source ... --snapshot ...`은 기본 READ ONLY이며 쓰기는 `--write --expected-plan`이 필요하다. 원본·대상·계획·전체 비위치 값/EWKB가 다르면 중단하고, source별 원자적 UPDATE·새 v2 배치·과거 출처/브랜드/삭제/sequence 보존을 검증한다. stores INSERT·원문/날짜/좌표/업종 교체는 하지 않는다. 현재 PC 개발 DB는 24,738행(지원 업종 등 조건 11,468행) 복구와 재실행 no_op·API 전후 검증을 완료했다. 팀원 DB 자동 적용이나 원천 최신화·모든 NULL 복구는 아니다.

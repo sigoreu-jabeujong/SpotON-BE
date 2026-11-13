@@ -1,5 +1,13 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
+## Render 검증 배포 추가 기준 (#106)
+
+DB 덤프 복원·조회 역할·실데이터 API24건 대조는 [복원 검증](render-postgres-restore-validation.md), Docker 배포와 실제 Claude 검토는 [#106](designs/feat106-render-validation-deploy.md)을 따른다. 운영 전환·원격 ETL은 별도이며 기존 API 계약과 .env·로컬 개발 DB를 유지한다.
+
+단일 인스턴스·명시적 WEB_CONCURRENCY=1·풀3/overflow0·별도 준비 연결1·역할 제한8에서 구/신 교체 피크8을 가정한다. Settings에서 이 예산을 검사하며 추가 인스턴스·외부 reader는 자동 계산하지 않는다. `/api/ready`는 독립 단일 연결/캐시, revision0011과 조회 권한을 확인한다. 기존 health·오류 외피를 유지하며 Docker 시작 시 migration/ETL을 실행하지 않는다.
+
+검증 서비스는 같은 계정·싱가포르 DB의 내부 TLS require/조회 역할을 사용하며 LLM 키를 생략한다. 주소 조회 키만 메모리로 전달한다. FE origin과 연결 설정은 담당자 확정 후 BE 측 전달 문서로 안내한다. FE 수정·실제 AI 해석·운영 전환 완료를 주장하지 않는다. 배포 결과와 URL은 실제 성공 후 별도로 기록한다.
+
 이 문서 하나에서 BE의 범위·개발 순서·데이터 규칙·API 보완·작업 방식을 관리한다. 공통 기준 변경은 해당 절을 수정한다. 기능별 설계·Claude 검토·커밋 계획은 `docs/designs/`에 별도로 기록하되 공통 규칙을 복제하지 않는다.
 
 ## 1. 적용 기준과 현재 상태

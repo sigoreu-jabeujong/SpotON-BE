@@ -1,10 +1,10 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     database_url: SecretStr | None = None
     database_connect_timeout: int = Field(default=5, ge=1, le=60)
     database_statement_timeout_ms: int = Field(default=3000, ge=1, le=60000)
+    database_pool_size: int = Field(default=3, ge=1, le=20)
+    database_max_overflow: int = Field(default=0, ge=0, le=20)
+    database_pool_timeout: float = Field(default=2, ge=0.1, le=30)
+    database_connection_budget: int = Field(default=8, ge=1, le=1000)
+    database_expected_revision: str = Field(default="0011", pattern=r"^[0-9]{4}$")
+    web_concurrency: int = Field(default=1, ge=1, le=8)
     risk_boundary_version_id: UUID | None = None
     data_go_kr_service_key: SecretStr | None = None
     kakao_rest_api_key: SecretStr | None = None
@@ -48,6 +54,15 @@ class Settings(BaseSettings):
     ai_cache_ttl_seconds: int = Field(default=300, ge=1, le=604800)
     cache_max_entries: int = Field(default=256, ge=1, le=4096)
     cache_max_bytes: int = Field(default=4194304, ge=1024, le=67108864)
+
+    @model_validator(mode="after")
+    def bounded_database_connections(self) -> Self:
+        # One instance; during replacement old/new workers may coexist. Each worker
+        # has one extra, single-flight readiness connection outside the API pool.
+        peak = 2 * self.web_concurrency * (self.database_pool_size + self.database_max_overflow + 1)
+        if peak > self.database_connection_budget:
+            raise ValueError("DB 연결 예산이 워커·풀·준비 검사·교체 배포 상한보다 작습니다")
+        return self
 
     @field_validator("llm_requests_per_minute", "llm_requests_per_day", mode="before")
     @classmethod
