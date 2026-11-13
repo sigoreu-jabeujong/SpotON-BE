@@ -2,6 +2,7 @@ from datetime import date
 
 import pytest
 
+from app.schemas.stores import HistoryQuery
 from app.services.store_history import location_match
 from etl.address.floor_unit import (
     FloorUnitFailure,
@@ -79,6 +80,23 @@ def test_place_without_detail_is_no_detail_instead_of_false_ambiguity(address: s
         "M층",
         "메자닌",
         "중2로",
+        "중.2층",
+        "중ㆍ2층",
+        "중:2층",
+        "중_2층",
+        "중M층",
+        "중지층",
+        "중반지하",
+        "중옥탑",
+        "중옥상",
+        "중메자닌",
+        "중간.2층",
+        "중간M층",
+        "중간지층",
+        "중간반지하",
+        "중간옥탑",
+        "중간옥상",
+        "중간메자닌",
     ],
 )
 def test_ambiguous_detail_cannot_fall_through_to_another_unit(detail: str) -> None:
@@ -151,3 +169,27 @@ def test_etl_retains_place_detail_without_changing_other_source_fields(
     assert record.date_flag is None and record.status == "open"
     assert record.batch_id == BATCH_ID
     assert result.report.flags["floor_unit_ok" if detail else "floor_unit_no_detail"] == 1
+    assert result.report.flags.get("floor_unit_ambiguous", 0) == 0
+
+
+def test_place_keeps_f_suffix_canonicalization_and_history_query() -> None:
+    result = parse_floor_unit("서울 중구 중앙로2길 3 3F")
+    assert result.value is not None and result.value.value == "3층"
+    query = HistoryQuery(building_key="중구-명동2가-1-1", floor_unit="중구 2층")
+    assert query.floor_unit == "2층"
+
+
+@pytest.mark.parametrize("detail", ["중2층", "중B1", "중.2층", "중M층"])
+def test_etl_keeps_real_ambiguity_when_other_address_has_valid_unit(detail: str) -> None:
+    row = raw(
+        "PLACE-AMBIGUOUS-1",
+        OPN_ATMY_GRP_CD="3010000",
+        ROAD_NM_ADDR=f"서울특별시 중구 테스트로 1 {detail} 201호",
+        LOTNO_ADDR="서울특별시 중구 중림동 1-1 2층 201호",
+    )
+    result = transform_rows(
+        Source.GENERAL_RESTAURANT, [row], batch_id=BATCH_ID, today=date(2026, 11, 10)
+    )
+    assert result.records[0].floor_unit is None
+    assert result.records[0].location_level == "unverified"
+    assert result.report.flags["floor_unit_ambiguous"] == 1

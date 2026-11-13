@@ -175,6 +175,9 @@ def test_place_detail_survives_transform_postgis_and_history_without_promoting_l
         assert session.scalar(select(Store.bzstat_nm)) == "한식"
         assert session.scalar(select(Store.open_date)) == date(2020, 1, 1)
         assert session.scalar(select(Store.geom.is_not(None))) is True
+        assert session.scalar(text("SELECT rule_version FROM store_import_batches")) == (
+            "localdata-normalization-v2"
+        )
         history = get_history(
             session,
             HistoryQuery(building_key=stored.building_key, floor_unit="2층 201호", category="cafe"),
