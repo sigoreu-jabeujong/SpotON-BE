@@ -2,6 +2,8 @@
 
 ## Render 검증 배포 추가 기준 (#106)
 
+2026-11-13 PR #107/commit56e174e를 Render 검증 BE에 배포했다. 일반1595건·CI PostGIS251건, 공개24API 전체 JSON·경계3건·동시3의6건, 실제 주소 검색·CORS 및 내부 풀 TLSv1.3을 확인했다. 공개 URL·실배포 SHA·연결 예산·미완료 범위는 [결과](render-be-validation-deployment.md), FE 연결 설정은 [전달 문서](fe-render-validation-api-request.md)를 따른다. FE 저장소는 변경하지 않았다.
+
 DB 덤프 복원·조회 역할·실데이터 API24건 대조는 [복원 검증](render-postgres-restore-validation.md), Docker 배포와 실제 Claude 검토는 [#106](designs/feat106-render-validation-deploy.md)을 따른다. 운영 전환·원격 ETL은 별도이며 기존 API 계약과 .env·로컬 개발 DB를 유지한다.
 
 단일 인스턴스·명시적 WEB_CONCURRENCY=1·풀3/overflow0·별도 준비 연결1·역할 제한8에서 구/신 교체 피크8을 가정한다. Settings에서 이 예산을 검사하며 추가 인스턴스·외부 reader는 자동 계산하지 않는다. `/api/ready`는 독립 단일 연결/캐시, revision0011과 조회 권한을 확인한다. 기존 health·오류 외피를 유지하며 Docker 시작 시 migration/ETL을 실행하지 않는다.

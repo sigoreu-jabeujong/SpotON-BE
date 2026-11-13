@@ -2,6 +2,8 @@
 
 ## Render 검증 배포
 
+검증용 [API 문서](https://spoton-be-check.onrender.com/docs)와 [DB 준비 상태](https://spoton-be-check.onrender.com/api/ready)를 사용할 수 있다. 실제 배포 commit·검증·제약은 [배포 결과](docs/render-be-validation-deployment.md), FE 연결은 [전달 문서](docs/fe-render-validation-api-request.md)를 따른다.
+
 배포 이미지는 `docker build -t spoton-be .`로 만든다. 고정 Python·uv digest와 uv.lock을 사용하고 비root 계정에서 `python -m app.runtime`으로 실행한다. `.env`·데이터·덤프·Git·개발 의존성은 이미지에 포함하지 않는다. 환경변수로 설정을 주입하며 PORT 기본값은10000이다. 시작 시 migration/ETL은 실행하지 않는다.
 
 `/api/health`는 프로세스 실행, `/api/ready`는 DB·revision·배포 조회 계정 준비 상태다. Render health check는 `/api/ready`를 사용한다. 준비 검사는 API 풀과 독립된 단일 연결·짧은 캐시를 사용하고 실패 시 기존 오류500/no-store를 반환한다.

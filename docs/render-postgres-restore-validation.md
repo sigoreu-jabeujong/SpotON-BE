@@ -1,5 +1,7 @@
 # Render PostgreSQL 덤프 복원·호환성 검증 결과
 
+> 이 문서는 DB 복원 당시 기록이다. 이후 BE 검증 배포와 내부 TLS·공개 API 확인을 완료했다. 최신 배포 상태는 [BE 배포 결과](render-be-validation-deployment.md)를 따른다.
+
 - 확인일: 2026-11-13 (Asia/Seoul)
 - 대상: `spoton-db-check` / `spoton_check`, 싱가포르, 유료 2 CPU·4GB·10GB
 - Render ID: `dpg-dbrgd70u01pc73b653sg-a`

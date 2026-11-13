@@ -1,5 +1,7 @@
 # #106 Render BE 검증 배포
 
+> 실행 완료: PR #107의 일반1595건·CI PostGIS251건 및 CodeQL 통과 후 develop Squash, commit56e174e의 Render 배포와 공개 API·내부 TLS 검증을 완료했다. 아래 설계 당시 미래형 기록과 구별해 [최종 배포 결과](../render-be-validation-deployment.md)를 따른다.
+
 > 아래 최초안과 Claude 의견 중 충돌하는 항목은 마지막 **Codex 최종 결정**을 따른다.
 
 - 이슈: https://github.com/sigoreu-jabeujong/SpotON-BE/issues/106
