@@ -176,6 +176,7 @@ class Provider:
             "favorable": list(c["favorable"]),
             "unfavorable": list(c["unfavorable"]),
             "checklist": ["access"] if self.failure != "validation" else ["CANARY_INVALID"],
+            "narrative_ids": [next(iter(c["narrative"][str(i)])) for i in range(4)],
         }
         return LlmResult(
             text=json.dumps(selected),

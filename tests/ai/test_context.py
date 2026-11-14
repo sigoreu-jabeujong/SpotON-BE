@@ -82,7 +82,7 @@ def test_allowlist_and_original_risk_numbers_and_statuses(monkeypatch):
     for before, after in zip(original.data.indicators, p.context.indicators, strict=True):
         assert after.value == before.value and after.source == tuple(before.source)
         assert after.status == before.status and after.denominator == before.denominator
-    assert p.prompt_version == "risk-interpret-v7"
+    assert p.prompt_version == "risk-interpret-v8"
     assert hashlib.sha256(serialize_context(safe).encode()).hexdigest() == p.context_hash
     assert serialize_context(safe) in p.request.user_content
 
@@ -290,6 +290,7 @@ def test_activity_allowlist_matches_server_activity(monkeypatch):
         "recent_closed",
         "groups",
         "methodology",
+        "yearly_trend",
     }
     assert activity["space"] == "radius_500m"
     assert activity["recent_period"] == "(2025-11-08, 2026-11-08]"
@@ -297,9 +298,10 @@ def test_activity_allowlist_matches_server_activity(monkeypatch):
     assert activity["groups"] == [
         {"sub_category": "cafe", "open_count": 8, "avg_operating_months": 41}
     ]
-    assert activity["methodology"]["yearly_trend_included"] is False
+    assert activity["methodology"]["yearly_trend_included"] is True
+    assert activity["yearly_trend"] == []
     keys = set(walk_keys(activity))
-    for forbidden in ["cohort_size", "stores_batch_ids", "yearly_trend", "license_no", "source"]:
+    for forbidden in ["cohort_size", "stores_batch_ids", "license_no", "source"]:
         assert forbidden not in keys
     assert not keys & FORBIDDEN_CONTEXT_KEYS
 

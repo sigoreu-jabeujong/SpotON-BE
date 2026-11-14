@@ -7,7 +7,8 @@ from datetime import UTC, datetime
 from pydantic import JsonValue
 
 from app.ai.context import PreparedRiskInterpretation
-from app.ai.verifier import NUMBER_PATTERN, verify_output
+from app.ai.narrative import NarrativeCatalog, build_narrative
+from app.ai.verifier import NUMBER_PATTERN, VerifyPolicy, verify_output
 from app.schemas.ai_context import RiskInterpretContext
 from app.schemas.interpret import (
     CandidateSelection,
@@ -63,6 +64,7 @@ class InterpretationCatalog:
     favorable: dict[str, InterpretSourcedItem]
     unfavorable: dict[str, InterpretSourcedItem]
     missing: tuple[MissingItem, ...]
+    narrative: NarrativeCatalog
 
     def selection_valid(self, data: dict[str, JsonValue]) -> bool:
         selected = CandidateSelection.model_validate(data)
@@ -70,6 +72,7 @@ class InterpretationCatalog:
             set(selected.favorable) == set(self.favorable)
             and set(selected.unfavorable) == set(self.unfavorable)
             and set(selected.checklist) <= set(CHECKLIST)
+            and self.narrative.valid(selected.narrative_ids)
         )
 
     def candidates(self) -> dict[str, JsonValue]:
@@ -81,10 +84,20 @@ class InterpretationCatalog:
                 k: {"id": k, **v.model_dump(mode="json")} for k, v in self.unfavorable.items()
             },
             "checklist": {k: {"id": k, **v.model_dump(mode="json")} for k, v in CHECKLIST.items()},
+            "narrative": self.narrative.candidates(),
         }
 
     def selection_schema(self) -> dict[str, JsonValue]:
         schema = CandidateSelection.model_json_schema()
+        schema["properties"]["narrative_ids"] = {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": {
+                "type": "string",
+                "enum": [key for group in self.narrative.groups for key in group],
+            },
+        }
         for group, options in (
             ("favorable", self.favorable),
             ("unfavorable", self.unfavorable),
@@ -273,7 +286,25 @@ def build_catalog(prepared: PreparedRiskInterpretation) -> InterpretationCatalog
             ),
         ]
     )
-    return InterpretationCatalog(tuple(facts), positive, negative, tuple(missing))
+    missing.extend(
+        [
+            MissingItem(
+                text="상세 주소만으로 동일한 점포 자리의 과거 이력을 특정할 수 없을 수 있습니다.",
+                reason="address_location_limit",
+            ),
+            MissingItem(
+                text="매출 자료의 집계 기간과 적용 경계를 확인하지 못해 분석에서 제외했습니다.",
+                reason="sales_not_available",
+            ),
+            MissingItem(
+                text="생활인구의 합산·격자·시점 기준을 확인하지 못해 분석에서 제외했습니다.",
+                reason="population_not_available",
+            ),
+        ]
+    )
+    return InterpretationCatalog(
+        tuple(facts), positive, negative, tuple(missing), build_narrative(c)
+    )
 
 
 def render_interpretation(
@@ -289,6 +320,8 @@ def render_interpretation(
     favorable = [catalog.favorable[k] for k in selection.favorable]
     unfavorable = [catalog.unfavorable[k] for k in selection.unfavorable]
     checklist = [CHECKLIST[k] for k in selection.checklist]
+    paragraphs = catalog.narrative.paragraphs(selection.narrative_ids)
+    body = "\n\n".join(item.text for item in paragraphs)
     visible = [item.text for item in catalog.facts]
     visible.extend(item.text for item in favorable + unfavorable)
     visible.extend(item.text for item in catalog.missing)
@@ -298,6 +331,15 @@ def render_interpretation(
         json.dumps({"text": text}, ensure_ascii=False), context=prepared.json_context()
     ).ok:
         raise ValueError("server narrative verification failed")
+    if not verify_output(
+        json.dumps({"text": body}, ensure_ascii=False),
+        context={
+            "analysis": prepared.json_context(),
+            "approved_narrative": catalog.narrative.candidates(),
+        },
+        policy=VerifyPolicy(max_chars=8000),
+    ).ok:
+        raise ValueError("grounded prose verification failed")
     return RiskInterpretation(
         official_values=list(catalog.facts),
         favorable=favorable,
@@ -305,8 +347,14 @@ def render_interpretation(
         missing_data=list(catalog.missing),
         checklist=checklist,
         verification=InterpretationVerification(
-            checked_numbers=len(NUMBER_PATTERN.findall(text)), regenerated=regenerated
+            checked_numbers=len(NUMBER_PATTERN.findall(body)), regenerated=regenerated
         ),
         model=model,
         generated_at=datetime.now(UTC),
+        body=body,
+        paragraphs=paragraphs,
+        used_indicator_ids=list(
+            dict.fromkeys(key for item in paragraphs for key in item.indicator_ids)
+        ),
+        evidence=prepared.json_context(),
     )

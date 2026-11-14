@@ -16,7 +16,8 @@ PROMPT_HISTORY: Mapping[str, str] = MappingProxyType(
         "risk-interpret-v5": "f87b39f08a85c30e2b7e09749152eb63f02ca227fbf3c7d4d4041ffa12d8a87f",
         "risk-interpret-v6": "42407f84df7cf9049c1084a365982c8dc728df9b3427a7d4a6f8ac56ee3f3184",
         "risk-interpret-v7": "d2823664292f3c37ac819accb218ef750e17fca3103bc46eedaba3b63e9ae0c5",
+        "risk-interpret-v8": "96748e3ccf6027eb885c16edfe11e2b339d809a4d6fa99cb97d98693bb93d2d0",
     }
 )
-PROMPT_VERSION = "risk-interpret-v7"
+PROMPT_VERSION = "risk-interpret-v8"
 PROMPT_SHA256 = PROMPT_HISTORY[PROMPT_VERSION]

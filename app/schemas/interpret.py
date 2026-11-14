@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, PrivateAttr, model_validator
 
 from app.schemas.risk import IndicatorId, RiskQuery
 from app.schemas.stores import HistoryQuery
@@ -43,6 +43,7 @@ class CandidateSelection(InterpretModel):
     favorable: list[str] = Field(max_length=3)
     unfavorable: list[str] = Field(max_length=3)
     checklist: list[str] = Field(min_length=1, max_length=3)
+    narrative_ids: list[str] = Field(min_length=4, max_length=4)
 
     @model_validator(mode="after")
     def unique_ids(self) -> Self:
@@ -52,7 +53,9 @@ class CandidateSelection(InterpretModel):
         return self
 
 
-ActivityFactId = Literal["recent_open_close", "avg_operating_months"]
+ActivityFactId = Literal[
+    "recent_open_close", "avg_operating_months", "yearly_trend", "nearby_profile"
+]
 HistoryFactId = Literal["building_history", "same_spot_history"]
 
 
@@ -99,3 +102,10 @@ class RiskInterpretation(InterpretModel):
     verification: InterpretationVerification
     model: str
     generated_at: datetime
+    body: str = ""
+    paragraphs: list[InterpretItem] = Field(default_factory=list)
+    used_indicator_ids: list[IndicatorId | ActivityFactId | HistoryFactId] = Field(
+        default_factory=list
+    )
+    # Full typed evidence stays with the response; it is not a repeated UI list.
+    evidence: dict[str, JsonValue] = Field(default_factory=dict)

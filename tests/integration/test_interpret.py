@@ -51,6 +51,7 @@ class Provider:
             "favorable": list(c["favorable"]),
             "unfavorable": list(c["unfavorable"]),
             "checklist": ["time_flow"],
+            "narrative_ids": [next(iter(c["narrative"][str(i)])) for i in range(4)],
         }
         return LlmResult(
             text=json.dumps(selection),

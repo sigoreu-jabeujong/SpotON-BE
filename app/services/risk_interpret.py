@@ -21,7 +21,7 @@ from app.schemas.stores import HistoryQuery
 from app.services.risk_cache import query_parts
 
 MIN_REGENERATION_SECONDS = 1.0
-SELECTION_CACHE_RULE = "selection-current-validation-v3"
+SELECTION_CACHE_RULE = "selection-current-validation-v4-narrative"
 
 
 class _CachedSelection(BaseModel):

@@ -80,6 +80,7 @@ def choice(p):
         "favorable": list(reversed(c.favorable)),
         "unfavorable": list(c.unfavorable),
         "checklist": ["access"],
+        "narrative_ids": [f"paragraph_{i}_direct" for i in range(4)],
     }
 
 
@@ -299,6 +300,7 @@ def test_longest_restaurant_combination_passes_verifier_with_large_counts(monkey
     selected = CandidateSelection(
         favorable=list(catalog.favorable),
         unfavorable=list(catalog.unfavorable),
+        narrative_ids=[f"paragraph_{i}_direct" for i in range(4)],
         checklist=["time_flow", "access", "visibility"],
     )
     output = render_interpretation(p, catalog, selected, model="fake", regenerated=False)
@@ -390,6 +392,7 @@ def history_output(monkeypatch, rows, hq=None, q=None, result=None, checklist=("
     selected = CandidateSelection(
         favorable=list(catalog.favorable),
         unfavorable=list(catalog.unfavorable),
+        narrative_ids=[f"paragraph_{i}_direct" for i in range(4)],
         checklist=list(checklist),
     )
     return render_interpretation(p, catalog, selected, model="fake", regenerated=False)
@@ -425,7 +428,7 @@ def test_history_sentences_for_mixed_building(monkeypatch, caplog):
         "참고 계산: 같은 자리 기록 중 영업 중 1건, 폐업 2건, 기타 상태 1건이며, "
         "영업 기간을 확인한 폐업 기록 2건의 영업 기간은 14~30개월입니다."
     )
-    assert reasons(output)[-4:-3] == ["history_latest_data_basis"]
+    assert "history_latest_data_basis" in reasons(output)
     dumped = output.model_dump_json()
     assert "PRIVATE" not in dumped + caplog.text and "101호" not in dumped
 
@@ -507,6 +510,7 @@ def test_longest_combination_with_history_stays_within_limit(monkeypatch):
         CandidateSelection(
             favorable=list(catalog.favorable),
             unfavorable=list(catalog.unfavorable),
+            narrative_ids=[f"paragraph_{i}_direct" for i in range(4)],
             checklist=["time_flow", "access", "visibility"],
         ),
         model="fake",
