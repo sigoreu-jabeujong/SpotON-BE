@@ -75,4 +75,54 @@ FE에는 최신 전달MD의브라우저 재검증·CI test 단계 추가 요청�
 
 ## 8. 구현·검증·최종 판단
 
-실행 후 기록한다. 현재까지 운영 서비스/소스/DB 데이터는 변경하지 않았다.
+### 8.1 Codex 구현 판단과 로컬 검사
+
+- 실제 Claude CLI 검토는 exit0·오류false·권한 거절0으로 완료됐고 MD 직접 수정을 대조했다. RUNNING Future·진입 deadline·잠금 밖 완료/로그·실행별 결과·close 소유권·connection_limit 의미를 채택했다. 라우터는 기존to_thread/wait_for를 유지하여 asyncio.wrap_future/shield를 도입하지 않는다.
+- `_probe`는 내부적으로bool 대신 고정사유Literal을 반환하게 변경했다. 주도자가bool 결과를 Future에 게시한 뒤 진단을 기록하므로 logger 작업을 상태 잠금 아래 두지 않는다. 외부check/HTTP 응답은bool/기존 외피다. 예상 밖 Exception은internal_error로 안전하게false, BaseException은 대기자 정리 후 재전파한다.
+- 일반pytest1,676개(신규21)·focused74개·ruff/format347파일·mypy app/etl/migrations158파일이 통과했다. 동시HTTP성공/실패·단일실행·참여자타임아웃·HTTP취소·close·Exception/BaseException·세대간결과·실패TTL·잠금/로그·원문누출을 검증했다. 일회용PostGIS263개는 진행 중이다. 기존 Starlette 경고1건은 유지한다.
+- 실제DB/Render/로컬.env/FE 코드는 아직 변경하지 않았다. 설계의 정책 보완/코드/테스트를 별도 커밋하고 검증/병합 뒤 수동 배포한다.
+
+### 8.2 한식 조사 자료 확보
+
+현재 확보한13개 후보에 대해 기존 Kakao REST 키로공식 Local 키워드API를13회 읽기 조회했다(키 출력/저장·설정 변경 없음). 11개에 결과가 있고 그중10개는 지도 분류가치킨/술집/분식, 1개는일반음식점 분류다. 2개는검색 결과가 없다. 치킨/술집/분식10개 중상호 정규화 정확일치6개·명칭차이4개다. 모두 자동 제외0이다.
+
+비비큐치킨 명동스타점↔BBQ 명동스타점은치킨 분류·API거리0m였으나명칭이 다르고, 인생주점은검색결과가 없어추정하지 않는다. 같은좌표·비슷한상호나지도분류는동일인허가/과거업종의확정근거가아니다. [Kakao 공식 Local API](https://developers.kakao.com/docs/ko/local/dev-guide)의place_name/category_name/distance/place_url을근거후보로사용한다. API분류를인허가공식분류로바꾸지않는다.
+
+저장소 밖 검토CSV/JSON에source+license_no·원래상호/업태·지도후보명/분류/거리/링크·확인시각·unverified를보관했다. 전화번호/키는저장하지않았다. 최종보정의최소조건은 ①정확한제보18개키/조회조건 ②주소/위치·명칭·인허가의동일성검토 ③제외판정근거와확인일/검토자/버전 ④현재분류보정과과거업종보장의구분 ⑤재적재시원문지문변경재검토 ⑥API목록/전체집계/캐시·메타의일관성검증이다. 지금은실DB UPDATE·자동재분류·FE목록숨김을하지않는다.
+
+### 8.3 Claude Code 구현 재검토
+
+2026-11-14 Claude Code 구현 후속 정적 검토. 실행한 도구는 지정 파일 Read와 이 MD Edit뿐이다. 코드/테스트 수정, pytest·ruff·mypy 실행, DB·Bash·Git·네트워크 접근은 하지 않았다. 8.1의 일반1,676개·focused74개·ruff/format·mypy 통과는 Codex 관측이며 직접 재확인하지 않았다. 과거 두500의 원인과 성능 영향은 이 검토로 확정하지 않는다.
+
+- 대조 파일: app/services/readiness.py, app/core/operations.py, app/routers/health.py, tests/test_readiness_concurrency.py, tests/test_render_runtime.py.
+- 차단: 없음.
+- 핵심 경합 판단(`_complete`가 잠금 안에서 `_current=None`·캐시 갱신 → 잠금 밖 `set_result`):
+  - 추가 DB 중첩 없음. `_probe`의 `with psycopg.connect(...)`가 반환 전에 연결을 닫으므로(readiness.py:119-123) `_current`가 비는 시점(readiness.py:103)에는 주도자 연결이 이미 닫혔다. 그 틈에 들어온 check는 `_checked_at`이 방금 갱신돼 `_fresh()` 적중으로 같은 세대 값만 받고(readiness.py:71-72) 새 검사를 시작하지 않는다. 연결이 열린 채 `_current`가 비는 유일한 경로는 close(readiness.py:151-156)이고, 이후 check는 `_closed`로 즉시False라 새 연결이 생기지 않는다. 따라서 인스턴스당 동시 연결 최대1은 유지된다.
+  - close 후True 없음. ⓐ close가 `_complete`보다 먼저 잠금을 잡으면 close가 완료 권한을 가져가 False를 게시하고, 늦은 주도자는 `_current is not future`로 no-op(이중 `set_result`/InvalidStateError 없음, 캐시 복원 없음). ⓑ `_complete`가 `_current`를 비운 뒤 `set_result(True)` 전에 close가 끼면 close는 `_current is None`이라 게시하지 않고 캐시를 초기화하며, 이후 게시된 True는 주도자·참여자 모두 마지막 `with self._lock: return result and not self._closed`(readiness.py:96-97)에서 False로 바뀐다. close 이전에 이 마지막 검사를 통과한 호출만True이며 이는 close 전 완료로 선형화되는 정상 순서다.
+- 동의(코드 대조):
+  - Future 생성 직후 잠금 안 `set_running_or_notify_cancel()`(readiness.py:74-77)로 `cancel()` 실패. 라우터는 `to_thread(check)`+`wait_for`만 사용하고 공유 Future를 asyncio로 감싸지 않아(health.py:35-37) HTTP 타임아웃/취소가 공유 Future를 취소하지 않는다. 참여자 대기 한도는 진입 시각 deadline 잔여(readiness.py:63-64, 93)다. `except TimeoutError`는 Python3.11+에서 `concurrent.futures.TimeoutError`와 동일하며, 코드가 이미 `datetime.UTC`(3.11+)를 쓰므로 전제와 일치한다.
+  - 상태 선택 순서가 closed → 진행 중 Future → 신선 캐시라 진행 중 새 세대가 있으면 오래된 성공을 반환하지 않고, 만료 성공은 `_fresh()`에서 탈락해 200이 되지 않는다. 참여자는 자기 Future 결과만 사용해 세대 혼동이 없다.
+  - Exception은 `internal_error`·False로 완료·`_current` 정리. BaseException은 `finally`에서 False 완료·정리·로그 후 재전파. 원문은 잡거나 기록하지 않는다. 대기자는 deadline 전에 깨어난다.
+  - 진단: `readiness_probe`는 `_complete` 뒤·잠금 밖에서 실행당1회만 호출되고, reason은 `READINESS_REASONS` allowlist·duration은 유한/비음수만 통과, 필드는 event·time·path 고정·reason·success·duration_ms로 request_id가 없다. `_emit`은 Exception을 삼켜 결과를 바꾸지 않는다. 캐시 적중·참여자는 이벤트를 만들지 않는다. `/api/ready`는 정확 일치만 allowlist에 들어가 변형 경로는 unmatched다.
+  - 테스트가 7절 필수 회귀 1~5·7·8을 다룬다: 기존 single-flight 테스트 교체(test_render_runtime.py:100-120), 참여자 타임아웃/HTTP 취소 후 `running()`·미취소·실행1회, close 대기자 해제·늦은 성공 거부, Exception/BaseException과 CANARY 미노출, 세대별 결과(양방향), 잠금 미보유 3지점, 경로 변형, logger 장애. 서비스 상수도 별도 patch한다(test_render_runtime.py:219-220).
+- 주의(비차단):
+  1. ⓑ 경합 창(`_current` 비움 후 `set_result` 전 close)과 "`_complete` 직후 틈의 check가 새 검사를 열지 않음"은 정적 추론으로만 확인했고 이를 고정하는 전용 테스트가 없다. 필요하면 `Future.set_result`를 감싸 그 직전에 close/check를 끼워 넣는 테스트로 보강할 수 있다.
+  2. 7절 회귀6(만료 성공 + 진행 중 새 실행 시 동시 호출이 새 결과를 기다림)은 전용 테스트가 없다. 코드 순서상 `_current` 우선 확인과 만료 시 `_fresh()` 탈락으로 구조적으로 보장된다.
+  3. close로 거부된 늦은 실행도 실제 reason(예: ok)으로 readiness_probe를 1회 남긴다. 4절대로 probe ok를 HTTP200으로 해석하지 않아야 한다. 주도자 duration은 check 진입부터라 잠금 대기를 포함한다.
+  4. 연결 최대1 보장은 ReadinessProbe 인스턴스 단위다. 프로세스당 1은 앱 수명당 DatabaseResources 하나라는 기존 전제에 의존한다(이번에 별도 확인하지 않음). close 후에도 진행 중이던 주도자 연결은 최대 connect_timeout1·SQL750ms 수준 동안 스스로 닫힐 때까지 남는다.
+  5. `test_concurrent_http_waits_for_one_actual_result`의 "검사 종료 전 미완료"는 50ms 관측이라 약한 단언이다. 실행1회·전원 동일 상태 단언이 주 근거다. 7절의 executor 스레드 점유(참여자 최대2.5초) 주의는 그대로 유효하다.
+  6. `_complete`/로그 호출 중 비동기 BaseException(예: 신호)이 들어오면 로그 누락 가능성 정도가 남으며 범위 밖으로 둔다.
+
+결론: 차단 없음. 지적한 경합에서 추가 DB 중첩이나 close 후True 반환은 정적 대조상 발생하지 않는다. 주의 1·2의 전용 테스트 보강은 선택이며, 일회용 PostGIS·CI/CodeQL 결과 확인 후 병합·배포 절차(5절)를 따르는 데 동의한다.
+
+### 8.4 Codex 재검토 채택·배포 전 완료 검사
+
+- 구현 재검토도 실제CLI exit0·is_error=false·권한거절0으로 완료했다. 차단 없음을 소스와 대조했고 선택 제안1·2를 채택해 완료 게시 직전close/동시check 두 경우와 만료 성공 후새 실패를 기다리는 경우3개 회귀를 추가했다.
+- 최종 일반1,679개(기준1,655+신규24)·focused77개 통과. 코드 동일 상태에서 격리PostGIS263개를 별도 loopback55474의 일회용 컨테이너로 실행해 성공/skip0을 JUnit XML로 확인했다. 컨테이너ID/작업label을 확인한 뒤 제거했고 기존 개발DB컨테이너/실제 DB 내용은 건드리지 않았다. ruff/format347파일·mypy158파일 통과를 유지한다. 추가3개는 테스트만 변경하여 PostGIS를 중복 재실행하지 않는다.
+- FE 최신develop4d27ab7·PR52/53 병합·CI Unit test98개 통과를 다시 확인했다. 담당자의 업태 기준 안내와 CI 추가를 완료로 갱신하고 제보18개명단/화면재검증만 요청한다. 원본 보정/AI 활성화는 미완료다.
+- 검토CSV는 원본배치/지문·근거확인시각·unverified 상태와빈판정자/판정/적용기준일을 포함해 재작성했다. 입력/증빙을 검토자가 확인하기 전에는 자동제외·실DB쓰기·정책승격을 하지 않는다.
+- 이 단계에서는 운영 배포 전이다. 검증한 PR을develop에Squash병합하고 그commit의실행코드가검증한branch와같은지확인한뒤수동배포한다. 배포후실측은다음절과현재Render안내에반영한다. 과거두unmatched500의경로확정은불가한한계로남긴다.
+
+### 8.5 배포 후 검증
+
+수동 배포·실측 후 기록한다.
