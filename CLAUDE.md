@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-15 #149는 [명시적 publication 정리/pending 복귀](docs/designs/feat149-chain-publication-maintenance.md)의 Draft 구현이다. 기본 읽기 전용·전체 내용/활성 포인터 가드·첫 snapshot 전 state 잠금·활성 보호·자식부터 원자적 삭제를 검증한다. FE/API/head0012/.env/원본·운영 DB는 유지하며, 삭제 검증은 새 폐기용 DB에서만 한다. Claude 설계 검수가5시간 한도로 실패해 검수 전 Draft PR에 남기며 추가 승인/검수 PASS·병합·운영 적용으로 표시하지 않는다. [관리 절차](docs/chain-publication-operations.md)를 따른다.
+
 2026-11-15 #147은 [브랜드 조건의 v2 AI 해석](docs/designs/feat147-chain-ai-context.md)을 구현·검증한다. 같은 RR 세션의 브랜드 Selection과 Risk/활동/전체 이력 재계산, 독립 outbound 문맥·프롬프트/선택 캐시, v1/v2 공유 한도와 숫자 검증을 따른다. v1 프롬프트v9·schema0012·FE·.env·원본/운영 DB·기존 서버·Render는 유지한다. [FE 계약](docs/fe-chain-ai-api-request.md)을 BE 문서에만 작성한다. 아래 #145의 v2 AI 후속 설명은 이 작업으로 대체한다.
 
 #147 BE 구현과 일반1944/PostGIS286·실제 Gemini2건 검증을 완료했다. 실제 Claude 설계 검수와 정적 코드 검수(차단 결함0)를 수행했고, 최종 증거 추가 재검수는 Claude5시간 한도로 실패했다. 그 사실과 Codex 최종 대조를 설계7.4절에 기록하며 추가 Claude PASS로 표시하지 않는다. FE·운영 배포는 후속이다.

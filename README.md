@@ -1,5 +1,9 @@
 # SpotON-BE
 
+## 브랜드 공개 세대 관리 초안 (#149)
+
+`python -m etl.chains.maintenance`는 기본 읽기 전용 보관 목록과 disable/prune 계획을 제공합니다. 쓰기는 정확한 내용 지문·활성 포인터·명시 비활성 UUID를 확인하고 활성 세대를 보호합니다. 원본/legacy·운영 DB와 FE는 변경하지 않습니다. **새 Claude 설계/코드 검수가 사용 한도로 미완료인 Draft 구현**이므로 [관리 절차](docs/chain-publication-operations.md)와 [설계·격리 검증](docs/designs/feat149-chain-publication-maintenance.md)을 확인하며, 검수/병합/운영 실행 완료로 표시하지 않습니다.
+
 ## 브랜드 조건을 유지하는 AI 해석 (#147)
 
 `POST /api/v2/risk/interpret`는 v2 Risk와 동일한 브랜드 조건으로 Risk·활동·선택 건물 이력을 같은 READ ONLY RR 세션에서 재계산합니다. 별도 typed 문맥과 chain-risk-interpret-v1 프롬프트를 사용하며 모델은 검증된 서버 문장 ID만 선택합니다. 내부 publication 식별자·주소·점포명·인허가/브랜드 ID·좌표는 모델에 보내지 않습니다. 추정·미확인·과거 소속의 한계와 실제 조건을 본문에 함께 표시합니다.
