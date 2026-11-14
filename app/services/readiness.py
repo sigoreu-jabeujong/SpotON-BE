@@ -1,5 +1,6 @@
 """Bounded, single-flight DB probe independent of the request connection pool."""
 
+from concurrent.futures import Future
 from threading import Lock
 from time import monotonic
 
@@ -7,6 +8,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from app.core.config import Settings
+from app.core.operations import ReadinessReason, readiness_probe
 from app.db.session import DatabaseConfigurationError, normalize_database_url
 
 PROBE_TIMEOUT_SECONDS = 2.5
@@ -51,33 +53,64 @@ class ReadinessProbe:
         self._last_result = False
         self._checked_at: float | None = None
         self._closed = False
+        self._current: Future[bool] | None = None
 
     def _fresh(self) -> bool:
         ttl = SUCCESS_TTL_SECONDS if self._last_result else FAILURE_TTL_SECONDS
         return self._checked_at is not None and monotonic() - self._checked_at < ttl
 
     def check(self) -> bool:
-        if self._closed:
-            return False
-        if self._fresh():
-            return self._last_result
-        if not self._lock.acquire(blocking=False):
-            return self._last_result if self._fresh() else False
-        try:
+        started = monotonic()
+        deadline = started + PROBE_TIMEOUT_SECONDS
+        with self._lock:
             if self._closed:
                 return False
-            if self._fresh():
+            if self._current is not None:
+                future = self._current
+                owner = False
+            elif self._fresh():
                 return self._last_result
-            self._last_result = self._probe()
-            self._checked_at = monotonic()
-            return self._last_result and not self._closed
-        finally:
-            self._lock.release()
+            else:
+                future = Future()
+                future.set_running_or_notify_cancel()
+                self._current = future
+                owner = True
 
-    def _probe(self) -> bool:
+        if owner:
+            reason: ReadinessReason = "internal_error"
+            try:
+                reason = self._probe()
+            except Exception:
+                # Fail closed without keeping or emitting raw exception details.
+                pass
+            finally:
+                duration = round((monotonic() - started) * 1000, 3)
+                self._complete(future, reason == "ok")
+                readiness_probe(reason=reason, duration=duration)
+            result = reason == "ok"
+        else:
+            try:
+                result = future.result(timeout=max(0, deadline - monotonic()))
+            except TimeoutError:
+                return False
+        with self._lock:
+            return result and not self._closed
+
+    def _complete(self, future: Future[bool], result: bool) -> None:
+        with self._lock:
+            if self._current is not future:
+                return
+            self._current = None
+            if not self._closed:
+                self._last_result = result
+                self._checked_at = monotonic()
+        # Callbacks and logging must never run under the state lock.
+        future.set_result(result)
+
+    def _probe(self) -> ReadinessReason:
         raw = self.settings.database_url
         if raw is None:
-            return False
+            return "configuration_missing"
         try:
             url = normalize_database_url(raw.get_secret_value())
             options = url.translate_connect_args(username="user", database="dbname")
@@ -89,9 +122,9 @@ class ReadinessProbe:
                 connection.execute("SET LOCAL statement_timeout='750ms'")
                 row = connection.execute(PROBE_SQL).fetchone()
             if row is None or row["revisions"] != [self.settings.database_expected_revision]:
-                return False
+                return "revision_mismatch"
             if self.settings.app_env not in {"staging", "production"}:
-                return True
+                return "ok"
             forbidden = (
                 "privileged",
                 "write_role",
@@ -102,15 +135,24 @@ class ReadinessProbe:
                 "sequence_write",
                 "owns_objects",
             )
-            return (
-                row["default_read_only"] is True
-                and row["connection_limit"] >= self.settings.database_connection_budget
-                and not any(row[key] for key in forbidden)
-            )
-        except (psycopg.Error, DatabaseConfigurationError):
-            return False
+            if row["connection_limit"] < self.settings.database_connection_budget:
+                return "connection_limit"
+            if row["default_read_only"] is not True or any(row[key] for key in forbidden):
+                return "unsafe_role"
+            return "ok"
+        except DatabaseConfigurationError:
+            return "configuration_invalid"
+        except psycopg.Error as exc:
+            return "query_cancelled" if exc.sqlstate == "57014" else "database_error"
 
     def close(self) -> None:
         # An already running probe owns at most one short-lived connection and
         # closes it itself, even if its HTTP caller times out or is cancelled.
-        self._closed = True
+        with self._lock:
+            self._closed = True
+            self._last_result = False
+            self._checked_at = None
+            future = self._current
+            self._current = None
+        if future is not None:
+            future.set_result(False)
