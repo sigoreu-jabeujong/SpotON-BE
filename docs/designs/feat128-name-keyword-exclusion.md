@@ -101,4 +101,68 @@ Risk 캐시 키는 정책 버전을 포함한다. AI의 엄격한 내부 _DataVe
 
 ## 7. Codex 최종 판단·실행 결과
 
-실행 후 기록한다. 현재까지 정책 구현/DB·운영 변경은 없다.
+### 7.1 구현 결정
+
+- B1/B2/B3/B4를 반영한다. 상수 predicate를 최상위 AND로 합성하고 batch/D/orphan/브랜드 ETL은 기존 SOURCE 자격, 목록/이력/시간 cohort/AI 위치 검사는 분석 자격을 쓴다. brand compare와 franchise 자동 분류의 증거 자격, 원본 ETL/floor backfill은 변경하지 않는다.
+- C2를 채택해 영문을 ASCII 문자 클래스로 펼친 `!~`를 쓴다. 공백/Unicode 정규화·상호 예외·브랜드 사전은 추가하지 않는다. `카페 M` 오탐을 사용자 선택에 따른 의도된 결과로 테스트한다.
+- C5는 구현 시 재검토했다. BE가 보내는 빈 이력 문구와 AI의 해당 고정 문장만 "분석 대상 … 조회되지 않음"으로 바꿔 제외된 원본이 존재하지 않는다고 오해하지 않게 한다. 새 입력·FE 작업·상호 공개는 없다. AI 내부 문맥/정책 버전 hash가 바뀌어 과거 캐시를 재사용하지 않는다.
+- AI strict 데이터 버전뿐 아니라 Risk/history/activity의 정책 메타도 일치해야 한다. 분석 한계를 허용된 고정 limitation으로 AI에 전달하며 키워드 목록·이름·주소를 프롬프트에 넣지 않는다.
+- Free 생성 전 최초 조회 DB721,131,187 bytes, 기존 cover45,883,392 bytes, 최종 상한778,485,427/일시851,839,667 bytes로 gate 안이다. 실행 직전에 재측정하며 코드 배포보다 새 인덱스를 먼저 검증한다.
+- #127/PR129가 별도로 완료되어 LLM 키가 연결된 상태를 확인했다. 이 작업은 환경값 전체 hash를 보존하며 AI를 비활성화하지 않는다.
+- 브랜드 회귀 fixture는 음식점 `Unique Cafe`를 키워드 없는 `Unique Bistro`로 바꿔 기존 브랜드 기능 검증을 유지한다. 별도 새 테스트가 제외 대상 `Unique Cafe`까지 원래 브랜드 입력 hash/건수에 포함되는 것을 독립 계산으로 확인한다.
+
+### 7.2 검증 진행
+
+새 정책 일반 회귀37개, 기존 AI345개 및 전체 일반1,716개 통과. ruff/format·mypy159 files 통과. 격리 전체와 실제 Free 실행 결과는 완료 후 갱신한다. 현재 운영 코드 배포는 하지 않았다.
+
+## 8. 실제 구현 Claude Code 검토
+
+2026-11-14 Claude Code 검토. 작업 디렉터리의 미커밋 구현을 Read로만 대조했고 이 MD만 Edit했다. 명령·테스트·DB·EXPLAIN·Git·네트워크는 실행하지 않았다. 아래 계획/동작 판단은 코드와 테스트를 대조한 결과다. B안 결정과 알려진 오탐(`카페 M` 등)은 전제로 두고 다시 묻지 않는다. 전달받은 상태: 일반1,716·AI 집중382·mypy159·ruff 통과, 격리 전체와 실제 Free 검증 진행 중, Free 미배포, 기존 LLM 설정 보존.
+
+### 8.1 검토 범위
+
+`app/services/store_scope.py`, `store_cohort.py`, `store_history.py`, `risk.py`, `risk_cache.py`, `app/ai/context.py`, `app/ai/interpretation.py`, `app/schemas/ai_context.py`, `etl/brands/assignment.py`, `docs/sql/render-free-risk-name-v1.sql`, `tests/test_store_scope.py`, `tests/integration/test_store_name_scope.py`, `tests/integration/test_store_provenance_index.py`, `tests/integration/test_brand_assignment.py`, `tests/ai/context_helpers.py`. `spatial_stores.py`·`market_activity.py`·data-range/snapshot 라우터·`franchise.py`·AI 결과 캐시 저장부는 읽지 않았다. 이들의 집합 일치는 `test_store_name_scope.py:97-205`의 HTTP 통합 테스트(nearby/snapshot/activity/risk/data-range/history/AI)로 확인되는 것을 근거로 삼았다.
+
+### 8.2 6.2 차단 항목 반영 확인
+
+- **B1 충족.** `store_scope.py:54-59`의 `NAME_SCOPE`는 `'restaurant'`·`''`·정규식을 모두 `literal_column`으로 렌더링한다. `test_store_scope.py:54-57`이 bind 파라미터 0개를 고정한다. `SUPPORTED_STORES = and_(SOURCE_SUPPORTED_STORES, NAME_SCOPE)`(:72)이므로 이름 절은 최상위 conjunct다. 렌더링은 `stores.category != 'restaurant' OR stores.name IS NULL OR stores.name = '' OR stores.name !~ '<pattern>'`이다. PG는 `!=`를 `<>`로 파싱하고, varchar 컬럼은 앱/인덱스 양쪽 모두 `(name)::text`·`'…'::text`로 같은 트리가 된다. 따라서 `render-free-risk-name-v1.sql:10-15`의 OR 절과 equal() 증명이 가능하다. OR 순서가 달라도 PG predtest의 OR⇒OR 팔 단위 증명으로 성립하지만 현재 순서도 같다. `SOURCE_SUPPORTED_STORES`의 기존 bind(`source IN`, `category = 'cafe'` 등)는 인덱스 predicate에 없는 조건이므로 증명에 영향이 없다. 실제 캡처한 서울 집계 SQL을 `force_generic_plan`으로 PREPARE해 stores 스캔이 모두 `ops_free_risk_name_v1`이고 Filter에 name이 없음을 단언한다(`test_store_name_scope.py:263-304`). 이 테스트는 repo SQL 파일 자체로 인덱스를 만들므로 파일과 앱 predicate의 의미 일치도 실행 수준에서 고정된다.
+- **C2(ASCII 클래스) 충족.** `_pattern`(:43-45)이 `a-z`만 `[cC]`로 펼치고 `!~`(대소문자 구분)를 쓴다. Kelvin 기호·전각 문자·NFD 한글이 SQL/Python 양쪽에서 미제외로 일치함을 단위(`test_store_scope.py:34-51`)와 실제 PostGIS(`test_store_name_scope.py:62-94`)에서 확인한다. 생성 패턴과 SQL 파일 문자열은 `[cC][aA][fF][eE]` 순서까지 같다(`test_store_scope.py:61`).
+- **B2 충족.** SOURCE 사용: orphan 3곳(`store_cohort.py:58/:66/:88`), 배치 목록(:99), history 배치 목록(`store_history.py:105`), 브랜드 입력(`assignment.py:50`), 오라클(`test_store_provenance_index.py:163`). 분석 사용: `temporal_cohort`(`store_cohort.py:31`), history 점포 목록(`store_history.py:121`), `check_history_location`(`context.py:203`). 이름 제외 고아가 500을 유지하고(`test_store_name_scope.py:208-222`), 최신 배치가 전부 제외돼도 D·배치 목록·브랜드 입력 hash가 원천 기준으로 유지되며(:225-252), 재적재 이름 변경이 다음 조회에 반영된다(:255-260). provenance 캡처 SQL에 `stores.name`이 없음을 단언한다(`test_store_provenance_index.py:126`).
+- **B3 충족.** `_DataVersion.name_exclusion_version`이 기본값 없는 `Literal`(`context.py:71`)이다. `_history`(:244-260)·`_activity`(:322-339)가 `meta.name_exclusion` 객체와 버전의 상수/Risk 일치를 모두 검사한다. `expected_meta`(:408-420)가 Risk의 `name_exclusion`과 `limitations` 순서(4개 기본 + 이름 한계 + 추정 시 ESTIMATE_LIMIT)를 `ContextMethodology` 기본값(`ai_context.py:82-88`)과 비교하며 `risk.py:329-342`의 순서와 맞다. `version_json`(:440)에 버전이 들어가 `data_version_hash`가 바뀜을 `test_store_scope.py:90-115`가 재구성으로 고정한다. 누락/구버전/미래버전 거부도 테스트한다(:78-87).
+- **캐시.** `risk_key`(`risk_cache.py:58-71`)에 `NAME_EXCLUSION_VERSION`이 들어가고 버전만 다른 키가 분리된다(`test_store_scope.py:65-75`). AI 쪽은 `data_version_hash`와 `context_hash`(methodology limitation 추가로 변경) 양쪽이 바뀌어 구 캐시를 재사용하지 않는다.
+- **LLM 전송.** 키워드 목록·상호는 문맥에 없고 limitation 식별자만 추가된다(`test_store_name_scope.py:194-200`). 기존 `PRIVATE-NAME` canary 경로도 유지된다(`context_helpers.py:204-210`).
+
+### 8.3 실제 결함
+
+차단(정책/데이터 무결성/성능 계약 위반) 결함은 찾지 못했다. 아래 하나는 사용자에게 보이는 사실 서술 오류라 병합 전 수정을 권한다.
+
+- **D1. AI 건물 이력 문장이 "전체"라고 서술한다(병합 전 수정 권장, 소규모).** 빈 이력 문구는 "분석 대상"으로 바뀌었지만(`store_history.py:22`, `interpretation.py:136-145`), 비어 있지 않을 때의 고정 문장은 그대로다. `interpretation.py:192-199`의 "건물 이력은 … **지원 업종 전체 기록입니다**"는 이름 정책 적용 후 사실이 아니다. 카테고리와 무관하게 history는 음식점을 포함하므로 cafe 질의에서도 틀린다. `:147-156`의 "이 건물의 음식점·카페 인허가 기록은 N건"도 빈 문구와 기준이 달라 같은 화면에서 모순된다. 수정: `:195`를 "…최신 자료 기준이며 이름 키워드 제외를 적용한 분석 대상 음식점·카페 기록입니다."처럼 숫자 없는 고정 문장으로 바꾸고, `:148`/`:154`에 "분석 대상"을 넣는다. 숫자를 추가하지 않으므로 `verify_output`의 숫자 대조에는 영향이 없을 것으로 예상하며, 문구를 단언하는 기존 AI 테스트만 갱신한다. 새 입력·상호·키워드·FE 변경은 필요 없다.
+
+### 8.4 선택적 개선(병합을 막지 않음)
+
+- **E1 LLM 측 basis 라벨.** `ContextHistory.basis = "latest_data_all_supported_categories"`(`ai_context.py:148`)는 LLM 문맥 라벨이라 출력은 서버 문장만 쓰므로 사용자 노출은 없다. 이번 릴리스에서 이미 `context_hash`가 바뀌므로 D1과 함께 `latest_data_analysis_scope_supported_categories` 등으로 바꾸면 추가 캐시 비용이 없다. 미루면 다음 변경에서 다시 hash가 바뀐다.
+- **E2 사용자 노출 한계 문장.** 이름 한계는 meta와 LLM 문맥(limitation 식별자)에만 있고 렌더링된 AI 결과(`interpretation.py:253-277`의 고정 missing 목록)에는 없다. 필요하면 숫자·키워드 없는 고정 `MissingItem`(예: reason `restaurant_name_keyword_scope`, "음식점은 이름 키워드 기준으로 일부 기록을 분석에서 제외해 실제 음식점이 빠질 수 있습니다.")을 추가한다. 설계 요구 사항은 아니다.
+- **E3 버전 고정 golden 테스트.** 캐시·AI 무효화는 버전 문자열에만 의존한다. 키워드/패턴만 바꾸고 버전을 올리지 않으면 Risk 캐시와 `data_version_hash`가 구 결과를 그대로 재사용한다. `sha256(NAME_EXCLUSION_PATTERN)`을 `store-name-keywords-v1`과 함께 고정하는 단위 테스트를 추가하면 버전 미변경을 CI에서 잡을 수 있다. 같은 이유로 `_DataVersion`의 `Literal["store-name-keywords-v1"]`(`context.py:71`)과 `ai_context.py:28`의 limitation 리터럴이 상수와 따로 적혀 있으므로 `get_args(...) == (NAME_EXCLUSION_VERSION,)` 단언을 추가한다.
+- **E4 키워드 문자 집합 가드.** `_pattern`은 소문자 ASCII만 펼치고 나머지는 `re.escape`에 맡긴다. 향후 대문자·`%`·정규식 메타문자·공백이 들어오면 Python/PG 정규식 방언 차이나 psycopg `%` 해석 문제가 생길 수 있다. 키워드가 한글 음절 또는 `[a-z]`로만 이루어졌음을 단언하는 테스트를 추가한다.
+- **E5 테스트 가독성.** `test_store_scope.py:46-47`, `test_store_name_scope.py:73-74`의 `"baKery"`·`"치킨"`은 시각적으로 ASCII/NFC 값과 같아 보이지만 Kelvin 기호·NFD 자모로 미제외를 기대한다(그렇지 않다면 :47이 실패해야 하므로 그렇게 추정한다). `"baKery"`, `unicodedata.normalize("NFD", "치킨")`처럼 명시적으로 쓰면 이후 편집기 정규화로 테스트 의미가 바뀌는 것을 막는다.
+- **E6 index-only 단언.** generic plan 테스트는 Index Name과 Filter만 단언한다. 작은 데이터에서는 visibility map 때문에 Index Scan이 나올 수 있어 격리에서는 현재 수준이 적절하다. 대신 Free EXPLAIN(ANALYZE, BUFFERS)에서 `Index Only Scan using ops_free_risk_name_v1`과 낮은 Heap Fetches를 확인한다(6.3 C7).
+- **E7 위치 검사 범위.** `check_history_location`이 분석 범위를 쓰므로 300m 밖 건물의 점포가 모두 이름 제외 대상이면 이제 거부되지 않고 0건 이력으로 통과한다(`context.py:195-209`). 설계 2절대로 history 목록과 같은 집합을 쓰는 것이 일관적이고 결과는 "조회되지 않음"이라 오해 위험은 작다. 더 엄격히 하려면 위치 검사만 SOURCE 범위로 둘 수 있다(INVALID_PARAM만 반환하므로 상호 노출은 없다). 현재 구현을 유지해도 된다.
+
+### 8.5 잔여 위험(검증으로 닫아야 함)
+
+- **R1 운영 인덱스 정의 동일성.** repo 파일과 앱 패턴의 일치는 테스트되지만, 실제 Free에 만들어진 인덱스는 실행 클라이언트 인코딩에 좌우된다. Windows psql이 콘솔 코드페이지(UHC/CP949)로 UTF-8 파일을 읽으면 한글 리터럴이 깨지거나 다른 문자열로 생성되어 predicate 증명이 조용히 실패한다(인덱스는 만들어지지만 쓰이지 않음). 생성 시 `PGCLIENTENCODING=UTF8`과 `ON_ERROR_STOP`을 쓰고, 생성 후 `pg_get_expr(indpred, indrelid)`/`pg_get_indexdef`에 `NAME_EXCLUSION_PATTERN`이 그대로 들어 있는지와 `indisvalid`/`indisready`를 확인한다. 이 확인이 통과하기 전에는 코드를 배포하지 않는다(B4).
+- **R2 배포 순서.** 새 코드는 `ops_free_risk_name_v1` 없이 뜨면 서울 Risk가 기존 cover의 index-only를 잃어 heap 접근으로 떨어진다(SQL10초 위험). 인덱스 생성·검증 → 기존 앱 응답 불변 확인 → 코드 배포 순서를 지킨다. 롤백은 코드 먼저, 새 인덱스 DROP은 그다음이다. 일반 `CREATE INDEX`는 생성 중 stores 쓰기를 막으므로 ETL/브랜드 적용과 겹치지 않게 한다. 소유자 연결의 `statement_timeout`이 생성 시간보다 짧지 않은지도 확인한다(앱 timeout은 바꾸지 않는다).
+- **R3 다른 Seoul 범위 쿼리.** generic 적격성 테스트는 서울 집계 1개만 캡처한다(`test_store_name_scope.py:276`). `min(open_date)`(`risk.py:225`)와 `excluded_no_coord` 카운트(:228-233)는 `geom IS NOT NULL`이 없거나 반대라 원래부터 어느 부분 인덱스도 쓸 수 없다. 이미 heap을 읽는 경로라 name 비교 추가 비용은 작을 것으로 예상하지만, data-range/activity의 전역 min 쿼리를 포함해 Free에서 기존 대비 지연/계획을 같이 측정한다.
+- **R4 하한 이동(6.3 C4).** 가장 오래된 restaurant이 이름 제외되면 restaurant의 `min_month`가 늦어지고 이전에 유효한 `as_of`가 422가 될 수 있다. 통합 테스트(:174, :182-183)가 이 동작을 의도로 고정한다. FE 전달 문서에 적는다.
+- **R5 정책 한계.** 오탐(`카페 M` 등 실제 음식점 제외)과 미탐(띄어쓰기·전각·NFD·키워드 없는 브랜드)은 사용자 결정대로 수용한 결과다. 명동 13후보·454 대조(5절 7단계)는 제거/잔여 집합을 독립 오라클로 기록만 하고 "18개 제보 해결"로 확대하지 않는다.
+- **R6 LLM 설정.** 이 변경은 LLM 클라이언트·설정 코드를 건드리지 않는다(읽은 범위). 배포 시 환경값 전체 hash 보존 확인은 5절 6단계대로 실제 값으로 다시 한다.
+
+### 8.6 결론
+
+원천/분석 분리(배치·D·고아·브랜드 입력 보존), API 간 집합·날짜·provenance 일치, Risk/AI 캐시와 strict 버전 검사, bind 없는 고정 리터럴과 ASCII 클래스로 만든 부분 인덱스 generic plan 적격성은 설계와 6.2 차단 조건대로 구현되었다. 차단 결함은 없다. D1(AI 이력 문장의 "전체" 서술)은 문자열만 바꾸면 되므로 병합 전에 고치는 것을 권한다. E1은 같은 커밋에 넣는 것이 가장 저렴하다. 나머지 E 항목은 선택이다. D1을 반영(또는 명시적으로 보류 결정)하고 진행 중인 격리 전체·CI/CodeQL·Free 실측과 R1/R2의 운영 인덱스 정의·유효성 확인이 모두 통과하면 코드는 5절 순서대로 진행해도 된다.
+
+## 9. 구현 검토 후 Codex 판단
+
+실제 Claude Code 2차는 exit0/is_error=false, 18턴, 권한 거절0건으로 완료했다. D1/E1을 반영해 빈/비어 있지 않은 AI 이력 문장과 내부 history basis를 분석 대상 기준으로 맞췄다. E3/E4도 반영해 v1 패턴 SHA256 golden·AI Literal 동기화·키워드 문자 범위를 테스트한다. E5의 분해 한글은 normalize 호출로 명시했다. E2의 새 AI 결과 항목은 추가하지 않는다(이미 메타와 안전 문맥에 한계가 있고 기존 결과 구조를 유지한다). E6은 실제 Free 계획으로 검증하며 E7은 이력 목록과 같은 분석 범위를 유지한다.
+
+검토 수정 후 일반1,718개, ruff/format·mypy159 files가 통과했다. 격리 전체270개와 검토 전후 관련26개 통과, 추가 문구 변경의 관련 회귀를 다시 확인한다. 실제 Free의 기존 응답은 한식454곳이고 고정 키워드로20곳이 제외될 것으로 사전 대조했다. #127의 LLM 설정·기존 live/전체 환경 hash를 기록했다. 전체 행의 JSON/text 직렬화 감사는 owner의90초 제한으로 취소되어 네이티브 composite hash(geom은 EWKB)로 바꿔689,440행 감사 기준을 확보했다. 앱의 SQL10초·풀 설정은 바꾸지 않았다.

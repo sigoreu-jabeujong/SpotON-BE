@@ -417,7 +417,8 @@ def test_history_sentences_for_mixed_building(monkeypatch, caplog):
     )
     (overview,) = texts_by_id(output, "building_history")
     assert overview == (
-        "참고 계산: 2026-11-08 최신 자료 기준 이 건물의 음식점·카페 인허가 기록은 6건이며, "
+        "참고 계산: 2026-11-08 최신 자료 기준 이 건물의 분석 대상 "
+        "음식점·카페 인허가 기록은 6건이며, "
         "같은 자리로 확인된 기록 4건, 같은 건물의 다른 위치 1건, 위치 미확인 1건입니다."
     )
     (spot,) = texts_by_id(output, "same_spot_history")
@@ -453,7 +454,8 @@ def test_history_without_floor_or_with_floor_only_and_empty(monkeypatch):
     rows = [history_row("unverified", "closed", 12, index=i) for i in range(2)]
     output = history_output(monkeypatch, rows, history_query(floor_unit=None))
     assert texts_by_id(output, "building_history") == [
-        "참고 계산: 2026-11-08 최신 자료 기준 이 건물의 음식점·카페 인허가 기록은 2건입니다."
+        "참고 계산: 2026-11-08 최신 자료 기준 이 건물의 분석 대상 "
+        "음식점·카페 인허가 기록은 2건입니다."
     ]
     assert not texts_by_id(output, "same_spot_history")
     assert "history_floor_unit_missing" in reasons(output)

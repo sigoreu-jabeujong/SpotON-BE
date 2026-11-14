@@ -3,29 +3,23 @@
 from datetime import date
 from typing import Literal
 
-from sqlalchemy import and_, exists, or_, select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from app.models import Store, StoreImportBatch
 from app.schemas.common import ApiMeta, ApiResponse
 from app.schemas.stores import HistoryQuery, HistoryStore, PeriodReason, StoreHistory
 from app.services.franchise import brand_context, effective_franchise, enrich_meta, franchise_fields
+from app.services.store_scope import (
+    NAME_EXCLUSION_VERSION,
+    SOURCE_SUPPORTED_STORES,
+    SUPPORTED_STORES,
+    name_exclusion_meta,
+)
 from etl.address.floor_unit import parse_floor_unit
 
 HISTORY_RULE_VERSION = "store-history-calendar-months-v1"
-EMPTY_HISTORY_MESSAGE = "이 건물에서 확인된 음식점·카페 인허가 기록이 없어요"
-SUPPORTED_STORES = and_(
-    Store.deleted_at.is_(None),
-    Store.source.in_(("general_restaurant", "rest_cafe")),
-    Store.category_review_flag.is_not(True),
-    or_(
-        and_(Store.category == "cafe", Store.sub_category == "cafe"),
-        and_(
-            Store.category == "restaurant",
-            Store.sub_category.in_(("korean", "chinese", "japanese", "western")),
-        ),
-    ),
-)
+EMPTY_HISTORY_MESSAGE = "이 건물에서 분석 대상 음식점·카페 인허가 기록이 조회되지 않았어요"
 
 
 def complete_months(start: date, end: date) -> int:
@@ -108,7 +102,7 @@ def get_history(session: Session, query: HistoryQuery) -> ApiResponse[StoreHisto
             .where(
                 exists(
                     select(Store.id).where(
-                        SUPPORTED_STORES,
+                        SOURCE_SUPPORTED_STORES,
                         Store.batch_id == StoreImportBatch.batch_id,
                         Store.source == StoreImportBatch.source,
                     )
@@ -175,11 +169,13 @@ def get_history(session: Session, query: HistoryQuery) -> ApiResponse[StoreHisto
         "collected_at": None,
         "collection_reason": "source_completion_time_not_recorded",
         "is_demo": False,
+        "name_exclusion": name_exclusion_meta(),
         "data_version": {
             "stores_batch_ids": [str(b.batch_id) for b in batches],
             "trdar_quarter": None,
             "map_version": versions[0] if len(versions) == 1 else None,
             "rule_version": HISTORY_RULE_VERSION,
+            "name_exclusion_version": NAME_EXCLUSION_VERSION,
         },
         "store_batches": [
             {
