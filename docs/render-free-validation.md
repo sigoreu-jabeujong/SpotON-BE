@@ -37,11 +37,13 @@ DATABASE_POOL_TIMEOUT=15
 DATABASE_CONNECTION_BUDGET=8
 DATABASE_EXPECTED_REVISION=0011
 CORS_ORIGINS=http://localhost:5173,http://localhost:5180,https://spot-on-fe.vercel.app
+LLM_PROVIDER=google
+LLM_MODEL=gemini-3.5-flash-lite
 ```
 
 `DATABASE_URL`은 **새 DB의 내부 호스트·spoton_api 조회 역할·sslmode=require**로 구성해 Render 비밀 환경변수로 주입한다. 내부 TLS는 암호화를 요구하며 서버 인증서 검증을 보장하지 않는다. 외부 관리자 검증/복원은 verify-full과 CA를 사용하고, 외부 DB 접근은 검증 PC /32만 허용한다. 비밀번호·실제 DB URI·인증 토큰·외부 IP는 문서나 저장소에 넣지 않는다.
 
-주소 조회용 `KAKAO_REST_API_KEY`, `JUSO_SEARCH_KEY`, `JUSO_COORD_KEY`만 별도로 설정한다. DB 소유 계정·정부 ETL·LLM 키는 BE에 전달하지 않는다. 현재 AI 해석은503 AI_UNAVAILABLE이다.
+주소 조회용 `KAKAO_REST_API_KEY`, `JUSO_SEARCH_KEY`, `JUSO_COORD_KEY`와 AI용 `LLM_API_KEY`를 Render 비밀 환경변수로 별도 설정한다. #127에서 기존 로컬 Gemini 키의 실제 생성 성공을 확인한 뒤 Render에 연결했다. 키 값은 FE·이미지·로그·저장소에 넣지 않는다. DB 소유 계정·정부 ETL 키는 BE에 전달하지 않는다. AI는 프로세스별 기본5회/분·50회/일·동시2개·전체20초 예산을 사용하며 공급자 quota는 별도다. 한도·공급자·시간 초과의503 AI_UNAVAILABLE과 선택 검증 실패의503 AI_VERIFY_FAILED 처리를 유지한다.
 
 브라우저 CORS는 로컬5173·5180과 배포 FE `https://spot-on-fe.vercel.app`의 세 origin을 명시적으로 허용한다. Vercel preview·다른 포트·추가 도메인은 자동 허용되지 않으며 정확한 origin을 별도로 추가해야 한다. 이 목록은 Render 서비스 환경변수이며 로컬 `.env`나 코드 기본값을 바꾸지 않는다.
 
@@ -96,7 +98,7 @@ CORS_ORIGINS=http://localhost:5173,http://localhost:5180,https://spot-on-fe.verc
 
 6. 인덱스 생성 전에 행 수·avg_width로 최종/임시 크기를 추정하고 여유를 확인한다. 현재 기준은 최종 DB800MB 이내, temp/WAL 포함 추정900MB 이내다. [운영 SQL](sql/render-free-risk-cover.sql)은 소유자 연결에서 일반 CREATE INDEX, lock_timeout5초·maintenance_work_mem16MB·statement_timeout1200초로 실행한다. 전체 해시 검사와 동시에 실행하지 않는다. 추가 후 크기·정의·실행 계획·API를 다시 검증한다.
 7. Render의 DATABASE_URL만 새 내부 reader 연결로 갱신하고 다른 환경변수를 지우지 않는다. 검증한 develop commit을 명시해 수동 배포한다. migration이 필요하면 소유자의 별도 세션에서 수행하며 reader나 앱 시작 시 실행하지 않는다. head가 바뀌면 DATABASE_EXPECTED_REVISION도 맞춘다.
-8. /api/ready, 대표 API 전체 JSON, 경계·동시 요청, 주소 검색/CORS/AI503을 검증한다. 대체 DB의 복원·권한·연결을 확인하기 전에 유일한 유효 사본을 삭제하지 않는다. 새 ID·만료일·검증 결과를 이 문서에 갱신한다.
+8. /api/ready, 대표 API 전체 JSON, 경계·동시 요청, 주소 검색/CORS와 실제 AI 해석200·검증 통과·오류 처리를 검증한다. 대체 DB의 복원·권한·연결을 확인하기 전에 유일한 유효 사본을 삭제하지 않는다. 새 ID·만료일·검증 결과를 이 문서에 갱신한다.
 
 새 DB 자동 생성이나 예약은 구현하지 않았다. 복원·데이터 대조는 Free의 CPU/디스크 제한 때문에 오래 걸릴 수 있다. 로컬 개발DB는 기존 Docker를 계속 사용하며 로컬 .env를 Render용으로 바꾸지 않는다.
 
@@ -111,11 +113,17 @@ CORS_ORIGINS=http://localhost:5173,http://localhost:5180,https://spot-on-fe.verc
 | 주소 검색 | 200 |
 | CORS 추가 검증 | 세 origin의 GET/POST preflight6건·실제 GET3건200, 미허용 origin3개 preflight400·GET 허용 헤더 없음 |
 | 내부 DB 연결 | reader·TLSv1.3, 풀1 확인 |
-| AI | LLM 키 생략,503 AI_UNAVAILABLE |
+| AI (#127) | 카페·한식·카페 재호출3건200, 실모델gemini-3.5-flash-lite·검증 통과·불일치0·재생성false |
 
 기존 코드 검증은 일반1595건·PostGIS251건을 통과했다. 이전·Claude 설계 검토 원문은 [PR #110](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/110)과 Git 이력에 남아 있다. 현재 기준에는 과거 유료 설정을 적용하지 않는다.
 
 2026-11-14 FE 요청의 CORS 두 주소를 추가하고 같은 commit으로 재배포했다. 배포 `dep-dbrisp4ipgvc73fojbt0`의 live·기존 commit 유지·ready200을 확인했다. CORS 이외 환경변수와 키 목록은 변경 전후 일치하며 Free 요금제·자동 배포 off를 유지한다. preflight는 Content-Type·GET/POST·Vary: Origin을 확인했고 credentials 허용은 추가하지 않았다. 이번에는 앱 코드·DB·로컬 `.env`·FE 저장소를 변경하지 않았으며 FE 브라우저 전체 통합 완료를 의미하지 않는다.
+
+### LLM 연결과 실제 AI 해석 검증 (#127, 2026-11-14)
+
+Render에 LLM_API_KEY·LLM_PROVIDER·LLM_MODEL이 모두 없어 실제 POST가503 AI_UNAVAILABLE로 실패했다. 로컬 키/모델 조회200·실제 JSON 생성1회 성공 후 세 설정을 추가하고 같은 검증 commit7d4846c를 수동 재배포했다. 배포 `dep-dbs51tk9v7es73bn89tg`는21:16:24 KST에live가 됐다. 기존14개 환경값·DB/schema/인덱스·Free·자동 배포off·로컬.env·FE 파일은 보존했다. 변경 전 환경은 사용자 전용 증빙 폴더에 DPAPI 암호화로 보관했다.
+
+실제 `/api/risk/interpret`에 시청 인근 카페500m와 홍대 인근 한식500m를 query-only로 전송해 각각3.047/7.625초에200을 확인했다. 두 응답 모두 verification.passed=true·검사53개·불일치0·재생성false·공식/참고 문장6개이며 interpretation_method=server_sentences_model_ordering이다. 카페 재호출도2.437초에200·검증 통과였다. no-store·배포 FE의 정확한CORS 헤더·세 허용origin POST preflight200·잘못된 업종422 INVALID_PARAM·ready200을 확인했다. 응답 시간은 이번 관측값이며 보장이 아니다. FE 브라우저의 버튼/표시·실제 공급자 장애나 quota 소진 시 화면은 별도 확인 대상이다. 키 값·공급자 원문은 증빙/문서에 기록하지 않았다.
 
 ## 6. 무료 제한과 FE 연결
 
@@ -133,7 +141,7 @@ Free BE는15분 무요청 후 절전하며 workspace 전체의 무료 웹750시�
 
 ### 운영 ready 후속 수정 배포 (#124, 2026-11-14)
 
-현재 live는 `dep-dbs3norl550s73fbvskg` / `7d4846c61291897993a1146e16945c06ca1255b1`(19:46:35 KST)이다. PR125의CI/CodeQL 성공·develop병합·검증한실행코드동등성을확인한뒤수동배포했다. Free·자동배포off·모든환경값/키목록해시·풀1/대기15초·SQL10초·워커1·예산8을보존했다. DB/schema/인덱스·로컬.env·FE는변경하지않았다.
+당시 live는 `dep-dbs3norl550s73fbvskg` / `7d4846c61291897993a1146e16945c06ca1255b1`(19:46:35 KST)였다. 현재는 같은 commit에 LLM 설정을 추가한 위 #127 배포를 사용한다. PR125의CI/CodeQL 성공·develop병합·검증한실행코드동등성을확인한뒤수동배포했다. Free·자동배포off·모든환경값/키목록해시·풀1/대기15초·SQL10초·워커1·예산8을보존했다. DB/schema/인덱스·로컬.env·FE는변경하지않았다.
 
 진행중인정상DB검사에합류한ready가즉시500을반환하던결함을재현/수정했다. 현재는실행별결과를같이기다리며닫힘/취소/시간초과/예외시에도추가검사나오래된성공으로우회하지않는다. 실패는500/no-store이며원시예외/URI를공개하지않는다. 과거두unmatched500의원인이같았다는증명은아니다.
 

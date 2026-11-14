@@ -8,7 +8,7 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 
 ## Render 무료 검증 배포 기준
 
-현재 Free 웹 spoton-be-free와 DB spoton-db-free를 같은 workspace·Singapore에서 사용한다. SQL10초·풀1/overflow0/대기15초·워커1·예산/reader8이며, 별도 ready 연결을 포함한 교체 상한은4개다. ready는 HTTP2.5초/SQL750ms·성공10초/실패1초 캐시를 유지한다. DB는 내부 TLS require/조회 역할만 사용하며 관리자/ETL/LLM 키를 BE에 넣지 않는다.
+현재 Free 웹 spoton-be-free와 DB spoton-db-free를 같은 workspace·Singapore에서 사용한다. SQL10초·풀1/overflow0/대기15초·워커1·예산/reader8이며, 별도 ready 연결을 포함한 교체 상한은4개다. ready는 HTTP2.5초/SQL750ms·성공10초/실패1초 캐시를 유지한다. DB는 내부 TLS require/조회 역할만 사용하며 관리자/ETL 키를 BE에 넣지 않는다. AI용 LLM_API_KEY는 Render 비밀 환경변수로만 주입한다.
 
 Docker app.runtime·PORT10000·비root 실행이며 시작 시 migration/ETL은 하지 않고, 검증한 commit을 수동 배포한다. 앱 모델/head0011·기준50인덱스와 별도 ops_free_risk_cover1개를 구분한다. 이 Free DB를 autogenerate 대상으로 쓰지 않는다. 로컬 .env·기본3초·FE 파일은 변경하지 않는다.
 
@@ -16,7 +16,9 @@ Render 전용 MD는 [현재 구성·복원·만료 안내](docs/render-free-vali
 
 2026-11-14 #122에서 실제 Claude Code 검토2회와 Free DB/동시 API 비교 후, 풀2 후보는 최초 지연 악화로1로 복구하고 검증된8958ba7(#118 출처 고아 검사 최적화)만 별도로 배포했다. 당시 live는dep-dbs37aek1f9s73858g6g이며 SQL10초·풀1/대기15초·워커1·예산8과 키/DB/인덱스는 그대로였다. 당시 동시5 GET×6묶음은30건200·본문 동일, 최초/반복 중앙값9.688/6.110초다. [설계·실제 검토·한계](docs/designs/feat122-fe-feedback.md)를 따른다. 원본 업태가 한식인 치킨/주점 상호의 실제 업종 보정·AI 활성화는 후속이며 FE를 직접 수정하지 않는다. 전체500·절전 복귀 해결로 확대하지 않는다.
 
-#124는 ready 단일 검사의 실행별 Future 결과를 동시 요청자가 HTTP2.5초 안에서 공유한다. SQL750ms·TTL10/1초·별도 연결 최대1·실패500/no-store·닫힘/취소 안전성을 유지하며, 미완료/만료 성공을 정상으로 만들지 않는다. ready 고정 경로와 원문 없는 readiness_probe 사유 로그를 추가했다. 현재 live는7d4846c/dep-dbs3norl550s73fbvskg이며 모든 환경값·풀1·DB/인덱스는 보존했다. ready24건/업무30건200·본문 동등성·CORS/AI503·검증 구간 HTTP500로그0을 확인했다. [설계·실제 Claude 검토2회·검증](docs/designs/feat124-readiness-followup.md)을 따른다. FE PR52의 업태 안내·PR53의 CI98개 통과는 담당자 반영을 확인했다. 실제 업종 보정·AI 활성화는 여전히 후속이다.
+#124는 ready 단일 검사의 실행별 Future 결과를 동시 요청자가 HTTP2.5초 안에서 공유한다. SQL750ms·TTL10/1초·별도 연결 최대1·실패500/no-store·닫힘/취소 안전성을 유지하며, 미완료/만료 성공을 정상으로 만들지 않는다. ready 고정 경로와 원문 없는 readiness_probe 사유 로그를 추가했다. 당시 live는7d4846c/dep-dbs3norl550s73fbvskg이며 모든 환경값·풀1·DB/인덱스는 보존했다. ready24건/업무30건200·본문 동등성·CORS/AI503·검증 구간 HTTP500로그0을 확인했다. [설계·실제 Claude 검토2회·검증](docs/designs/feat124-readiness-followup.md)을 따른다. FE PR52의 업태 안내·PR53의 CI98개 통과는 담당자 반영을 확인했다. 실제 업종 보정은 후속이며 AI 활성화는 아래 #127 결과를 따른다.
+
+2026-11-14 #127에서 Render의 LLM 설정 누락을 확인하고 기존 로컬 Gemini 키의 실제 생성 성공 후 LLM_PROVIDER=google·LLM_MODEL=gemini-3.5-flash-lite·비밀 LLM_API_KEY를 추가했다. 현재 live는 같은7d4846c의dep-dbs51tk9v7es73bn89tg(21:16:24 KST)다. 카페·한식 query-only POST와 카페 재호출3건이200·verification.passed=true·불일치0·재생성false였고 ready200·세 origin POST preflight200·잘못된 업종422를 확인했다. 기존14개 환경값·Free·자동 배포off를 보존했다. 기본 해석 한도는 프로세스별5회/분·50회/일·동시2이며 공급자 quota는 별도다. FE 브라우저의 해석 표시 검증은 담당자가 수행한다. [현재 운영/검증 범위](docs/render-free-validation.md)를 따른다.
 
 ## 상세 위치 파서 지명 오인 수정 (BE #102)
 
