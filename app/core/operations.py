@@ -34,9 +34,34 @@ Stage = Literal[
     "save_snapshot",
 ]
 Status = Literal["started", "completed", "failed"]
+ReadinessReason = Literal[
+    "ok",
+    "configuration_missing",
+    "configuration_invalid",
+    "database_error",
+    "query_cancelled",
+    "connection_limit",
+    "revision_mismatch",
+    "unsafe_role",
+    "internal_error",
+]
+READINESS_REASONS = frozenset(
+    {
+        "ok",
+        "configuration_missing",
+        "configuration_invalid",
+        "database_error",
+        "query_cancelled",
+        "connection_limit",
+        "revision_mismatch",
+        "unsafe_role",
+        "internal_error",
+    }
+)
 API_PATHS = frozenset(
     {
         "/api/health",
+        "/api/ready",
         "/api/geocode",
         "/api/stores/history",
         "/api/stores/nearby",
@@ -151,6 +176,21 @@ def api_event(
 def llm_attempt(*, success: bool) -> None:
     if type(success) is bool:
         _emit({"event": "llm_http_attempt", "count": 1, "success": success})
+
+
+def readiness_probe(*, reason: ReadinessReason, duration: float) -> None:
+    if type(reason) is str and reason in READINESS_REASONS:
+        _emit(
+            {
+                "event": "readiness_probe",
+                "path": "/api/ready",
+                "reason": reason,
+                "success": reason == "ok",
+                "duration_ms": duration
+                if type(duration) in (int, float) and math.isfinite(duration) and duration >= 0
+                else None,
+            }
+        )
 
 
 def _counts(value: object, allowed: frozenset[str]) -> dict[str, int]:

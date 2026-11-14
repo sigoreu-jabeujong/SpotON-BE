@@ -85,7 +85,7 @@ def test_runtime_binds_render_port_and_explicit_worker(monkeypatch: pytest.Monke
 def test_probe_cache_expiration_and_close() -> None:
     probe = ReadinessProbe(settings())
     with (
-        patch.object(probe, "_probe", return_value=True) as query,
+        patch.object(probe, "_probe", return_value="ok") as query,
         patch("app.services.readiness.monotonic", return_value=100) as clock,
     ):
         assert probe.check() and probe.check()
@@ -101,20 +101,23 @@ def test_probe_single_flight_does_not_open_extra_connection() -> None:
     probe = ReadinessProbe(settings())
     entered, release = Event(), Event()
 
-    def slow() -> bool:
+    def slow() -> str:
         entered.set()
         assert release.wait(3)
-        return True
+        return "ok"
 
-    with patch.object(probe, "_probe", side_effect=slow) as query, ThreadPoolExecutor(1) as pool:
+    with patch.object(probe, "_probe", side_effect=slow) as query, ThreadPoolExecutor(2) as pool:
         task = pool.submit(probe.check)
         try:
             assert entered.wait(3)
-            assert not probe.check()
+            concurrent = pool.submit(probe.check)
+            with pytest.raises(TimeoutError):
+                concurrent.result(timeout=0.05)
             assert query.call_count == 1
         finally:
             release.set()
         assert task.result(timeout=3)
+        assert concurrent.result(timeout=3)
 
 
 def good_row() -> dict[str, object]:
@@ -192,7 +195,7 @@ def test_readiness_database_failure_is_safe_and_liveness_stays_healthy() -> None
 
 def test_readiness_success_uses_common_envelope() -> None:
     with (
-        patch.object(ReadinessProbe, "_probe", return_value=True),
+        patch.object(ReadinessProbe, "_probe", return_value="ok"),
         TestClient(create_app(settings())) as client,
     ):
         response = client.get("/api/ready")
@@ -206,14 +209,15 @@ def test_http_readiness_timeout_keeps_single_flight_connection() -> None:
 
     entered, release = Event(), Event()
 
-    def slow() -> bool:
+    def slow() -> str:
         entered.set()
         assert release.wait(3)
-        return True
+        return "ok"
 
     with (
         patch.object(ReadinessProbe, "_probe", side_effect=slow) as query,
         patch("app.routers.health.PROBE_TIMEOUT_SECONDS", 0.03),
+        patch("app.services.readiness.PROBE_TIMEOUT_SECONDS", 0.03),
         TestClient(create_app(settings())) as client,
     ):
         try:
