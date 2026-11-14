@@ -8,6 +8,8 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 
 ## Render 무료 검증 배포 기준
 
+2026-11-14 #134 사용자 승인으로 AI 문단 개편을 공개 배포했다. BE05790fa/dep-dbs5t55g1s2s73e8vorg를 먼저live로 확인하고 실제 카페·한식 API200/4문단/검증 통과 후 FE PR55를4bf012f로 병합해 Vercel GWN6ZJMbFMQVDdJ8Ns7mKxYhUF7F에 반영했다. 공개 실제 AI·ⓘ·모바일390/360·키보드·조건 변경·브라우저 모의503과실제 지도/업무 조회를 검증했다. 기존17개 환경값·LLM/CORS·Free·자동 배포off·DB는 보존했다. [현재 운영/공개 검증](docs/render-free-validation.md)의 #134가 최신 배포 기준이다.
+
 2026-11-14 사용자 최신 AI 개편 요청에 따라 #130에서는 FE·BE를 함께 수정하고 모바일 대응을 포함한다. 기존 FE 직접 수정 금지는 이 요청 범위에서 대체한다. [설계·데이터 정합성 검증](docs/designs/feat130-ai-narrative.md)을 따른다. 응답의 연결 본문 body와 문단/지표 IDs/evidence를 추가하고 기존 배열은 내부 근거·호환용으로 유지한다. 모델은 검증된 문단 후보 ID만 선택하며 본문에서 건물 총건수·최신 시점 이후 사건·새 수치·예측을 생성하지 않는다. 프롬프트v8/선택 캐시v4, 기본 한도와20초 예산은 유지한다. FE 정보 팝오버·주소/필터/시점 조건 표시·조건별 캐시/취소·진단서 본문을 함께 맞춘다. 개발 구현과 현재 Render 실행 배포는 구분한다.
 
 현재 Free 웹 spoton-be-free와 DB spoton-db-free를 같은 workspace·Singapore에서 사용한다. SQL10초·풀1/overflow0/대기15초·워커1·예산/reader8이며, 별도 ready 연결을 포함한 교체 상한은4개다. ready는 HTTP2.5초/SQL750ms·성공10초/실패1초 캐시를 유지한다. DB는 내부 TLS require/조회 역할만 사용하며 관리자/ETL 키를 BE에 넣지 않는다. AI용 LLM_API_KEY는 Render 비밀 환경변수로만 주입한다.

@@ -2,6 +2,8 @@
 
 ## Render 무료 검증 배포 기준
 
+2026-11-14 #134는 사용자 승인으로 #130을 공개 반영했다. BE05790fa/dep-dbs5t55g1s2s73e8vorg의 API 검증 후 FE PR55/4bf012f를 Vercel에 배포했다. 공개 AI4문단·검증 통과·ⓘ 접근성·1440/390/360px·조건 변경/오류와 실제 지도/점포 조회를 확인했다. 기존17개 환경값·키·Free·자동 배포off·DB를 유지했다. [현재 Render 안내](render-free-validation.md)의 #134가 최신 공개 배포/검증 범위다.
+
 현재 Free 웹 spoton-be-free·DB spoton-db-free만 사용한다. SQL10초·풀1/overflow0/대기15초·워커1·reader/연결 예산8, 별도 ready 연결 포함 교체 상한4개다. ready의 HTTP2.5초/SQL750ms·캐시는 유지한다. 앱 모델/head0011·기준50인덱스와 별도 운영 인덱스2개(ops_free_risk_cover/ops_free_risk_name_v1)를 구분하며 Free DB를 autogenerate 대상으로 쓰지 않는다.
 
 구성·환경변수·권한·데이터 검증·운영 SQL·복원과2026-12-13 만료는 [현재 Render 안내](render-free-validation.md), FE URL·CORS·절전 후 대기는 [FE 연결 안내](fe-render-validation-api-request.md)를 따른다. Render 전용 MD는 이 두 개만 유지한다. 로컬 .env·기본3초·개발DB·FE 파일은 변경하지 않는다. 시작 시 migration/ETL과 자동 배포는 실행하지 않으며 검증한 commit을 수동 배포한다.
