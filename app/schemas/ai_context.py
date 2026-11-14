@@ -25,6 +25,7 @@ Limit = Literal[
     "historical_intervals_from_current_snapshot",
     "coordinate_selection_bias_possible",
     "franchise_name_match_not_contract_or_history",
+    "restaurant_name_keywords_may_exclude_valid_stores",
 ]
 
 
@@ -83,6 +84,7 @@ class ContextMethodology(ContextModel):
         "ownership_transfer_not_separated",
         "historical_intervals_from_current_snapshot",
         "coordinate_selection_bias_possible",
+        "restaurant_name_keywords_may_exclude_valid_stores",
     )
 
 
@@ -192,7 +194,9 @@ class ContextHistoryMethodology(ContextModel):
 class ContextHistory(ContextModel):
     """#98 건물 이력 집계. 최신 자료 기준·지원 업종 전체이며 행 원문을 담지 않는다."""
 
-    basis: Literal["latest_data_all_supported_categories"] = "latest_data_all_supported_categories"
+    basis: Literal["latest_data_analysis_scope_supported_categories"] = (
+        "latest_data_analysis_scope_supported_categories"
+    )
     data_updated_at: date
     floor_unit_provided: bool
     same_spot_comparable: bool

@@ -16,6 +16,7 @@ from app.schemas.risk import ReferenceCounts, Risk, RiskFlags, RiskMarket, RiskQ
 from app.schemas.stores import HistoryQuery, HistoryStore, StoreHistory
 from app.services.market_activity import year_cutoff
 from app.services.risk import pending_indicator, period, reference_indicators
+from app.services.store_scope import name_exclusion_meta
 
 DATE = date(2026, 11, 8)
 
@@ -89,6 +90,7 @@ def response(q=None, local=None, seoul=None):
         ),
     )
     meta = {
+        "name_exclusion": name_exclusion_meta(),
         "source": ["R5", "R6"],
         "data_updated_at": DATE.isoformat(),
         "as_of": DATE.isoformat(),
@@ -111,12 +113,14 @@ def response(q=None, local=None, seoul=None):
             "ownership_transfer_not_separated",
             "historical_intervals_from_current_snapshot",
             "coordinate_selection_bias_possible",
+            "restaurant_name_keywords_may_exclude_valid_stores",
         ],
         "data_version": {
             "stores_batch_ids": [str(UUID(int=66))],
             "trdar_quarter": None,
             "map_version": "synthetic-map",
             "rule_version": "risk-reference-fixed-anniversary-v1",
+            "name_exclusion_version": "store-name-keywords-v1",
         },
     }
     return ApiResponse(data=data, meta=meta)
@@ -158,6 +162,7 @@ def activity_response(risk, q=None, *, opened=3, months=41):
     meta = {
         "source": ["R5", "R6"],
         "data_updated_at": risk.meta["data_updated_at"],
+        "name_exclusion": name_exclusion_meta(),
         "collected_at": None,
         "collection_reason": "source_completion_time_not_recorded",
         "is_demo": False,
@@ -222,6 +227,7 @@ def history_response(risk, rows):
     meta = {
         "source": ["R5", "R6"],
         "space": "point",
+        "name_exclusion": name_exclusion_meta(),
         "denominator": len(rows),
         "as_of": risk.meta["data_updated_at"],
         "data_updated_at": risk.meta["data_updated_at"],

@@ -12,7 +12,7 @@ BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에�
 
 현재 Free 웹 spoton-be-free와 DB spoton-db-free를 같은 workspace·Singapore에서 사용한다. SQL10초·풀1/overflow0/대기15초·워커1·예산/reader8이며, 별도 ready 연결을 포함한 교체 상한은4개다. ready는 HTTP2.5초/SQL750ms·성공10초/실패1초 캐시를 유지한다. DB는 내부 TLS require/조회 역할만 사용하며 관리자/ETL 키를 BE에 넣지 않는다. AI용 LLM_API_KEY는 Render 비밀 환경변수로만 주입한다.
 
-Docker app.runtime·PORT10000·비root 실행이며 시작 시 migration/ETL은 하지 않고, 검증한 commit을 수동 배포한다. 앱 모델/head0011·기준50인덱스와 별도 ops_free_risk_cover1개를 구분한다. 이 Free DB를 autogenerate 대상으로 쓰지 않는다. 로컬 .env·기본3초·FE 파일은 변경하지 않는다.
+Docker app.runtime·PORT10000·비root 실행이며 시작 시 migration/ETL은 하지 않고, 검증한 commit을 수동 배포한다. 앱 모델/head0011·기준50인덱스와 별도 ops_free_risk_cover/ops_free_risk_name_v1 두 운영 인덱스를 구분한다. 이 Free DB를 autogenerate 대상으로 쓰지 않는다. 로컬 .env·기본3초·FE 파일은 변경하지 않는다.
 
 Render 전용 MD는 [현재 구성·복원·만료 안내](docs/render-free-validation.md)와 [FE 연결 안내](docs/fe-render-validation-api-request.md) 두 개로 관리한다. DB 만료일은2026-12-13이다. 설정을 갱신할 때 두 문서와 이 기준의 불일치를 함께 정리한다.
 
@@ -20,7 +20,11 @@ Render 전용 MD는 [현재 구성·복원·만료 안내](docs/render-free-vali
 
 #124는 ready 단일 검사의 실행별 Future 결과를 동시 요청자가 HTTP2.5초 안에서 공유한다. SQL750ms·TTL10/1초·별도 연결 최대1·실패500/no-store·닫힘/취소 안전성을 유지하며, 미완료/만료 성공을 정상으로 만들지 않는다. ready 고정 경로와 원문 없는 readiness_probe 사유 로그를 추가했다. 당시 live는7d4846c/dep-dbs3norl550s73fbvskg이며 모든 환경값·풀1·DB/인덱스는 보존했다. ready24건/업무30건200·본문 동등성·CORS/AI503·검증 구간 HTTP500로그0을 확인했다. [설계·실제 Claude 검토2회·검증](docs/designs/feat124-readiness-followup.md)을 따른다. FE PR52의 업태 안내·PR53의 CI98개 통과는 담당자 반영을 확인했다. 실제 업종 보정은 후속이며 AI 활성화는 아래 #127 결과를 따른다.
 
-2026-11-14 #127에서 Render의 LLM 설정 누락을 확인하고 기존 로컬 Gemini 키의 실제 생성 성공 후 LLM_PROVIDER=google·LLM_MODEL=gemini-3.5-flash-lite·비밀 LLM_API_KEY를 추가했다. 현재 live는 같은7d4846c의dep-dbs51tk9v7es73bn89tg(21:16:24 KST)다. 카페·한식 query-only POST와 카페 재호출3건이200·verification.passed=true·불일치0·재생성false였고 ready200·세 origin POST preflight200·잘못된 업종422를 확인했다. 기존14개 환경값·Free·자동 배포off를 보존했다. 기본 해석 한도는 프로세스별5회/분·50회/일·동시2이며 공급자 quota는 별도다. FE 브라우저의 해석 표시 검증은 담당자가 수행한다. [현재 운영/검증 범위](docs/render-free-validation.md)를 따른다.
+2026-11-14 #127에서 Render의 LLM 설정 누락을 확인하고 기존 로컬 Gemini 키의 실제 생성 성공 후 LLM_PROVIDER=google·LLM_MODEL=gemini-3.5-flash-lite·비밀 LLM_API_KEY를 추가했다. 당시 live는 같은7d4846c의dep-dbs51tk9v7es73bn89tg(21:16:24 KST)였다. 현재 배포는 아래 #128이다. 카페·한식 query-only POST와 카페 재호출3건이200·verification.passed=true·불일치0·재생성false였고 ready200·세 origin POST preflight200·잘못된 업종422를 확인했다. 기존14개 환경값·Free·자동 배포off를 보존했다. 기본 해석 한도는 프로세스별5회/분·50회/일·동시2이며 공급자 quota는 별도다. FE 브라우저의 해석 표시 검증은 담당자가 수행한다. [현재 운영/검증 범위](docs/render-free-validation.md)를 따른다.
+
+## 음식점 이름 키워드 제외 정책 (BE #128)
+
+2026-11-14 #128은 사용자가 B안을 선택해 음식점4종 이름의18개 키워드를 부분 일치로 제외한다. 원본 분류·이름·배치/D·브랜드 입력을 보존하고 이력/주변/과거/활동/Risk(local/서울/미좌표)/월 범위/AI에 같은 분석 모집단을 적용한다. cafe·null/빈 이름은 유지하며 실제 업종 확정 보정이 아니다. 점포/집계의 `meta.name_exclusion`/`data_version.name_exclusion_version=store-name-keywords-v1`과 Risk/AI 캐시를 함께 구분한다(AI 공개 메타는 기존 해시 계약 유지). 실제 Free에 새 부분 인덱스만 먼저 생성해 원본689,440행 composite/EWKB hash·기존 인덱스·기존 API 본문 보존, direct/generic index-only/Heap Fetches0과 후보454→434를 확인했다. PR131의 CI/CodeQL 통과·develop 병합 후 c4de3ed를 수동 배포해 dep-dbs5fus9v7es73boe6dg가21:46:27 KST에live가 됐다. 기존13후보 전부를 포함해20곳 제외·한식454→434·카페 data 동등·후보와 전체 응답 일치, 동시 업무30건/ready24건200·실제 AI(이력 포함)200/검증57개·불일치0·검증 구간 HTTP500로그0을 확인했다. 모든17개 환경값/LLM 설정·원본 행 지문·기존 인덱스를 보존했다. [설계·Claude 실제 검토2회·검증](docs/designs/feat128-name-keyword-exclusion.md)을 따른다.
 
 ## 상세 위치 파서 지명 오인 수정 (BE #102)
 

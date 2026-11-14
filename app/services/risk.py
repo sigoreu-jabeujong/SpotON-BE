@@ -42,6 +42,7 @@ from app.services.spatial_stores import (
     effective_date,
 )
 from app.services.store_cohort import current_provenance, provenance_meta, temporal_cohort
+from app.services.store_scope import NAME_EXCLUSION_LIMITATION
 
 RULE_VERSION = "risk-reference-fixed-anniversary-v1"
 OFFICIAL_RISK_URL = "https://golmok.seoul.go.kr/stateDistrict.do"
@@ -330,6 +331,7 @@ def _get_risk(session: Session, query: RiskQuery, settings: Settings) -> ApiResp
             "ownership_transfer_not_separated",
             "historical_intervals_from_current_snapshot",
             "coordinate_selection_bias_possible",
+            NAME_EXCLUSION_LIMITATION,
         ],
     }
     branding = brand_context(session)

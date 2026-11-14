@@ -149,19 +149,22 @@ def _history_items(c: RiskInterpretContext) -> tuple[list[InterpretItem], list[M
     if h.total == 0:
         return [], [
             MissingItem(
-                text=f"{day} 최신 자료 기준 이 건물에서 확인된 음식점·카페 인허가 기록이 없습니다.",
+                text=(
+                    f"{day} 최신 자료 기준 이 건물에서 분석 대상 음식점·카페 "
+                    "인허가 기록이 조회되지 않았습니다."
+                ),
                 reason="history_no_records",
             )
         ]
     if h.floor_unit_provided:
         overview = (
-            f"참고 계산: {day} 최신 자료 기준 이 건물의 음식점·카페 인허가 기록은 "
+            f"참고 계산: {day} 최신 자료 기준 이 건물의 분석 대상 음식점·카페 인허가 기록은 "
             f"{h.total:,}건이며, 같은 자리로 확인된 기록 {h.same_spot:,}건, "
             f"같은 건물의 다른 위치 {h.same_building:,}건, 위치 미확인 {h.unverified:,}건입니다."
         )
     else:
         overview = (
-            f"참고 계산: {day} 최신 자료 기준 이 건물의 음식점·카페 인허가 기록은 "
+            f"참고 계산: {day} 최신 자료 기준 이 건물의 분석 대상 음식점·카페 인허가 기록은 "
             f"{h.total:,}건입니다."
         )
     facts = [InterpretItem(text=overview, indicator_ids=["building_history"])]
@@ -202,7 +205,8 @@ def _history_items(c: RiskInterpretContext) -> tuple[list[InterpretItem], list[M
     missing.append(
         MissingItem(
             text=(
-                "건물 이력은 요청 기준 시점이 아닌 최신 자료 기준이며 지원 업종 전체 기록입니다. "
+                "건물 이력은 요청 기준 시점이 아닌 최신 자료 기준이며 "
+                "이름 키워드 제외를 적용한 분석 대상 음식점·카페 기록입니다. "
                 "폐업 원인이나 자리의 성패를 뜻하지 않습니다."
             ),
             reason="history_latest_data_basis",

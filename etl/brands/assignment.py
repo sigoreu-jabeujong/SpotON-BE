@@ -15,7 +15,7 @@ from app.models import BrandMappingState as State
 from app.models import Store
 from app.models import StoreBrandMatch as Match
 from app.models.brand import MAPPING_RULE
-from app.services.store_history import SUPPORTED_STORES
+from app.services.store_scope import SOURCE_SUPPORTED_STORES
 from etl.brands.catalog import Catalog, canonical, digest, fail
 from etl.brands.matching import PARTITIONS, Matcher
 
@@ -47,7 +47,7 @@ def plan(c: Connection, catalog: Catalog) -> Plan:
             Store.is_franchise,
             Store.brand_id,
         )
-        .where(SUPPORTED_STORES)
+        .where(SOURCE_SUPPORTED_STORES)
         .order_by(Store.source.collate("C"), Store.license_no.collate("C"))
         .execution_options(stream_results=True, yield_per=2000)
     )

@@ -18,7 +18,8 @@ from app.main import create_app
 from app.models import Store, StoreImportBatch
 from app.schemas.stores import HistoryQuery
 from app.services.store_cohort import current_provenance, orphan_exists
-from app.services.store_history import SUPPORTED_STORES, get_history
+from app.services.store_history import get_history
+from app.services.store_scope import SOURCE_SUPPORTED_STORES
 from tests.integration.conftest import TemporaryDatabase
 from tests.integration.test_localdata_upsert import ROOT, migrate
 from tests.integration.test_nearby import batch, store
@@ -122,6 +123,7 @@ def test_actual_service_queries_are_eligible_for_provenance_index(
         assert len(captured) == 3
         assert sum(sql.startswith("WITH RECURSIVE") for sql, _ in captured) == 1
         for sql, parameters in captured:
+            assert "stores.name" not in sql
             plan = (
                 session.connection()
                 .exec_driver_sql("EXPLAIN (FORMAT JSON) " + sql, parameters)
@@ -157,7 +159,9 @@ def reference_orphan(session: Session) -> bool:
         .where(StoreImportBatch.batch_id == Store.batch_id, StoreImportBatch.source == Store.source)
         .correlate(Store)
     )
-    return bool(session.scalar(select(exists(select(Store.id).where(SUPPORTED_STORES, ~linked)))))
+    return bool(
+        session.scalar(select(exists(select(Store.id).where(SOURCE_SUPPORTED_STORES, ~linked))))
+    )
 
 
 def registered(session: Session, n: int, source: str = "general_restaurant") -> StoreImportBatch:

@@ -13,9 +13,9 @@
 | 리전 | 같은 workspace의 Singapore |
 | DB 버전 / 이름 | PostgreSQL17·PostGIS3.6.2 / spoton_free_check |
 | DB 생성 / 만료 | 2026-11-13 23:02:59 / **2026-12-13 23:02:59 KST** |
-| DB 크기 | 검증 당시721,131,187 bytes, 약721MB |
+| DB 크기 | #128 운영 인덱스 생성 후761,124,531 bytes, 약761MB |
 | Migration | 0011 |
-| 배포 commit | 7d4846c61291897993a1146e16945c06ca1255b1 (#118 조회 최적화·#124 ready 동시 검사 수정 포함) |
+| 배포 commit | c4de3ed802c220d80fdd03040e53004e3620e515 (#118·#124 및 #128 이름 키워드 제외) |
 | 자동 배포 | off, 검증한 commit을 수동 배포 |
 
 검증 당시 남은 자원은 Free BE1개·Free DB1개이며, 유료 컴퓨팅·별도 지속 디스크·Key Value는0개다. 카드 삭제는 사용자가 확인했고, 이후 Free BE·DB 생성이 실제 성공했다. API로 카드나 청구 내역을 조회한 것은 아니다. DB를 새로 만들면 ID·내부 호스트·접속정보·만료일이 바뀐다.
@@ -53,13 +53,13 @@ LLM_MODEL=gemini-3.5-flash-lite
 
 ## 3. 운영 인덱스와 스키마
 
-앱19개 테이블과 alembic_version을 합쳐20테이블이다. 기준50인덱스·110제약·3시퀀스·head0011을 유지하며, Free DB에만 [ops_free_risk_cover](sql/render-free-risk-cover.sql) 운영 인덱스1개를 추가해 총51개다. 데이터·계산식·API SQL·앱 모델을 변경하지 않는다.
+앱19개 테이블과 alembic_version을 합쳐20테이블이다. 기준50인덱스·110제약·3시퀀스·head0011을 유지하며, Free DB에만 [ops_free_risk_cover](sql/render-free-risk-cover.sql)와 [ops_free_risk_name_v1](sql/render-free-risk-name-v1.sql) 운영 인덱스2개를 두어 총52개다. 원본 행·계산식·앱 모델/migration은 유지한다. #128 이름 정책은 분석 SQL predicate와 메타/캐시를 바꾼다.
 
-이 인덱스는 서울 전체 Risk 집계에 필요한 컬럼을 커버한다. 실제 크기45,883,392 bytes이며 동일 집계의 단일 측정이12.589초에서2.777초로 줄었다. Index Only Scan·Heap Fetches0을 확인했다. 성능 보장이나 전체 HTTP 시간 상한은 아니다.
+기존 cover는 서울 전체 Risk 집계를 커버한다. 크기45,883,392 bytes이며 도입 당시 단일 집계가12.589→2.777초로 줄었다. 새 이름 인덱스는 같은 key/include에 고정 이름 predicate를 추가한39,993,344 bytes다. 코드 배포 전에 생성했고 기존 모든689,440행 composite/EWKB hash·기존 인덱스·API 본문이 같았다. 새 코드의 실제 Free 쿼리에서 direct1.798초/generic2.683초·Index Only Scan·Heap Fetches0·name heap Filter 없음과 한식454→434의 정확한 marker 대조를 확인했다. 이 관측은 시간 보장이나 전체 HTTP 상한이 아니다.
 
-이 Free DB를 `alembic revision --autogenerate` 대상으로 쓰면 운영 인덱스 삭제가 제안될 수 있으므로 사용하지 않는다. 모델 비교에서 예외를 둘 때는 이름뿐 아니라 정확한 key/include·predicate·valid/ready/live를 확인하고 이1개만 구분한다. 컬럼/타입 변경이나 새로운 migration을 적용할 때 운영 인덱스도 재검토한다.
+이 Free DB를 `alembic revision --autogenerate` 대상으로 쓰면 운영 인덱스 삭제가 제안될 수 있으므로 사용하지 않는다. 모델 비교에서 예외를 둘 때는 이름뿐 아니라 정확한 key/include·predicate·valid/ready/live를 확인하고 이2개만 구분한다. 컬럼/타입 변경이나 새로운 migration을 적용할 때 운영 인덱스도 재검토한다.
 
-효과가 없거나 정의가 다름·생성 후800MB 초과·API 응답 회귀가 확인되면 소유 계정으로 `DROP INDEX public.ops_free_risk_cover;`를 실행하고 기준50개 상태를 확인한다. 다른 데이터·인덱스를 임의로 줄여 맞추지 않는다.
+새 이름 인덱스의 효과가 없거나 정의 불일치·생성 후800MB 초과·API 회귀가 확인되면 먼저 검증된 이전 코드를 배포하고 필요할 때 `DROP INDEX public.ops_free_risk_name_v1;`만 실행해 기존51개 상태를 확인한다. 기존 cover/provenance를 롤백용으로 유지하며 다른 행·인덱스를 줄여 맞추지 않는다. 키워드/패턴 수정은 정책 버전과 새 운영 인덱스를 함께 검토한다.
 
 ## 4. DB 복원·만료 대응
 
@@ -96,7 +96,7 @@ LLM_MODEL=gemini-3.5-flash-lite
 
    복원한 앱 테이블과 spatial_ref_sys의 SELECT를 확인한다. READONLY/NOINHERIT만을 권한 경계로 삼지 않고, 소유자 역할의 멤버가 아니며 READ WRITE 상태에서도 INSERT/CREATE/TEMP/SET ROLE이 거절되는지 검증한다. 향후 테이블에 SELECT를 자동 부여하는 default privileges는 설정하지 않았다.
 
-6. 인덱스 생성 전에 행 수·avg_width로 최종/임시 크기를 추정하고 여유를 확인한다. 현재 기준은 최종 DB800MB 이내, temp/WAL 포함 추정900MB 이내다. [운영 SQL](sql/render-free-risk-cover.sql)은 소유자 연결에서 일반 CREATE INDEX, lock_timeout5초·maintenance_work_mem16MB·statement_timeout1200초로 실행한다. 전체 해시 검사와 동시에 실행하지 않는다. 추가 후 크기·정의·실행 계획·API를 다시 검증한다.
+6. 인덱스 생성 전에 행 수·avg_width로 최종/임시 크기를 추정하고 여유를 확인한다. 현재 기준은 최종 DB800MB 이내, temp/WAL 포함 추정900MB 이내다. 원래 [cover SQL](sql/render-free-risk-cover.sql)과 #128의 [이름 정책 부분 인덱스 SQL](sql/render-free-risk-name-v1.sql)은 소유자 연결에서 일반 CREATE INDEX, lock_timeout5초·maintenance_work_mem16MB·statement_timeout1200초로 실행한다. 앱 모델50개와 별개인 운영 인덱스2개이며 autogenerate 대상이 아니다. 전체 해시 검사와 동시에 실행하지 않는다. 추가 후 크기·UTF-8 리터럴/정의·유효성·generic 계획·API를 검증하고 이름 정책 코드보다 새 부분 인덱스를 먼저 준비한다. 롤백은 이전 코드 배포 후 필요하면 새 이름 인덱스만 제거하며 기존 cover/provenance는 유지한다.
 7. Render의 DATABASE_URL만 새 내부 reader 연결로 갱신하고 다른 환경변수를 지우지 않는다. 검증한 develop commit을 명시해 수동 배포한다. migration이 필요하면 소유자의 별도 세션에서 수행하며 reader나 앱 시작 시 실행하지 않는다. head가 바뀌면 DATABASE_EXPECTED_REVISION도 맞춘다.
 8. /api/ready, 대표 API 전체 JSON, 경계·동시 요청, 주소 검색/CORS와 실제 AI 해석200·검증 통과·오류 처리를 검증한다. 대체 DB의 복원·권한·연결을 확인하기 전에 유일한 유효 사본을 삭제하지 않는다. 새 ID·만료일·검증 결과를 이 문서에 갱신한다.
 
@@ -141,10 +141,26 @@ Free BE는15분 무요청 후 절전하며 workspace 전체의 무료 웹750시�
 
 ### 운영 ready 후속 수정 배포 (#124, 2026-11-14)
 
-당시 live는 `dep-dbs3norl550s73fbvskg` / `7d4846c61291897993a1146e16945c06ca1255b1`(19:46:35 KST)였다. 현재는 같은 commit에 LLM 설정을 추가한 위 #127 배포를 사용한다. PR125의CI/CodeQL 성공·develop병합·검증한실행코드동등성을확인한뒤수동배포했다. Free·자동배포off·모든환경값/키목록해시·풀1/대기15초·SQL10초·워커1·예산8을보존했다. DB/schema/인덱스·로컬.env·FE는변경하지않았다.
+당시 live는 `dep-dbs3norl550s73fbvskg` / `7d4846c61291897993a1146e16945c06ca1255b1`(19:46:35 KST)였다. 이후 #127에서 LLM 설정을 추가했고 현재는 그 설정을 유지한 #128 배포를 사용한다. PR125의CI/CodeQL 성공·develop병합·검증한실행코드동등성을확인한뒤수동배포했다. Free·자동배포off·모든환경값/키목록해시·풀1/대기15초·SQL10초·워커1·예산8을보존했다. DB/schema/인덱스·로컬.env·FE는변경하지않았다.
 
 진행중인정상DB검사에합류한ready가즉시500을반환하던결함을재현/수정했다. 현재는실행별결과를같이기다리며닫힘/취소/시간초과/예외시에도추가검사나오래된성공으로우회하지않는다. 실패는500/no-store이며원시예외/URI를공개하지않는다. 과거두unmatched500의원인이같았다는증명은아니다.
 
 배포후동시ready24건·업무GET30건모두200·기존8958ba7업무본문SHA256완전일치, health200·CORS preflight6/실제GET3·미허용origin3차단·AI503을확인했다. 검증구간서버ready이벤트28건(플랫폼요청포함)·실제probe4회모두ok·수집된HTTP500이벤트0이었다. 업무묶음중앙값은최초8.428/반복5.520초였으며추가ready요청이있는이번관측값이다. 시간보장·물리절전·대량부하·모든오류해결로확대하지않는다. [설계·실제Claude검토2회·검증/한계](designs/feat124-readiness-followup.md)
 
 카드 없는 무료 계정은 포함량 초과 시 서비스/새 빌드가 중단될 수 있다. 과거 발생 요금은 무료 전환으로 취소되지 않으며, 미납0이나 영구 무료를 보장하지 않는다. [과금 안내](https://render.com/docs/faq)
+
+
+### 이름 키워드 제외 배포 검증 (#128, 2026-11-14)
+
+사용자가 B안을 선택해 원본 인허가 분류는 유지하고 음식점4종의 이름18개 키워드를 분석에서 제외한다. 정책은 `store-name-keywords-v1`이며 cafe 업종·null/빈 이름은 유지한다. ASCII 영문 대소문자를 무시하는 부분 일치이고 실제 업종 확정이 아니다. 실제 음식점 오탐, 내부 공백/분해 한글/전각/키워드 없는 이름의 미탐을 수용한다. 점포/집계 성공 메타에 정책·버전을 표시하고 Risk/AI 캐시와 AI 문맥 버전을 함께 구분한다. AI 공개 메타는 기존 data_version_hash 계약을 유지한다.
+
+[PR131](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/131)의 일반1,718개·PostGIS270개·CodeQL 성공 후 develop c4de3ed802c220d80fdd03040e53004e3620e515를 수동 배포했다. `dep-dbs5fus9v7es73boe6dg`는21:46:27 KST에live가 됐다. 검증한 코드와 병합 실행 트리가 같았고, #127의 LLM 설정을 포함한17개 환경값 전체 hash·Free/autoDeploy off·원본689,440행 전체 composite/EWKB hash·기존 인덱스/head0011을 보존했다. 새 부분 인덱스는 코드보다 먼저 생성·검증했으며 앱 모델50개와 운영2개를 구분한다.
+
+- 같은 명동 최신 한식500m nearby454→434: 독립 키워드 오라클의 전체 남은 marker와 일치하며 기존13후보도 모두 제외됐다. 제보18개 전체 명단 검증이나 실제 업종 확정이 아니다.
+- 이력·월 범위·주변·활동·Risk의 실제10개 GET200과 배포 전 후보의 전체 JSON 일치, 카페 data 동등(교차 업종 이력 제외), 원천 D/배치 목록 불변을 확인했다.
+- 2026-10 snapshot455→435: 전체 목록과 still_open/closed_since/other 합계가 동일 이름 필터와 일치했다.
+- 한식2026-10·300/500/1000m·최초/반복의 동시5 GET×6묶음30건 모두200·반복 본문 동일·nearby 수=활동 open_count 합=Risk competitor_count였다. 묶음 중앙값 최초10.380/반복7.410초다. 추가 이름 조건과 서버/캐시 상태가 포함된 관측이며 이전 검증과 동일 부하 통제 비교나 시간 보장이 아니다.
+- 동시ready24건·health200, 세 origin preflight6/실제GET3·미허용origin3차단을 확인했다. LLM 키를 보존한 실제 한식+건물 이력 POST는9.783초에200, 숫자57개 검증 통과·불일치0·재생성false였다.
+- 검증 구간 수집된 API 로그111건에서 HTTP500 이상0건이었다. 절전/여러 사용자/공급자 장애·quota 소진·전체 오류 해결로 확대하지 않는다. FE 파일·로컬.env·데이터 DML은 변경하지 않았다.
+
+상세 정책·실제 Claude Code 검토2회·원천/분석 자격 분리·롤백과 잔여 한계는 [#128 설계](designs/feat128-name-keyword-exclusion.md)를 따른다.
