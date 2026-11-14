@@ -145,3 +145,11 @@
 - 풀 대기 초과를 503 등으로 구분하거나 운영 로그에 고정 사유로 남기는 것은 API 계약·로그 필드 변경이라 후속 후보로만 둔다.
 - Render는 권장안만 기록하며 적용·재배포·재측정은 사용자 결정이다. Free DB `max_connections`와 실제 원인(Render 로그)은 적용 시 확인한다.
 - `.env` 사용자 로컬 파일에 풀 키가 없다는 서술은 설계자 확인을 따랐으며 검토자는 `.env`를 열지 않았다.
+
+## 10. 구현·검증 결과
+
+- 구현: `database_pool_timeout` 기본값 2→10초(`app/core/config.py`), `.env.example` 값·주석, `render-free-validation.md`의 코드 기본값 서술(대기10초)과 Render 권장안 7절(미적용). SQL 문장 제한·풀 크기·연결 예산·오류 코드·응답은 바꾸지 않았다.
+- 테스트: 단위 2개(환경변수 제거 후 기본값 10·SQL 제한 초과·풀3/overflow0, `.env.example` 값=코드 기본값). 격리 1개(풀1·대기2초에서 반납 전 미완료 → 반납 후 TimeoutError 없이 성공). 기존 대기 초과 테스트 유지.
+- 로컬 검사: ruff check·ruff format --check(345 files)·mypy app migrations(99 files) 통과. 일반 **1,657 passed**(기준 1,655+신규 2), 일회용 PostGIS 17-3.7 격리 **264 passed**(기준 263+신규 1). 기존 Starlette 경고 1건.
+- 실제 개발 DB 재검증(일반 uvicorn, 설정 덮어쓰기·진단 실행기 없음, `.env`에 풀 키 없음 → 새 기본값): §3.1과 같은 콜드 화면3(15동시)+웜 1회차 × 3시행, 총 90요청 모두 200·앱 500 이벤트 0·PG statement timeout 0. 콜드 회차 최대 1,907~2,156ms, 웜 203~288ms. 같은 조건의 기존 기본값은 5시행 중 3시행에서 500 7건이었다(§3.1). 단발 측정이며 SLA·부하 상한 검증이 아니다.
+- Render: 코드 기본값 변경은 Render에 영향이 없다(Render는 `DATABASE_POOL_TIMEOUT=15`를 명시). 풀1 직렬 문제는 환경변수 권장안(§4.3, 문서 7절)으로만 남겼고 적용·재배포·재측정은 사용자 결정이다.
