@@ -14,6 +14,8 @@ Docker app.runtime·PORT10000·비root 실행이며 시작 시 migration/ETL은 
 
 Render 전용 MD는 [현재 구성·복원·만료 안내](docs/render-free-validation.md)와 [FE 연결 안내](docs/fe-render-validation-api-request.md) 두 개로 관리한다. DB 만료일은2026-12-13이다. 설정을 갱신할 때 두 문서와 이 기준의 불일치를 함께 정리한다.
 
+2026-11-14 #122에서 실제 Claude Code 검토2회와 Free DB/동시 API 비교 후, 풀2 후보는 최초 지연 악화로1로 복구하고 검증된8958ba7(#118 출처 고아 검사 최적화)만 별도로 배포했다. 현재 live는dep-dbs37aek1f9s73858g6g이며 SQL10초·풀1/대기15초·워커1·예산8과 키/DB/인덱스는 그대로다. 최종 동시5 GET×6묶음은30건200·본문 동일, 최초/반복 중앙값9.688/6.110초다. [설계·실제 검토·한계](docs/designs/feat122-fe-feedback.md)를 따른다. 원본 업태가 한식인 치킨/주점 상호의 실제 업종 보정·AI 활성화·FE CI 테스트 추가는 후속이며 FE를 직접 수정하지 않는다. 전체500·절전 복귀 해결로 확대하지 않는다.
+
 ## 상세 위치 파서 지명 오인 수정 (BE #102)
 
 기적재 데이터의 후속 검증·개발 DB 보정은 [#104](docs/designs/feat104-floor-location-backfill.md)에서 수행했다. `python -m etl.localdata.floor_backfill --source ... --snapshot ...`은 기본 READ ONLY이며 쓰기는 `--write --expected-plan`이 필요하다. 원본·대상·계획·전체 비위치 값/EWKB가 다르면 중단하고, source별 원자적 UPDATE·새 v2 배치·과거 출처/브랜드/삭제/sequence 보존을 검증한다. stores INSERT·원문/날짜/좌표/업종 교체는 하지 않는다. 현재 PC 개발 DB는 24,738행(지원 업종 등 조건 11,468행) 복구와 재실행 no_op·API 전후 검증을 완료했다. 팀원 DB 자동 적용이나 원천 최신화·모든 NULL 복구는 아니다.

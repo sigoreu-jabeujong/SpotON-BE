@@ -182,4 +182,89 @@ FE 담당자는 배포 화면의 실제 데이터 연결을 확인했고, 결과
 
 ### 8.3 Render 풀 전후 검증
 
-실행 후 기록한다. 현재까지 Render 설정·BE/FE 코드·실제 DB는 변경하지 않았다.
+- 고정 시나리오의 변경 전30요청에서28건200·2건500을 관측했다. 실패는 data-range/nearby 각각1건이며 서버 요청 로그의 duration_ms는15,001.982/15,002.466이다. 같은15분 구간의 Web286로그·DB627로그를 pagination 종료(hasMore=false)까지 확인했고 DB ERROR/statement timeout은0건이었다. 풀 대기15초 만료와 일치해 풀 대기 초과를 강하게 시사하지만, 앱이 SQLAlchemy 예외를 안전하게 변환하여 예외 클래스가 로그에 없으므로 실제 클래스까지 확인한 것은 아니다.
+- B1에 대한 Codex 판단: 기존 모든500의 원인 확정·해결 주장은 보류한다. 위 관측으로 풀1→2의 한 변수 대조 실험을 진행할 근거는 충분하다. 기존500의 동일 JSON을 비교 대상으로 삼지 않고, 각 시나리오/API에서 성공한200 본문을 오라클로 사용한다. 모든 조합에 성공 표본이 존재함을 적용 전에 확인한다. 적용 후 전부200·본문 동등성과 미리 정한 지연 기준을 통과해야 유지한다.
+- 변경 전 묶음(초): 300m 최초16.515/반복15.219, 500m 최초16.078/반복19.360, 1000m 최초18.343/반복12.282. 최초 중앙값16.515·반복15.219이며 유지 기준은 각각14.038/12.936초 이하다.
+- 풀 변경·재배포 후 결과는 이어서 기록한다. 아직 BE/FE 코드·실제 DB 내용은 변경하지 않았다.
+
+## 9. 후속 설계: 풀 복구 후 검증된 출처 최적화만 별도 배포
+
+풀2·기존 commit 재배포 `dep-dbs33fafngtc73bj7hi0`가 live가 됐다. 최초300m18.406초/500m18.500초, 반복11.157/12.000초로 관측되어 최초 중앙값은 세 번째 값과 무관하게18.406초 이상이다. 8절에서 미리 정한14.038초 기준을 넘으므로 풀2를 유지하지 않는다. 1000m 비교까지 끝내고 풀1·기존 commit으로 복구한 뒤 ready/설정/CORS/AI503을 확인한다.
+
+다음 후보는 새 코드 작성이 아니라 **이미 develop에 병합된 #118의 출처 고아 검사 최적화 배포**다. 현재 배포 d449c5f에는 이 개선이 없다. 기준 develop8958ba7의 일반pytest1655개는 이번 작업에서도 통과했고, #118의 격리263개·실제 데이터 응답 digest 동등성은 기존 PR119/설계에 기록되어 있다. 실제 GitHub CI도 재확인한다.
+
+- 7절 B3의 "풀 변경과 develop 동시 배포 금지"는 지킨다. 풀1 복구를 먼저 완료하고 별도 단계에서 commit만8958ba7로 바꾸어 수동 배포한다. 다른 환경값·키·DB·schema/head0011·인덱스는 그대로다. 배포를 이 설계문서의 미병합 commit으로 지정하지 않는다.
+- #118은 기존 SUPPORTED_STORES를 유지하고 고아 검사를 batch_id/source의 서로 다른 키만 확인하는 recursive CTE skip scan으로 바꾼다. 필수 ix_stores_provenance 존재·유효 상태/정의와 head0011을 읽기 전용으로 확인한다. 실제 DB에 migration·VACUUM·재적재·인덱스 변경은 하지 않는다.
+- 배포 전 실제 Free DB를 대상으로 후보 앱을 READ ONLY 설정으로 구동해 같은 API 성공 본문을 비교할 수 있다면 먼저 검증한다. 로컬/외부 경로 시간은 Render 내부 HTTP 시간과 혼동하지 않는다.
+- 후보 배포 이후 동일30요청의 전부200·모든 성공 JSON 동일·최초/반복 중앙값 각각 원래 풀1보다15% 이상 개선·ready/CORS/AI503·나머지 환경값 보존을 만족할 때만 유지한다. 실패 시 풀1을 유지한 채 원래 d449c5f로 다시 수동 배포해 복구 확인한다. 원인별 예외 클래스 부재의 한계는 그대로 기록한다.
+- 효과가 있어도 기존 전체500/절전 복귀/데이터 품질 문제가 해결됐다고 확대하지 않는다. 원본 한식의 제외 업종 보정·AI 활성화·FE CI 추가는 독립 후속으로 남긴다.
+
+### 9.1 Claude Code 후속 재검토
+
+이 후보는 아직 배포하지 않았다.
+
+**방법과 한계 (2026-11-14, Claude Code 후속)**
+
+- 이번에 실제로 실행한 것은 아래 파일의 정적 Read와 이 MD의 Edit뿐이다. pytest·Bash·Git·네트워크·DB·Render API는 사용하지 않았다. 아래 판단은 모두 소스 대조와 추론이며, 측정·DB 조회·배포 결과가 아니다.
+- Read: 이 MD 전체, `app/services/store_cohort.py`, `app/services/store_history.py`, `app/models/store.py`, `app/services/readiness.py`, `tests/integration/test_store_provenance_index.py`, `docs/designs/feat118-source-batch-query-perf.md`.
+- 읽지 않음: `app/models/store_import_batch.py`(PK가 `batch_id` 단독이라는 근거는 feat118 설계 기록에만 의존), 단위 컴파일 테스트 파일, `ops_free_risk_cover` 정의, d449c5f 소스. **d449c5f에 #118 개선이 없다는 점과 d449c5f..8958ba7 사이의 전체 변경 범위는 이번에 확인하지 않았다**(Codex가 git 비교로 최종 확인).
+- 1~9절에서 고쳐야 할 사실 오류는 찾지 못했다. 9절 첫 문단의 "최초 중앙값 ≥18.406초"는 세 값 중 두 값이 18.406·18.500이므로 산술상 맞다. 1655개 통과·격리263개·실데이터 digest 동등성은 Codex/PR119 기록을 인용한 것이고 이번에 재실행하지 않았다.
+
+**요약 판단: 조건부 동의.** 코드 의미는 기존과 동등하다고 판단하나, 이 배포로 성능이 좋아진다는 근거는 아직 Render DB에서 확인되지 않았다. 아래 차단 항목을 통과하기 전에는 배포하지 않는다.
+
+| 구분 | 내용 |
+|---|---|
+| 차단 | (C1) d449c5f..8958ba7 변경이 #118의 `store_cohort.py`·테스트·문서뿐인지 git으로 확인. migration·모델·인덱스·config 기본값·의존성 잠금·다른 서비스 코드 변경이 있으면 한 변수 실험이 아니므로 이번 방식으로 배포하지 않는다. (C2) Render DB에서 `ix_stores_provenance` 존재·`indisvalid`·`indisready`·정의(`(batch_id, source, category, sub_category) WHERE deleted_at IS NULL AND category_review_flag IS NOT TRUE`)와 `alembic_version=0011`을 읽기 전용으로 확인. 인덱스가 없거나 무효면 새 쿼리는 재귀 단계마다 전체 스캔·정렬이 되어 기존보다 크게 느려지고 SQL 10초를 넘을 수 있으므로 배포 금지. (C3) 7절 B3 유지: 풀1 복구와 ready/CORS/AI503·환경값 해시 확인이 끝난 뒤에만 commit을 바꾼다. 풀·commit 동시 변경 금지. |
+| 주의 | (W1) 기대 이득이 미확인. 개발 DB에서 기존 고아 검사는 약 37~42ms였다. Render Free DB의 기존 값이 이 정도라면 묶음당 수백 ms 이하만 줄어 15% 기준(약 2.5초)을 넘기 어렵다. (W2) 비교 표본이 작고 분산이 크다(같은 조건 12~19초). (W3) Render DB의 visibility map·통계·NULL batch 꼬리·지원 행 없는 키 규모가 개발 DB와 다를 수 있다. (W4) 로컬 후보 앱을 Free DB에 붙이는 사전 검증은 reader 연결을 추가로 쓴다. |
+| 동의 | 새 코드 작성 없이 이미 병합·검증된 #118만 배포, 풀1 유지, 별도 단계 배포, 실패 시 d449c5f 재배포 복구, 다른 env/DB/schema/인덱스 보존, 효과가 있어도 기존 500·절전 복귀·데이터 품질 문제 해결로 확대하지 않는 원칙. |
+
+**코드 정적 점검 결과**
+
+1. **NULL batch_id**: `store_cohort.py:51-55` 첫 키는 `batch_id IS NOT NULL`이고, 재귀 분기(`:62`)의 row 비교에서 NULL은 참이 아니어서 열거되지 않는다. 대신 `:83` `null_batch`가 `SUPPORTED_STORES AND batch_id IS NULL`을 별도로 검사하므로 기존 anti-join(NULL은 배치와 매칭 불가 → 고아)과 같다. 테스트 `test_store_provenance_index.py:75`(NULL→500), `:78-80`(삭제/검토/미지원 NULL→200), `scenario_null_batch_supported/unsupported_tail`이 이를 고정한다.
+2. **source 불일치**: 키는 `(batch_id, source)` 쌍으로 열거되고 `:76-79`의 NOT EXISTS가 두 컬럼을 모두 비교한다. 같은 batch_id·다른 source는 별도 키가 되어 고아로 판정된다. `store.py:51` source는 NOT NULL이며 `SUPPORTED_STORES`의 `source IN (...)`으로 지원 외 source는 빠진다. 테스트 `:77`, `scenario_same_batch_other_source`가 고정한다.
+3. **recursive 종료**: 재귀 항은 `(batch_id, source) > 직전 키`의 엄격 부등호와 `ORDER BY ... LIMIT 1` LATERAL이므로 키가 단조 증가하고, 더 큰 키가 없으면 LATERAL 0행으로 종료한다. 중복·누락 없이 지원 행이 있는 non-null 키를 모두 한 번씩 방문한다. 무한 재귀 경로는 보이지 않는다.
+4. **부분 인덱스 전제**: `store.py:39-46`의 정의와 `SUPPORTED_STORES`(`store_history.py:17-28`)의 `deleted_at IS NULL`·`category_review_flag IS NOT TRUE`가 일치하여 predicate 함의가 가능하다. 성능은 이 인덱스의 앞 두 키 순서 스캔에 전적으로 의존하며, 적격성은 격리 테스트(`:103-140`, `enable_seqscan=off`의 작은 데이터)로만 고정됐다. Render 실제 planner 선택은 미확인이다.
+5. **쿼리 의미 동등성**: 결과는 bool 하나이고 `current_provenance`의 배치 목록 쿼리·500 정책·반환값·호출부는 바뀌지 않는다(`store_cohort.py:87-117`). 동등성은 12개 시나리오에서 테스트 내부의 기존 anti-join 기준 함수(`:153-160`)와 비교된다. 따라서 Render DB에 고아가 없으면 응답 JSON이 바뀔 코드 경로는 #118 범위 안에서는 보이지 않는다. 다만 C1에서 다른 변경이 섞여 있으면 이 결론은 성립하지 않는다.
+6. **권한**: 새 SQL은 기존과 같은 `stores`·`store_import_batches`에 대한 SELECT만 쓴다. recursive CTE는 임시 테이블 권한(TEMP)이 필요 없어 readiness의 `temporary_create=false` 요구(`readiness.py:95-108`)와 충돌하지 않는다. READ ONLY 트랜잭션에서 실행 가능한 순수 SELECT다. 연결 수·풀 예산은 바뀌지 않는다.
+7. **롤백 가능성**: migration·인덱스·데이터·env 변경이 없는 코드 단독 변경이므로 d449c5f 수동 재배포로 되돌릴 수 있다. 프로세스 내 캐시는 재배포 때 양방향 모두 비워진다(추정, `cache.py` 미확인). 반대로 장래 인덱스를 제거(0010 downgrade)하면 이 코드도 함께 되돌려야 한다는 feat118 §3.1 조건은 계속 유효하다.
+
+**배포 전 필요한 사전 조건 (아직 실행 안 함)**
+
+1. C1: `git diff --stat d449c5f 8958ba7`와 commit 목록으로 변경 파일 확인. `migrations/`·모델·config·`requirements`/lock 변경 0을 기록한다. d449c5f의 `store_cohort.py`에 `orphan_exists`가 없음을 확인한다.
+2. 8958ba7 GitHub CI(일반·격리·CodeQL) 성공을 재확인한다.
+3. C2: Render DB reader 역할의 READ ONLY 세션에서 인덱스 상태·정의·head0011을 확인한다. 같은 세션에서 **기존 anti-join과 새 쿼리의 `EXPLAIN (ANALYZE, BUFFERS)`를 각각 3회** 실행해 (a) 두 결과가 모두 false로 같은지, (b) LATERAL 단계가 `ix_stores_provenance` 순서 스캔(row 비교 Index Cond)인지, (c) heap fetch·`IS NULL` 분기 버퍼 수, (d) 기존 대비 절감 시간을 기록한다. 둘 다 SELECT이므로 데이터는 바뀌지 않는다. 연결은 측정 전에 닫는다. 이 단계 없이 개발 DB의 0.1ms 결과를 Render에 그대로 옮기지 않는다.
+4. W1 사전 판단: 3-(d)의 절감 시간 × 묶음당 `current_provenance` 호출 수(data-range·activity·risk·nearby 등, 정확한 호출 수는 Codex가 호출부로 확인)가 15% 기준에 크게 못 미치면 배포 자체를 보류하고 그 사실을 기록한다. 이 경우 지연의 주원인은 고아 검사가 아닌 다른 쿼리(예: Risk 집계·nearby 공간 조회)일 가능성이 높다.
+5. W2: 비교 기준은 8.3의 과거 값만 쓰지 말고, 풀1·d449c5f 복구 직후 같은 30요청을 다시 재서 직전 기준으로 함께 사용한다. 시나리오 순서·입력·간격(캐시 TTL 300초 안/밖)을 후보 측정과 같게 한다. 기준 자체가 흔들리면(같은 조건 반복 간 15% 이상 차이) 개선 판정을 보류한다.
+6. W4: 로컬 후보 앱으로 사전 검증한다면 reader 역할·READ ONLY만 사용하고, Render 앱 피크 4 + 로컬 앱 풀/ready 연결 + 측정 연결의 합이 연결 제한 8 이하인지 확인한 뒤 끝나면 즉시 닫는다. 소유자 계정은 쓰지 않는다. 로컬→Free DB 경로 시간은 Render 내부 HTTP 시간과 비교하지 않는다.
+7. 배포 후: 30요청 전부200·성공 JSON 동일·최초/반복 중앙값 각각 15% 이상 개선·ready/CORS/AI503·env 해시 보존을 9절 기준대로 확인하고, 실패 시 풀1 유지 상태에서 d449c5f로 재배포한 뒤 같은 항목으로 복구를 확인한다.
+
+**확대 해석 금지**: 이 후속 배포는 원본이 한식으로 신고된 점포의 제외 업종 혼입(데이터 품질), AI 활성화, FE CI test 단계 추가를 해결하지 않는다. 이들은 독립 후속으로 남는다. 성능 개선도 위 측정으로 재현되기 전에는 확정하지 않는다.
+
+### 9.2 Codex 사전 조건 대조·최종 배포 판단
+
+- 후속 Claude CLI도 exit0·is_error=false·권한 거절0으로 종료했다. Codex가 실제 MD 수정과 소스를 대조했다.
+- C1: d449c5f..8958ba7의 실행 코드 차이는 `app/services/store_cohort.py`와 새 `app/analysis/day_night.py` 두 파일이다. 후자는 #115의 독립 산술 기반으로 API/AI/DB에서 import하지 않으며 테스트에서만 import하는 것을 rg와 package init으로 확인했다. migration·모델·config·기타 서비스·ETL·Docker·pyproject/uv.lock 차이는0이다. 따라서 "전체 코드 파일이 #118 하나뿐"이라고 쓰지 않고, 배포되는 추가 미연결 모듈을 명시한다. 현재 API 요청 경로의 동작 변경은 #118 하나라는 판단으로 진행한다. 원래 배포 소스에는 `orphan_exists`가 없음을 git diff로 확인했다.
+- 8958ba7의 GitHub `lint-and-test`·`postgis-integration`·CodeQL Analyze(actions)가 모두 completed/success임을 확인했다. 이번 worktree 일반pytest1655개도 통과했다.
+- C2: Free reader READ ONLY로 head0011·ix_stores_provenance의 전체 정의 및 valid/ready/live·ops_free_risk_cover 존재를 확인했다. 후보 앱을 같은 Free DB에 붙인 별도 사전15 API는 모두200·기존 성공 본문 SHA256 완전 일치·SQL 오류0·실모델0이었다. 앱 종료로 준비/풀 연결을 닫았다. 후보 앱의 외부 경로 HTTP 시간은 Render 성능 비교에 쓰지 않는다.
+- Free DB READ ONLY EXPLAIN ANALYZE3회에서 기존 고아 검사는2,825.046/1,720.435/1,999.757ms·shared hit624/626/628, 후보는0.166/0.097/0.105ms·shared hit15로 관측됐다. 둘 다false·heap fetch0이고 후보는 ix_stores_provenance의 LATERAL 순서 스캔을 사용한다. 쿼리4개 호출부(data-range/nearby/activity/risk)를 소스로 확인했다. 관측 중앙값 약2초의 절감을4회 사용하므로 사전 검토 W1의 효과 부족 조건에는 해당하지 않는다. 실제 전체 HTTP 개선 여부는 배포 후 별도로 판단한다.
+- C3: 풀2는30건 모두200·본문 일치였으나 최초 중앙값18.500초(기준16.515), 반복12.000초(기준15.219)로 최초 유지 조건을 실패했다. 풀1/d449c5f 복구 배포dep-dbs352u7bikc73efiofg live 이후 ready/health200·CORS preflight6/실제GET3·미허용origin차단·AI503·나머지 환경값 해시 일치를 확인했다.
+- 복구 직후30요청 재측정은29건200·data-range1건500이었다. 최초 묶음17.640/18.312/20.125초(중앙값18.312), 반복9.891/16.375/12.297초(중앙값12.297)다. 반복 편차가 큰 Free 환경임을 기록하고 분산이 없다는 주장은 하지 않는다. 후보는 원래 기준과 직전 복구 기준 모두에서15% 개선·30건200·전체 JSON 동등성을 확인한다. 이는 작은 관측 표본의 유지 기준이며 SLA/통계적 보장은 아니다.
+- 위 조건을 확인한 후 풀1을 그대로 두고 검증된8958ba7만 수동 배포한다. 아직 미병합인 #120/PR121 기본값 변경은 포함하지 않는다.
+
+### 9.3 최적화 배포 결과
+
+- `8958ba737002e9969027db832f3ac6aaf45277d6` 배포 `dep-dbs37aek1f9s73858g6g`가2026-11-14 19:11:42 KST live가 됐다. 풀1·대기15초·SQL10초·워커1·overflow0·예산8과 모든 환경값/키 목록 해시·Free·자동 배포off를 보존했다. schema/head0011·DB 데이터·운영 인덱스는 변경하지 않았다.
+
+| 구성 | 최초 묶음 중앙값 | 반복 묶음 중앙값 | 30요청 상태 |
+|---|---:|---:|---|
+| 기존d449c5f·풀1 최초 기준 | 16.515초 | 15.219초 | 28×200·2×500 |
+| 기존d449c5f·풀2 후보 | 18.500초 | 12.000초 | 30×200, 최초 기준 실패로 복구 |
+| 기존d449c5f·풀1 복구 직후 | 18.312초 | 12.297초 | 29×200·1×500 |
+| 최적화8958ba7·풀1 최종 | **9.688초** | **6.110초** | **30×200** |
+
+- 최종 각 반경 최초/반복 묶음은300m8.735/4.015초, 500m9.688/8.656초, 1000m10.500/6.110초다. 기존 최초 기준 대비 중앙값41.34%/59.85% 감소, 복구 직후 기준 대비47.09%/50.31% 감소로 두 기준 모두 사전15% 개선 조건을 통과했다. 성공 응답 전체 JSON SHA256은 두 기준의15개 시나리오/API 조합과 모두 같았다. 이 관측에 따라8958ba7·풀1을 유지한다.
+- 최종 health/ready200, 세 origin GET/POST preflight6건·실제GET3건200/정확한 ACAO, 미허용·유사도메인·localhost5181차단, AI503 AI_UNAVAILABLE을 확인했다. 실제 LLM 키는 추가하지 않았고 실모델 호출도 하지 않았다.
+- 최종 배포 후 조회한 Web92로그·DB71로그 구간에 DB ERROR/statement timeout 문구는0건이다. 다만 Web에는 `path=unmatched`500이2건(19:12:21/19:12:51 KST, 1.198/0.869ms) 남아 있었다. 업무5개 API의30건은 모두200이므로 이2건과 구분한다. 기존 로그의 allowlist는 ready 경로를 식별하지 못하므로 운영 probe일 가능성은 있지만 확정하지 않는다. 원인/경로 식별 개선은 #78/#122 후속이며 전체 서버500이 사라졌다고 주장하지 않는다.
+- 물리 DB 캐시 초기화·15분 무요청 후 실제 절전 복귀·여러 사용자 동시 화면·전체 FE 브라우저 수용 검사는 이번에 하지 않았다. 최초/반복은 고정 시나리오의 호출 순서다. 작은 표본·Free 자원 편차·캐시 상태 때문에 위 시간이나 개선율을 SLA로 쓰지 않는다.
+- 코드 변경은 기존 병합본을 배포한 것이며 이번 브랜치에는 설계·검토·실행 결과·FE 전달 문서만 추가/수정한다. 원본 한식의 실제 제외 업종 혼입, FE CI 추가, AI 시연 활성화 결정은 미해결 후속으로 유지한다. #122/#78을 이 PR로 자동 종료하지 않는다.
+- 설계/검토 JSON·읽기 조사·전후 벤치마크·설정 보존/롤백·배포 검증 증빙과 실행 스크립트는 저장소 밖 `%USERPROFILE%\SpotON-private-backups\render-free-20261113\fe-feedback-20261114\`에 보관한다. 자격증명·실제 URI·원본 점포 식별자·응답 원문·프롬프트/모델 원문은 커밋하지 않는다.
