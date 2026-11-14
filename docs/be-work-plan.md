@@ -6,6 +6,8 @@
 
 구성·환경변수·권한·데이터 검증·운영 SQL·복원과2026-12-13 만료는 [현재 Render 안내](render-free-validation.md), FE URL·CORS·절전 후 대기는 [FE 연결 안내](fe-render-validation-api-request.md)를 따른다. Render 전용 MD는 이 두 개만 유지한다. 로컬 .env·기본3초·개발DB·FE 파일은 변경하지 않는다. 시작 시 migration/ETL과 자동 배포는 실행하지 않으며 검증한 commit을 수동 배포한다.
 
+2026-11-14 #127에서 Render의 LLM 설정3개 누락으로 발생한 AI_UNAVAILABLE을 확인하고, 실제 생성이 가능한 기존 Gemini 키를 비밀 LLM_API_KEY와 google/gemini-3.5-flash-lite 설정으로 연결했다. 같은7d4846c의배포dep-dbs51tk9v7es73bn89tg가live이며 카페·한식·카페 재호출3건이200·검증 통과·불일치0·재생성false다. ready200·세 origin POST preflight200·잘못된 업종422를 확인했고 기존14개 환경값·Free·자동 배포off를 보존했다. BE 실모델 연결 완료와 FE 브라우저의 해석 표시 확인을 구분하며, 기본 해석 한도5회/분·50회/일·동시2와기존503 처리를 유지한다. 키 값은 FE·문서·로그·저장소에 넣지 않는다. 현재 구성은 위 Render 안내를 따른다.
+
 이 문서 하나에서 BE의 범위·개발 순서·데이터 규칙·API 보완·작업 방식을 관리한다. 공통 기준 변경은 해당 절을 수정한다. 기능별 설계·Claude 검토·커밋 계획은 `docs/designs/`에 별도로 기록하되 공통 규칙을 복제하지 않는다.
 
 ## 1. 적용 기준과 현재 상태
