@@ -263,6 +263,35 @@ def test_external_foreign_key_rejects_prune_without_losing_children(db):
     assert after["targets"] == plan["targets"]
 
 
+def test_temporary_tables_cannot_redirect_guarded_public_deletion(db):
+    old = publish(db, 0)
+    publish(db, 1)
+    plan = manage(db, "prune", (old,))
+    with db.engine.connect() as c:
+        for table in (
+            "chain_publications",
+            "chain_publication_brands",
+            "store_chain_classifications",
+            "chain_publication_state",
+        ):
+            c.exec_driver_sql(f"CREATE TEMP TABLE {table} AS TABLE public.{table}")
+        c.commit()
+        maintenance.locked(c, True)
+        result = maintenance.manage(
+            c,
+            action="prune",
+            generations=(old,),
+            write=True,
+            expected_plan=plan["expected_plan_sha256"],
+            expected_active=plan["active"],
+        )
+        c.commit()
+        assert result["removed"]["publications"] == 1
+        assert c.scalar(text("SELECT count(*) FROM public.chain_publications")) == 1
+        assert c.scalar(text("SELECT count(*) FROM pg_temp.chain_publications")) == 2
+        assert c.scalar(text("SELECT count(*) FROM pg_temp.store_chain_classifications")) == 2
+
+
 def test_waiting_prune_reads_pointer_after_publisher_commit(db):
     old = publish(db, 0)
     publish(db, 1)

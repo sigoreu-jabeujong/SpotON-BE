@@ -18,6 +18,8 @@ write가 hash/active 모두 일치할 때만 실행한다. 활성 UUID만 보는
 
 write는 RR 설정/timeout 뒤 **어떤 SELECT보다 먼저** chain_publication_state EXCLUSIVE → chain_publications·chain_publication_brands·store_chain_classifications SHARE ROW EXCLUSIVE를 잡는다. #145 publish/activate가 state를 먼저 잠그므로 직렬화된다. metadata 직접 writer도 후자 잠금으로 차단한다. source stores/원천·legacy 표에는 쓰기/SHARE 잠금을 추가하지 않는다. 초기 가드는 잠금 뒤 수행한다. lock_timeout5초/statement_timeout60초다.
 
+ORM의 비한정 테이블명이 잠근 public 표와 다른 임시/다른 스키마 표로 해석되지 않도록 SELECT 전에 LOCAL search_path=pg_catalog,public,pg_temp로 고정한다. 임시 동명 표가 존재하는 연결에서도 public 대상만 삭제하고 임시 표는 보존하는 실제 DB 검사를 추가한다.
+
 disable은 state 한 행만 삭제한다. prune은 각 명시 대상의 Evidence→Brand→Publication 순서로 같은 트랜잭션에서 삭제하고 state/source-state는 보존한다. 각 실제 삭제 행수를 계획과 대조한다. 실패/누락/외부 FK/중간 예외는 전체 rollback이다. 활성 세대는 자동 전환/삭제하지 않는다. 중도 실패를 주입한 테스트로 이전 포인터와 모든 대상이 남음을 확인한다.
 
 EXCLUSIVE/SHARE ROW EXCLUSIVE는 일반 SELECT의 ACCESS SHARE와 호환된다. 기존 RR reader는 자기 snapshot의 state/이전 판정 행을 계속 읽고 새 reader만 disable 후 pending을 본다. active archive와 기존 publisher가 경합하면 잠금 뒤 재계산으로 오래된 계획을 거절한다. new v2 AI는 매번 재계산하고 snapshot/private version이 달라져 이전 선택 캐시와 섞이지 않는다.
@@ -51,10 +53,11 @@ disable은 잘못된 판정의 공개 포인터를 내리는 동작이며 guard/
 ### 6.2 Codex 구현 초안·실제 격리 검증
 
 - 신규 CLI1파일과 단위/통합 테스트2파일, 설계/관리 문서만 추가했다. 기존 API·FE·DB 모델/migration·head0012·.env·기존 서버·원본/운영 DB를 변경하지 않았다. Codex가 내용/활성 포인터/ABA 가드, 부모/자식 삭제 순서, state 잠금 직렬화와 실패 rollback을 직접 대조했다.
-- 일반 전체1957개 통과(기존1944+신규13). PostGIS 전체293개 통과 뒤 외부 FK 검사를 보강해 신규 통합8개 전체를 다시 통과했다(최종 검증 범위294개, CI에서 같은 최종 집합을 다시 실행). ruff/format·mypy183파일 통과. 단순 SQL 호출 문자열을 재현하는 테스트 대신 실제 DB의 대기/읽기 동시성 검사를 유지했다.
+- 일반 전체1957개 통과(기존1944+신규13). PostGIS 전체293개 통과 뒤 외부 FK 검사를 포함한 신규 통합8개와 첫 PR CI의294개가 통과했다. 이후 임시 테이블의 대상 가림을 보강해 관리 통합9개를 다시 통과했다(최종 검증 집합295개, 마지막 CI에서 재확인). ruff/format·mypy183파일 통과. 단순 SQL 호출 문자열을 재현하는 테스트 대신 실제 DB의 대기/읽기 동시성 검사를 유지했다.
 - 통합8개:3세대→4번째 거절→inactive prune→4번째 성공, 활성 API 응답 보존과 source/원천 revision 동일, pending/no-op/동일 입력 재활성화, active/missing/plan/CAS 거절, 실제 자식 내용 변경 지문, disable→activate 같은 UUID의 ABA 감지, 자식 삭제 후 실패 주입 rollback, 기존 RR reader의 퇴역 행 조회와 새 reader pending, publisher 잠금 대기 후 새 포인터 검사, 외부 FK23503에서 자식까지 rollback을 확인했다. 출력에 원문 점포명/주소/인허가·URL이 없음을 단언했다.
 - 기존 실자료 검증 DB를 템플릿으로 새 폐기용 DB spoton_it_98fd63d39b62를 생성해 별도 실행했다. 비활성 publication1개·브랜드2074개·판정8778개만 정리하고 원래 활성 포인터를 보존했다. 그다음 disable은 state1행만 내렸고 재계획 후 재실행은 no-op이었다. v2 엄격 chain 조회200/pending/0건을 확인했다.
 - 점포689440행의 모든 필드/좌표·legacy 브랜드5테이블의 전체 행 hash와 원천 revision이 정리/disable 전후 동일했다. 기존 실자료 검증 DB의 활성 포인터·세대 수·원천/legacy hash도 그대로여서, 삭제는 새 폐기용 복제본에만 한정됨을 확인했다. 기존 원본 spoton_dev/이전 검증 DB는 삭제하지 않았다.
 - 실제 복제 실행25.672초. 세 publication 표의 physical bytes는14,852,096→14,852,096으로 같았다. 논리 정리와 물리 공간 회수를 구분하고 FULL/자동 VACUUM·용량 상한 완화를 하지 않았다. 생성한 폐기용 DB 식별자/검증 보고서는 저장소 밖 비공개 검증 폴더에 보관했다.
+- 마지막 자체 대조에서 임시/다른 스키마의 동명 표가 비한정 ORM 질의를 가릴 수 있어 LOCAL search_path를 pg_catalog,public,pg_temp로 고정했다. public 표4개를 임시 표로 복사한 연결에서도 public 비활성 세대만 삭제되고 임시 표는 그대로임을 검증했다. 기존 API/연결 환경은 수정하지 않는다.
 
 상태: 코드/검증 자료 준비, **Claude 새 설계·코드 검수 대기**. Draft PR의 CI/CodeQL을 확인하되 CI 성공을 Claude 검수/병합 완료로 대체하지 않는다.

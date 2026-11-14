@@ -66,6 +66,9 @@ def locked(connection: Connection, write: bool) -> None:
     )
     connection.exec_driver_sql("SET LOCAL statement_timeout='60s'")
     connection.exec_driver_sql("SET LOCAL lock_timeout='5s'")
+    # The lock names and ORM statements must address the same public tables, even
+    # when the connection has temporary relations or a custom role search_path.
+    connection.exec_driver_sql("SET LOCAL search_path=pg_catalog,public,pg_temp")
     if write:
         # Same coordinator and order as publication.locked, before the first SELECT.
         connection.exec_driver_sql("LOCK TABLE public.chain_publication_state IN EXCLUSIVE MODE")
