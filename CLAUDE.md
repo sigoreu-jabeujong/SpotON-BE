@@ -241,3 +241,7 @@ as_of/data_updated_at/space·배치 집합/map_version·franchise_classification
 `context.history`는 최신 자료 기준·지원 업종 전체 집계(total·same_category·same_spot/same_building/unverified·같은 자리 영업/폐업/기타·기간 확인 폐업 수와 완료 개월 min/max·floor_unit_provided·same_spot_comparable)뿐이다. 층과 호수가 모두 있어야 comparable이다. 건물키·층호수·상호·관리번호·날짜 원문은 AI 입력·응답·로그·캐시 key에 넣지 않는다. 캐시 key는 집계(payload/context_hash)로 구분되며 값은 Risk 후보 ID뿐이다.
 
 official_values에 `building_history`(호수 미입력이면 총계만)·`same_spot_history` 문장을, missing_data에 `history_no_records`·`history_floor_unit_missing`·`history_detail_incomplete`·`history_latest_data_basis`를 추가한다. 이력 기반 유리/불리 후보·자리 판정은 만들지 않는다. prompt는 규칙15를 더한 risk-interpret-v7, 선택 cache rule은 selection-current-validation-v3다. 설계·Claude Code 재검토·실제 DB 검증은 docs/designs/feat98-ai-history-context.md, FE 요청은 docs/fe-risk-interpret-api-request.md다. 좌표 점포가 없는 건물키(실측 약 9.9%)는 위치 검증 없이 통과하는 한계가 있다.
+
+## 동시 조회 후속 재검증과 감사 기준 (#122 / #78)
+
+2026-11-14 사용자요청의최신재검증은[설계·실제Claude검토·실행](docs/designs/feat122-concurrency-final-audit.md)을따른다. 병합본02b5288의실제개발DB160건(기본10초80/비교2초80)·운영05790fa의동시60/snapshot4/ready12건이200이며본문/날짜/버전/집계가같았다. 앱로그101/DB로그77건에서500/SQL timeout0,실제.env·head/행수/배치/인덱스·운영17개환경값·배포를보존했다. 물리DB콜드는미통제라2/10초차이는미관측이며과거콜드검증과구분한다. 원천일반100행지연은여전히남아있다. #122초기제보범위는완료판정하되과거unmatched500두건을#78에이관한다. #78전체정상판정보류와남은BE/FE경계는[최신감사](docs/be-system-audit.md)를따른다. FE코드·운영설정·DB를수정하지않고이미반영된브랜드/AI/FE구현을중복요청하지않는다.
