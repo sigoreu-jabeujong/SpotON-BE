@@ -1,11 +1,31 @@
 # 전체 시스템 점검에 따른 FE 수정 요청
 
+
+
+## 2026-11-14 현재 확인 — 구현 중복 요청 대신 남은 경계 확인
+
+최신 FE develop `4bf012f`와 BE `02b5288`을 대조했다. FE는 읽기/단위 검사만 수행했고 파일·설정·문서·이슈·PR은 수정하지 않았다. 이번 FE 단위14파일108개가 통과했다.
+
+| 최초 문제 | 최신 소스 확인 | 남은 확인 |
+|---|---|---|
+| F1 AI 구형 본문422 | toRiskInterpretRequest가 원래query와 선택history만 전송, 자동 재시도 없음. #134는 공개 실제AI200/4문단 검증 완료 | 이번 실모델 호출은0회, #134 근거와 구분 |
+| F2 unverified→outside | MarketCard·ReportPage에명시적인unverified 분기·안내가 있음 | 최초 반례의 브라우저 표시 재주입 |
+| F3 null 개업일 정렬 | HistoryTable·ReportPage의sortHistoryRecentFirst와null/복합식별 단위 검사 | 최초 결측 표·진단서 브라우저 경계 재주입 |
+| F4 source별 같은번호 충돌 | 표·Map선택/콜백/find·React key가storeKey(source,license_no)를 사용 | 다른 좌표 두 원천·조건변경·언마운트의 실제 지도 정리 |
+| F5 nullable 상호·기간 | storeName/storePeriod/사유·실제0 단위 검사와 표·지도·진단서 공통 사용 | 최초 결측 표본 전체 화면/인쇄 확인 |
+
+위 구현을 다시 추가해 달라는 요청은 하지 않는다. 아래1~5절은2026-11-12의 최초 재현 기록이며 그 당시의 "현재 코드/미해결" 서술과 이번 판정을 구분한다. 이력 선택 문맥은 현재 #98 계약의 `history={building_key,floor_unit}`를 허용하고 주소·수치·점포 목록을query에 넣지 않는다. 원본 업태에 더해 #128의이름 키워드 분석 제외가 적용되므로 FE에서별도상호필터를 추가하지 않는다.
+
+새 BE 검증은 로컬160건/Render60건+snapshot4건 모두200·목록/집계/날짜·버전 일치, ready/CORS 통과다. 실제 배포는05790fa/dep-dbs5t55g1s2s73e8vorg를 유지했고 병합본의 기본대기10초는 운영의명시15초를 바꾸지 않는다. 외부 일반음식점100행 지연·운영/공식근거·과거unmatched500은 #78에남긴다. [최신 BE 감사](be-system-audit.md)·[실제 검증 설계](designs/feat122-concurrency-final-audit.md)를 따른다.
+
+---
+
 - 작성일: 2026-11-12
 - 대상: FE 담당자
 - 관련 BE 이슈: [#78](https://github.com/sigoreu-jabeujong/SpotON-BE/issues/78)
 - 최초 실행 검사 기준: FE develop `21ec13fb59d1eed456c150b2c99300d9fe755d5a`, BE develop `1f81baf` / 2026-11-12 재점검
-- 현재 문서 대조 기준: BE develop `135ec63`(PR #93·migration0011), 로컬 FE `21ec13f` / 2026-11-12
-- 상태: **5종 재현·Claude Code 소스 대조 완료 / FE 수정·검증 요청 / 지도 기본 연결 통과·복합 식별 수정 대기**
+- 최초 후속 문서 대조 기준: BE develop `135ec63`(PR #93·migration0011), 로컬 FE `21ec13f` / 2026-11-12
+- 최초 상태(2026-11-12): **5종 재현·수정 요청 / 당시 지도 복합 식별 수정 대기**
 
 FE lint·build는 통과했지만 실제 BE 연결과 유효한 결측 응답에서 아래 문제가 재현됐습니다. BE의 공개 응답은 기존 요청서 계약에 맞으며, FE에 맞추기 위해 서버 검증을 완화하거나 결측을 가짜 값으로 채우지 않습니다. FE 파일·설정·문서·이슈·PR은 이번 작업에서 직접 수정하지 않았습니다.
 
