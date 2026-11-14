@@ -31,6 +31,7 @@ from app.schemas.risk import (
     RiskQuery,
     RiskQueryEcho,
 )
+from app.services.chains import ChainSelection
 from app.services.franchise import brand_context, enrich_meta
 from app.services.market_activity import year_cutoff
 from app.services.market_judgement import judge_market
@@ -198,9 +199,16 @@ def pending_indicator(identifier: RiskInclude, reason: str) -> RiskIndicator:
 
 
 def get_risk(
-    session: Session, query: RiskQuery, settings: Settings, *, cache: CacheResources | None = None
+    session: Session,
+    query: RiskQuery,
+    settings: Settings,
+    *,
+    cache: CacheResources | None = None,
+    chain: ChainSelection | None = None,
 ) -> ApiResponse[Risk]:
     try:
+        if chain is not None:
+            return _get_risk(session, query, settings, chain=chain)
         key = None
         if cache is not None and cache.enabled:
             key = risk_key(cache, snapshot_token(session, cache), query, settings, RULE_VERSION)
@@ -216,12 +224,14 @@ def get_risk(
     raise AppError(ErrorCode.INTERNAL_ERROR, headers=NO_STORE)
 
 
-def _get_risk(session: Session, query: RiskQuery, settings: Settings) -> ApiResponse[Risk]:
+def _get_risk(
+    session: Session, query: RiskQuery, settings: Settings, *, chain: ChainSelection | None = None
+) -> ApiResponse[Risk]:
     batches, reference = current_provenance(session)
     cohort = temporal_cohort(query, reference)
     minimum = session.scalar(select(func.min(Store.open_date)).where(*cohort))
     target = effective_date(reference, minimum, query.as_of)
-    conditions = [*cohort, *attribute_filters(query), Store.open_date <= target]
+    conditions = [*cohort, *attribute_filters(query, chain), Store.open_date <= target]
     excluded = int(
         session.scalar(
             select(func.count()).select_from(Store).where(*conditions, Store.geom.is_(None))
@@ -326,9 +336,10 @@ def _get_risk(session: Session, query: RiskQuery, settings: Settings) -> ApiResp
             NAME_EXCLUSION_LIMITATION,
         ],
     }
-    branding = brand_context(session)
-    enrich_meta(meta, branding)
-    if isinstance(branding.classification, EstimatedClassification):
+    branding = brand_context(session) if chain is None else None
+    if branding is not None:
+        enrich_meta(meta, branding)
+    if branding is not None and isinstance(branding.classification, EstimatedClassification):
         limitations = meta["limitations"]
         if isinstance(limitations, list):
             limitations.append(ESTIMATE_LIMIT)

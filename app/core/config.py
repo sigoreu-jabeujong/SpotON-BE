@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # from the per-statement timeout. This is not an overall HTTP response deadline.
     database_pool_timeout: float = Field(default=10, ge=0.1, le=30)
     database_connection_budget: int = Field(default=8, ge=1, le=1000)
-    database_expected_revision: str = Field(default="0011", pattern=r"^[0-9]{4}$")
+    database_expected_revision: str = Field(default="0012", pattern=r"^[0-9]{4}$")
     web_concurrency: int = Field(default=1, ge=1, le=8)
     risk_boundary_version_id: UUID | None = None
     data_go_kr_service_key: SecretStr | None = None

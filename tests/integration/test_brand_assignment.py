@@ -66,7 +66,7 @@ def setup(temporary_database, tmp_path, monkeypatch):
 
     def check(c):
         assert c.scalar(text("SELECT current_database()")) == temporary_database.database_name
-        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0011"
+        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0012"
 
     monkeypatch.setattr(apply, "check_local_database", check)
     source = catalog(
@@ -373,4 +373,4 @@ def test_empty_downgrade_and_nonempty_downgrade_rejection(setup):
         cfg.attributes["connection"] = c
         command.downgrade(cfg, "0010")
     with engine.connect() as c:
-        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0011"
+        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0012"

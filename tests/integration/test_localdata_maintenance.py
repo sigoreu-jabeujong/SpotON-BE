@@ -34,7 +34,7 @@ def maintenance_db(temporary_database, monkeypatch):
         assert (
             connection.scalar(text("SELECT current_database()")) == temporary_database.database_name
         )
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0011"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0012"
 
     monkeypatch.setattr(cli, "check_local_database", isolated_identity)
     return engine

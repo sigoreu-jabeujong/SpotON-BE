@@ -168,7 +168,7 @@ def test_cli_snapshot_is_read_only_and_releases_resources(
         checked.append(True)
         assert connection.scalar(text("SHOW transaction_read_only")) == "on"
         assert connection.scalar(text("SHOW transaction_isolation")) == "repeatable read"
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0011"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0012"
 
     monkeypatch.setattr(cli, "check_local_database", check)
     if attempt_write:

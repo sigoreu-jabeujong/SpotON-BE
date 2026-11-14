@@ -25,6 +25,7 @@ from app.schemas.market_activity import (
     YearlyActivity,
 )
 from app.schemas.stores import SubCategory
+from app.services.chains import ChainSelection
 from app.services.franchise import brand_context, enrich_meta
 from app.services.spatial_stores import (
     NO_COORD_SCOPE,
@@ -121,19 +122,23 @@ def aggregate_activity(
     )
 
 
-def get_activity(session: Session, query: ActivityQuery) -> ApiResponse[MarketActivity]:
+def get_activity(
+    session: Session, query: ActivityQuery, *, chain: ChainSelection | None = None
+) -> ApiResponse[MarketActivity]:
     try:
-        return _get_activity(session, query)
+        return _get_activity(session, query, **({"chain": chain} if chain else {}))
     except (ValueError, TypeError):
         raise AppError(ErrorCode.INTERNAL_ERROR, headers=NO_STORE) from None
 
 
-def _get_activity(session: Session, query: ActivityQuery) -> ApiResponse[MarketActivity]:
+def _get_activity(
+    session: Session, query: ActivityQuery, *, chain: ChainSelection | None = None
+) -> ApiResponse[MarketActivity]:
     batches, reference = current_provenance(session)
     cohort = temporal_cohort(query, reference)
     minimum = session.scalar(select(func.min(Store.open_date)).where(*cohort))
     target = effective_date(reference, minimum, query.as_of)
-    conditions = [*cohort, *attribute_filters(query), Store.open_date <= target]
+    conditions = [*cohort, *attribute_filters(query, chain), Store.open_date <= target]
     excluded = int(
         session.scalar(
             select(func.count()).select_from(Store).where(*conditions, Store.geom.is_(None))
@@ -216,5 +221,6 @@ def _get_activity(session: Session, query: ActivityQuery) -> ApiResponse[MarketA
         "excluded_no_coord_cohort": "opened_by_as_of",
         "optional_data": optional,
     }
-    enrich_meta(meta, brand_context(session))
+    if chain is None:
+        enrich_meta(meta, brand_context(session))
     return ApiResponse(data=data, meta=meta)

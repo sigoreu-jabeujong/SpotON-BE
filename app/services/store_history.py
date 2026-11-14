@@ -3,12 +3,13 @@
 from datetime import date
 from typing import Literal
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, literal, select
 from sqlalchemy.orm import Session
 
 from app.models import Store, StoreImportBatch
 from app.schemas.common import ApiMeta, ApiResponse
 from app.schemas.stores import HistoryQuery, HistoryStore, PeriodReason, StoreHistory
+from app.services.chains import ChainSelection
 from app.services.franchise import brand_context, effective_franchise, enrich_meta, franchise_fields
 from app.services.store_scope import (
     NAME_EXCLUSION_VERSION,
@@ -94,7 +95,9 @@ def operating_period(
     return complete_months(opened, end), None, opened, closed
 
 
-def get_history(session: Session, query: HistoryQuery) -> ApiResponse[StoreHistory]:
+def get_history(
+    session: Session, query: HistoryQuery, *, chain: ChainSelection | None = None
+) -> ApiResponse[StoreHistory]:
     # Both queries share one REPEATABLE READ snapshot in the request dependency.
     batches = list(
         session.scalars(
@@ -117,13 +120,13 @@ def get_history(session: Session, query: HistoryQuery) -> ApiResponse[StoreHisto
     )
     stores = list(
         session.execute(
-            select(Store, effective_franchise())
+            select(Store, effective_franchise() if chain is None else literal(None))
             .where(SUPPORTED_STORES, Store.building_key == query.building_key)
             .order_by(Store.open_date.asc().nulls_last(), Store.source, Store.license_no, Store.id)
         )
     )
     result: list[HistoryStore] = []
-    branding = brand_context(session)
+    branding = brand_context(session) if chain is None else None
     for store, franchise_value in stores:
         batch = batch_map.get(store.batch_id) if store.batch_id is not None else None
         if batch is not None and batch.source != store.source:
@@ -143,7 +146,11 @@ def get_history(session: Session, query: HistoryQuery) -> ApiResponse[StoreHisto
                     "operating_period_status": "fact" if reason is None else "no_data",
                     "operating_period_reason": reason,
                     "store_status": store.status if store.status in {"open", "closed"} else "other",
-                    **franchise_fields(store, franchise_value, branding),
+                    **(
+                        franchise_fields(store, franchise_value, branding)
+                        if branding
+                        else {"franchise": "unknown"}
+                    ),
                     "floor_unit": store.floor_unit,
                     "location_match": location_match(
                         query.floor_unit, store.floor_unit, store.location_level
@@ -189,7 +196,8 @@ def get_history(session: Session, query: HistoryQuery) -> ApiResponse[StoreHisto
             for b in batches
         ],
     }
-    enrich_meta(meta, branding)
+    if branding is not None:
+        enrich_meta(meta, branding)
     return ApiResponse(
         data=StoreHistory(
             total=len(result), stores=result, message=None if result else EMPTY_HISTORY_MESSAGE

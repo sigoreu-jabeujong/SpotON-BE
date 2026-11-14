@@ -7,6 +7,13 @@ from app.models.brand import (
     BrandMappingState,
     StoreBrandMatch,
 )
+from app.models.chain import (
+    ChainPublication,
+    ChainPublicationBrand,
+    ChainPublicationState,
+    ChainSourceState,
+    StoreChainClassification,
+)
 from app.models.living_population import (
     LivingGrid,
     LivingGridVersion,
@@ -21,6 +28,11 @@ from app.models.store import Store
 from app.models.store_import_batch import StoreImportBatch
 
 __all__ = [
+    "ChainPublication",
+    "ChainPublicationBrand",
+    "ChainPublicationState",
+    "ChainSourceState",
+    "StoreChainClassification",
     "Brand",
     "BrandCatalogVersion",
     "BrandMappingRun",

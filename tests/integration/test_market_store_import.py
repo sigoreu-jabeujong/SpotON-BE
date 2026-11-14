@@ -160,7 +160,7 @@ def test_cli_real_read_only_write_replay_and_safe_error(setup_stats, monkeypatch
     monkeypatch.setattr(cli, "create_db_engine", lambda _: e)
 
     def check(c):
-        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0011"
+        assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0012"
         read_only.append(c.scalar(text("SHOW transaction_read_only")))
 
     monkeypatch.setattr(cli, "check_local_database", check)
