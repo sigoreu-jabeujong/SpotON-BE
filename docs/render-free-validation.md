@@ -15,8 +15,10 @@
 | DB 생성 / 만료 | 2026-11-13 23:02:59 / **2026-12-13 23:02:59 KST** |
 | DB 크기 | #128 운영 인덱스 생성 후761,124,531 bytes, 약761MB |
 | Migration | 0011 |
-| 배포 commit | c4de3ed802c220d80fdd03040e53004e3620e515 (#118·#124 및 #128 이름 키워드 제외) |
+| 배포 commit | 05790fa7d71f6010b0174960863e4c9ceba77e25 (#118·#124·#128 및 #130 AI 문단) |
 | 자동 배포 | off, 검증한 commit을 수동 배포 |
+
+현재 BE 배포는 `dep-dbs5t55g1s2s73e8vorg`(2026-11-14 22:14:36 KST live)다. FE [PR55](https://github.com/sigoreu-jabeujong/SpotON-FE/pull/55)는 `4bf012fe231e0f3108aaf43521d6acc9b97a41d6`으로 develop에 병합돼 [공개 화면](https://spot-on-fe.vercel.app)에 반영됐다. Vercel 배포는 `GWN6ZJMbFMQVDdJ8Ns7mKxYhUF7F`다. 아래 #134는 실제 공개 브라우저 검증 결과이며, 과거 절의 배포 ID와 검증 수치는 당시 이력으로 구분한다.
 
 검증 당시 남은 자원은 Free BE1개·Free DB1개이며, 유료 컴퓨팅·별도 지속 디스크·Key Value는0개다. 카드 삭제는 사용자가 확인했고, 이후 Free BE·DB 생성이 실제 성공했다. API로 카드나 청구 내역을 조회한 것은 아니다. DB를 새로 만들면 ID·내부 호스트·접속정보·만료일이 바뀐다.
 
@@ -126,6 +128,16 @@ Render에 LLM_API_KEY·LLM_PROVIDER·LLM_MODEL이 모두 없어 실제 POST가50
 실제 `/api/risk/interpret`에 시청 인근 카페500m와 홍대 인근 한식500m를 query-only로 전송해 각각3.047/7.625초에200을 확인했다. 두 응답 모두 verification.passed=true·검사53개·불일치0·재생성false·공식/참고 문장6개이며 interpretation_method=server_sentences_model_ordering이다. 카페 재호출도2.437초에200·검증 통과였다. no-store·배포 FE의 정확한CORS 헤더·세 허용origin POST preflight200·잘못된 업종422 INVALID_PARAM·ready200을 확인했다. 응답 시간은 이번 관측값이며 보장이 아니다. FE 브라우저의 버튼/표시·실제 공급자 장애나 quota 소진 시 화면은 별도 확인 대상이다. 키 값·공급자 원문은 증빙/문서에 기록하지 않았다.
 
 ## 6. 무료 제한과 FE 연결
+
+### AI 문단 개편 공개 반영 (#134, 2026-11-14)
+
+사용자 승인에 따라 검증된 BE05790fa를 먼저 Render에 수동 배포하고 실제 API 성공을 확인한 후 FE PR55를 병합했다. 기존17개 환경값의 전체 지문이 일치하고 LLM 키·모델·CORS·풀1/SQL10초·워커1·Free·자동 배포off를 유지했다. DB/schema/인덱스·로컬.env·Vercel 환경변수를 바꾸지 않았다. API는 기존 배열을 호환용으로 유지하며 body/paragraphs/used_indicator_ids/evidence를 추가한다.
+
+공개 BE의 카페500m·2025-11 및 최신 한식500m query-only 요청은 각각3.703/10.063초에200·본문4문단·verification.passed=true·검사47개·불일치0·재생성false·prompt_version=risk-interpret-v8을 반환했다. 정확한 FE origin의CORS와no-store·ready200을 확인했다. 관측 응답 시간은 보장이 아니다.
+
+이후 Vercel의 해당 commit 배포 성공과 공개 JS 자산 변경을 확인하고 실제 공개 페이지에서 DB+Gemini 해석을 다시 생성했다. 본문4문단·기존 번호형 구역/근거 칩 없음·실제 조건 표시·ⓘ의클릭/외부 클릭/Esc/포커스 복귀,1440px 및390/360px에서가로 넘침 없음, 조건 변경 후 이전 해석 제거·자동POST 없음, 브라우저에서만 주입한503에도지표 보존을 확인했다. 공개 AI도200·검사47개·불일치0·재생성false였다. 실제 공급자 장애나quota를 강제로 소진한 검사는 아니다.
+
+공개 분석 화면의 Kakao SDK/실제 지도 타일, 이력·주변·시점·활동·Risk·월 범위는200이며 브라우저 실행 오류는0건이었다. Vercel의 기존 공개 지도 키와 허용 도메인을 그대로 사용했다. 이 검증은 지정한 주소·조건과화면 범위이며 전체 사용자 부하·절전 복귀·모든 조건의 시간 보장은 아니다. 증빙은 사용자 전용 `SpotON-private-backups/ai-narrative-20261114/release`에 보관하며 키·환경값 원문은 기록하지 않았다.
 
 Free BE는15분 무요청 후 절전하며 workspace 전체의 무료 웹750시간을 공유한다. Free DB는1GB 고정·생성30일 후 만료이고 관리형 자동 백업은 없다. [Render 무료 정책](https://render.com/docs/free)
 
