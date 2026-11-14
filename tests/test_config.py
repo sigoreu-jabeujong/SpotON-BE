@@ -107,6 +107,39 @@ def test_out_of_range_llm_limits_fail_startup(field: str, value: float) -> None:
         Settings(_env_file=None, **{field: value})
 
 
+POOL_ENV_NAMES = [
+    "DATABASE_POOL_TIMEOUT",
+    "DATABASE_POOL_SIZE",
+    "DATABASE_MAX_OVERFLOW",
+    "DATABASE_STATEMENT_TIMEOUT_MS",
+    "DATABASE_CONNECTION_BUDGET",
+    "WEB_CONCURRENCY",
+]
+
+
+def test_pool_wait_default_covers_cold_concurrent_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #120: a 2s pool wait failed queued cold requests; wait longer than one SQL limit."""
+    for name in POOL_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.database_pool_timeout == 10
+    assert settings.database_pool_timeout > settings.database_statement_timeout_ms / 1000
+    assert settings.database_pool_size == 3 and settings.database_max_overflow == 0
+
+
+def test_env_example_pool_wait_matches_code_default() -> None:
+    example = (Path(__file__).resolve().parents[1] / ".env.example").read_text(encoding="utf-8")
+    values = [
+        line.split("=", 1)[1].strip()
+        for line in example.splitlines()
+        if line.startswith("DATABASE_POOL_TIMEOUT=")
+    ]
+    assert len(values) == 1
+    assert float(values[0]) == Settings.model_fields["database_pool_timeout"].default
+
+
 def test_env_example_lists_llm_limit_settings() -> None:
     example = (Path(__file__).resolve().parents[1] / ".env.example").read_text(encoding="utf-8")
     names = {line.split("=", 1)[0] for line in example.splitlines() if "=" in line}

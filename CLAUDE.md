@@ -172,6 +172,10 @@ docs/be-system-audit.md에 기능별 상태와 실제/격리·모의/정적/기�
 
 #118 이후 `current_provenance`의 고아 검사는 `orphan_exists()`의 recursive CTE skip scan이다. 지원 점포의 서로 다른 (batch_id, source) 키만 이 인덱스로 탐색하고 `batch_id IS NULL` 지원 점포는 별도 EXISTS로 검사하며, 결과 의미는 기존 anti-join과 같다. 이 인덱스가 있어야 키 수에 비례하므로 인덱스를 제거/downgrade하면 코드도 함께 되돌린다. 배치 목록 쿼리·응답·3초 제한은 그대로이고 대량 재적재 직후 첫 확인 비용과 위 운영 절차도 그대로다. 측정·검토·검증은 docs/designs/feat118-source-batch-query-perf.md를 따른다.
 
+## DB 연결 풀 대기 (BE #120)
+
+코드 기본 `DATABASE_POOL_TIMEOUT`은 10초다. 최초 콜드 동시 조회에서 기본2초가 연결 점유보다 짧아 줄 선 요청이 QueuePool `TimeoutError` →500이 된 것을 재현·수정했다(SQL statement timeout0건). 풀 대기는 SQL 문장 제한(기본3초)과 별개이며 전체 HTTP 마감이 아니다. 초기 FE15초는 당시 기준이고 최신 FE4bf012f는 일반45초·초기60초다. 풀 크기·연결 예산·오류 코드는 그대로다. Render는 명시된 풀1/대기15초를 유지하며, 과거 풀2 후보는 후속 #122의 지연 악화로 미채택됐다. 현재/과거 구분은 docs/render-free-validation.md 7절, 설계·실제 검토와 rebase 회귀는 docs/designs/feat120-concurrent-query-500.md를 따른다.
+
 ## 생활인구 원자료 상태 진단 (BE #84)
 
 `python -m etl.living_pop.quality --population-version UUID --lat FLOAT --lng FLOAT --radius 300|500|1000`은 명시 관측 버전의 내부 진단이다. 기존 로컬 대상/head0011 검사·READ ONLY REPEATABLE READ·SQL3초를 재사용한다. 원천 EPSG5179 중심 속성→4326 geography 타원체 거리≤반경을 선택 기준으로 쓰며 polygon 중심으로 바꾸지 않는다.
