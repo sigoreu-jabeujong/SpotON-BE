@@ -146,7 +146,7 @@ def test_stores_migration_schema_and_constraints(
     database = temporary_database
     migrate(database, "head")
     with database.engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0011"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0012"
     assert_database_schema(database.engine)
 
     insert = (

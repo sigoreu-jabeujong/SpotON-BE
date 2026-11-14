@@ -1,5 +1,21 @@
 # SpotON-BE
 
+## 브랜드 판정 공개와 v2 조회 (#145)
+
+새 코드의 migration/head 가드는 **0012**입니다. 실행 중인 개발 서버와 Render의 기존0011 DB는 이번 작업에서 변경하지 않습니다. 새 코드 실행 전 격리 검증·백업을 거쳐 관리 역할로 migration을 적용하고 조회 역할에 신규5테이블 SELECT 권한을 준비합니다. trigger는 원천 변경 번호만 갱신하며 점포 업무 필드는 보존합니다.
+
+```powershell
+uv run --locked --extra dev python -m etl.chains.publication --snapshot "<기존 외부 semas.json>"
+uv run --locked --extra dev python -m etl.chains.publication --snapshot "<같은 semas.json>" --write --expected-plan "<dry-run의 expected_plan_sha256>" --expected-active "<dry-run의 active>"
+uv run --locked --extra dev python -m etl.chains.publication --snapshot "<원래 semas.json>" --activate "<저장된 generation>" --write --expected-active "<현재 generation 또는 none>"
+```
+
+기본은 읽기 전용입니다. `--expected-plan`은 unknown을 포함한 원천 전체·판정·registry·출처를 묶은 fingerprint이며 희소 판정만의 plan_sha256과 다릅니다. 포인터 경합·입력 변경·무결성 실패는 전체 rollback합니다. 최대3세대·publication 테이블/인덱스128MiB를 넘으면 저장을 거절하며 자동 삭제는 하지 않습니다. 소진공 snapshot은 새로 수집하지 않고 검증된 기존 파일을 재사용할 수 있습니다. 별도 registry는 `--registry`로 전달합니다.
+
+stores를 쓰는 원천 ETL·위치 보정·publication은 순서대로 실행합니다. 공유 원천 변경 번호 때문에 동시 writer는 대기하거나 실패할 수 있으며 실패 시 전체 트랜잭션을 rollback합니다. 원천 수집/보정 뒤 소진공 근거는 재공개로 검증합니다. 복원 DB는 ANALYZE로 조회 통계를 준비하고, trigger를 비활성화하는 복원 절차 뒤에는 관리 역할로 `ALTER TABLE public.stores ENABLE ALWAYS TRIGGER spoton_chain_source_changed`를 복구한 다음 원천 전체를 재검증해 공개합니다.
+
+`/api/v2/brands/status`, `/api/v2/stores/nearby`, `/snapshot`, `/history`, `/api/v2/market/activity`, `/api/v2/risk`를 추가합니다. 체인 추정만 조회할 때 `brand_scope=chain&brand_unknown=exclude`를 함께 전달합니다. 가맹·직영·소규모 체인을 함께 포함하되 실제 운영 형태/과거 소속/비체인 확정은 미확인입니다. 기존 v1·AI 계약을 유지하며 v2 AI는 아직 제공하지 않습니다. [설계·검수·실제 검증](docs/designs/feat145-chain-publication-api.md), [FE 계약 요청](docs/fe-chain-v2-api-request.md)을 확인합니다.
+
 ## 브랜드·체인 점포 대조 기반 (#143)
 
 이 CLI의 lifecycle stderr 로그는 기존 브랜드 작업과 `source=brands`를 공유합니다. 명령의 stdout `mode`와 실행 기록으로 구분하며, stderr source 필드만으로 두 명령을 구별할 수는 없습니다.
@@ -14,7 +30,7 @@ uv run --locked --extra dev python -m etl.chains --compare-local
 
 기존 `DATA_GO_KR_SERVICE_KEY`를 환경에서 읽고 키 인자는 받지 않습니다. 수집은 서울 I2 고정·최대251회·페이지5MiB/전체256MiB·redirect/retry0이며 기준월/전체 수/중복 ID·첫 페이지를 검증한 최소 필드 snapshot만 저장합니다. 원문 인증 URL/사업자·대표자·연락처를 저장하지 않습니다. snapshot과 선택적인 인허가 증거 계획은 다른 Git checkout을 포함해 저장소 내부 저장·기존 파일 덮어쓰기를 거절하며 완성 파일만 원자적으로 공개합니다.
 
-`--compare-local`은 `spoton_dev`/`spoton_app`·head0011 가드 뒤 READ ONLY REPEATABLE READ로 동작합니다. 기존 카탈로그가 없으면 검수 seed만 쓰며 미매칭은 unknown입니다. 별도 `--registry` 파일로 근거/검수일을 갖춘 소규모 체인을 추가할 수 있습니다. 공정위 전체 목록의 지점명 패턴을 열지는 않으며, 개별 소진공 점포의 별도 지점명·동일 주소·인허가1:1 연결을 만족할 때만 별도 추정합니다. 출력은 집계와 지문뿐이고 raw 상호/주소/인허가번호를 출력하지 않습니다. 현재 FE 개선으로 연결하려면 후속 publication/v2 공통 조회와 FE 담당 반영이 필요합니다.
+`--compare-local`은 `spoton_dev`/`spoton_app`·head0012 가드 뒤 READ ONLY REPEATABLE READ로 동작합니다. 기존 카탈로그가 없으면 검수 seed만 쓰며 미매칭은 unknown입니다. 별도 `--registry` 파일로 근거/검수일을 갖춘 소규모 체인을 추가할 수 있습니다. 공정위 전체 목록의 지점명 패턴을 열지는 않으며, 개별 소진공 점포의 별도 지점명·동일 주소·인허가1:1 연결을 만족할 때만 별도 추정합니다. 출력은 집계와 지문뿐이고 raw 상호/주소/인허가번호를 출력하지 않습니다. 현재 publication/v2 BE는 위 #145 계약을 따르며 FE 담당 반영·운영 배포는 후속입니다.
 
 ## Render 무료 검증 배포
 
@@ -24,7 +40,7 @@ uv run --locked --extra dev python -m etl.chains --compare-local
 
 서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
 
-현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해·기본 상권 활동·Risk 참고지표·검증 후보 기반 AI 해석·상담/지원기관 공통 링크 API와 인허가/상권/생활인구 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 점포 689,440건·상권 경계 1,650건·2025년 점포 통계 24,810행·추정매출 14,391행·공식 상권변화 유형 6,600행과 2026-11-07 생활인구 531,922행·공식 250m 격자 10,125개를 적재했습니다. migration `0011`가 현재 head입니다. 원천별 시점을 혼합하지 않으며 브랜드명 기반 프랜차이즈 추정·필터를 제공하며, 공식 지표 연결·조건부 매출/인구 수치와 FE 반영은 후속 작업입니다.
+현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해·기본 상권 활동·Risk 참고지표·검증 후보 기반 AI 해석·상담/지원기관 공통 링크 API와 인허가/상권/생활인구 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 점포 689,440건·상권 경계 1,650건·2025년 점포 통계 24,810행·추정매출 14,391행·공식 상권변화 유형 6,600행과 2026-11-07 생활인구 531,922행·공식 250m 격자 10,125개를 적재했습니다. migration `0012`가 현재 head입니다. 원천별 시점을 혼합하지 않으며 브랜드명 기반 프랜차이즈 추정·필터를 제공하며, 공식 지표 연결·조건부 매출/인구 수치와 FE 반영은 후속 작업입니다.
 
 ## 로컬 실행
 
@@ -223,7 +239,7 @@ uv run --locked --extra dev python -m etl.brands --snapshot "<기존 snapshot.js
 - 원문 body/base64·페이지SHA256·정규화content hash·규칙·실제 전체 수집 완료 UTC시각을 BE/FE 저장소 밖 파일에 보존합니다. 관리번호는 영문 접두사·구분자·앞0를 보존하는 문자열입니다. snapshot의 완료시각은 기존 인허가 collected_at이나 원천 갱신일과 별개입니다. 기존 파일을 덮지 않으며 실패/Ctrl+C 때 이번 생성 파일만 정리합니다. 강제 종료나 정리 실패 시 불완전 파일이 남을 수 있고 replay에서 거절합니다.
 - snapshot에는 공식 공개 대표자·사업자정보가 포함될 수 있습니다. 로컬에만 보관하고 커밋·로그·Claude/LLM 입력으로 보내지 않습니다. 정규화/후보 대조는 브랜드명·관리번호·기준년도·업종만 사용하며 법인명·대표자·사업자번호는 사용하지 않습니다. stdout/stderr는 고정 건수·상태·해시만 출력합니다.
 - replay는 원문·페이지·hash·규칙·완료시각을 다시 검증하며 키/HTTP가 필요 없습니다. 최대100,000행·페이지5MiB·raw 합계140MiB·base64 포함 snapshot200MiB입니다. hash 일치는 공급기관 서명이나 원천 의미 검증이 아닙니다.
-- `--compare-local`만 기존 로컬대상/head0011 검사를 통과한 DB에 READ ONLY REPEATABLE READ·SQL60초/잠금5초로 연결합니다. 지원5업종·삭제없음·검토대기아님 점포를 스트리밍 대조하며 좌표/날짜/영업 상태로 한정하지 않습니다. 현재 지도/과거 조회의 실제 점포 수와 다른 모집단입니다. 점포 상호는 외부로 전송하지 않습니다.
+- `--compare-local`만 기존 로컬대상/head0012 검사를 통과한 DB에 READ ONLY REPEATABLE READ·SQL60초/잠금5초로 연결합니다. 지원5업종·삭제없음·검토대기아님 점포를 스트리밍 대조하며 좌표/날짜/영업 상태로 한정하지 않습니다. 현재 지도/과거 조회의 실제 점포 수와 다른 모집단입니다. 점포 상호는 외부로 전송하지 않습니다.
 - NFKC/casefold/공백만 정규화하고 지점명·구두점 제거/부분일치/유사도 판정은 하지 않습니다. 전체 업종 목록 기준 유일한 외식 이름이 정확히 일치해도 `exact_name_candidate`일 뿐입니다. 기존판정보존→상호결측→약한이름→반복브랜드번호→동명모호→비외식→정확후보→미일치 순의 배타건수이며 합계는 total과 같습니다. 3자 미만/숫자만인 이름은 약한 이름입니다. 미일치를 비프랜차이즈 수로 사용하지 않습니다.
 - 원천은 `(기준년,브랜드관리번호,가맹본부관리번호)` 행으로 보존합니다. 같은 브랜드번호·다른 본부의 모든 행을 유지하며 그 번호와 관련된 이름은 유일해도 `repeated_brand_id`로 격리합니다. 원천 반복의 이유나 브랜드 소속은 추론하지 않습니다. v2 content hash/첫페이지 재확인은 복합키 순서이며 이전 규칙 snapshot은 거절합니다. `rows`는 원천 행 수, `unique_brand_ids/repeated_brand_ids/repeated_rows`는 번호·행 건수입니다. `ambiguous_names`는 정규화명이 복수 원천 행에 있는 그룹 수로 반복번호 행도 포함할 수 있습니다. 이 요약들을 합산해 실제 브랜드/점포 수로 쓰지 않습니다.
 - 성공0·고정 JSON오류1·인자오류2·Ctrl+C130입니다. `request_count`는 성공한 실행의 HTTP시도 수이며 replay는0입니다. 원천 파일 저장 뒤 DB 대조가 실패하면 exit1·`snapshot_saved=true`·stage=prepare를 출력하고 파일을 보존하므로 `--snapshot`으로 재실행합니다. `snapshot_saved`는 이번 실행이 완료 파일을 저장했는지 뜻합니다.
@@ -602,7 +618,7 @@ uv run --locked --extra dev python -m etl.localdata.maintenance
 uv run --locked --extra dev python -m etl.localdata.maintenance --execute
 ```
 
-loopback의 `spoton_dev`·비슈퍼유저 `spoton_app`·head0011과 정확한 `public.stores` 소유자만 허용합니다. 실행 SQL은 `VACUUM (ANALYZE, TRUNCATE FALSE) public.stores`로 고정하며 FULL·테이블명/URL 옵션은 제공하지 않습니다. 잠금 대기5초·명령60초를 적용하고, 후속 출처 검증은 기존 SQL별 제한(기본3초)을 사용합니다.
+loopback의 `spoton_dev`·비슈퍼유저 `spoton_app`·head0012과 정확한 `public.stores` 소유자만 허용합니다. 실행 SQL은 `VACUUM (ANALYZE, TRUNCATE FALSE) public.stores`로 고정하며 FULL·테이블명/URL 옵션은 제공하지 않습니다. 잠금 대기5초·명령60초를 적용하고, 후속 출처 검증은 기존 SQL별 제한(기본3초)을 사용합니다.
 
 결과는 stdout JSON 한 건입니다. 정상0·실패1·Ctrl+C130이며 `--help`는 도움말/0입니다. 오류는 `localdata_maintenance:` 뒤 고정 코드만 반환합니다. `vacuum_completed=true`는 명령이 정상 반환했다는 뜻이고 `provenance_checked=true`는 그 뒤 출처 검사가 통과했다는 뜻입니다. 기본 dry-run은 두 값이 false입니다. VACUUM 후 검증이 실패하면 첫 값은 true인 채 실패로 종료합니다. 실패/중단 시 일부 물리 정리가 반영됐을 수 있으며 앞선 ETL 커밋을 되돌리지 않습니다.
 
@@ -624,7 +640,7 @@ ORDER BY observation_date, version_id;
 uv run --locked --extra dev python -m etl.living_pop.quality --population-version <UUID> --lat 37.5665 --lng 126.9780 --radius 500
 ```
 
-기존 로컬 `spoton_dev`·앱 계정·head0011 검사를 통과한 DB만 READ ONLY REPEATABLE READ로 조회합니다. SQL별3초 제한을 유지하며 데이터나 결과 파일을 쓰지 않습니다. 성공은 stdout JSON 한 건/종료코드0, 실패는 `living_pop_quality:arguments|version|counts|configuration|database|operation_failed` 중 고정 오류 코드/종료코드1입니다. 입력 좌표·격자/행정동 코드·인구 값·DB URL은 출력하지 않습니다.
+기존 로컬 `spoton_dev`·앱 계정·head0012 검사를 통과한 DB만 READ ONLY REPEATABLE READ로 조회합니다. SQL별3초 제한을 유지하며 데이터나 결과 파일을 쓰지 않습니다. 성공은 stdout JSON 한 건/종료코드0, 실패는 `living_pop_quality:arguments|version|counts|configuration|database|operation_failed` 중 고정 오류 코드/종료코드1입니다. 입력 좌표·격자/행정동 코드·인구 값·DB URL은 출력하지 않습니다.
 
 원천 중심점 속성(EPSG5179)을 기준으로 타원체 거리≤반경인 격자를 선택합니다. 72개 원천·시각 칸에서 `observed_zero`, `observed_nonzero`, `suppressed`, `missing` 행과 행이 있는/없는 격자를 구분합니다. 미좌표 행은 버전 전체 통계로만 별도 표시합니다. 저장 건수와 metadata를 대조하지만 content hash를 재검증하는 도구는 아닙니다.
 

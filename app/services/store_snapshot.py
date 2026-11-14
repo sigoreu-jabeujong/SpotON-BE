@@ -9,14 +9,19 @@ from app.core.errors import AppError
 from app.db.dependencies import NO_STORE
 from app.schemas.common import ApiResponse, ErrorCode
 from app.schemas.snapshot import SnapshotQuery, SnapshotStore, StoreSnapshot
+from app.services.chains import ChainSelection
 from app.services.spatial_stores import get_spatial_stores
 
 RULE_VERSION = "store-snapshot-latest-status-v1"
 
 
-def get_snapshot(session: Session, query: SnapshotQuery) -> ApiResponse[StoreSnapshot]:
+def get_snapshot(
+    session: Session, query: SnapshotQuery, *, chain: ChainSelection | None = None
+) -> ApiResponse[StoreSnapshot]:
     try:
-        selected = get_spatial_stores(session, query, rule_version=RULE_VERSION)
+        selected = get_spatial_stores(
+            session, query, rule_version=RULE_VERSION, **({"chain": chain} if chain else {})
+        )
         stores = [
             SnapshotStore.model_validate(marker.model_dump(include=set(SnapshotStore.model_fields)))
             for marker in selected.markers

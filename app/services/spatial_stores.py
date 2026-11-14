@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import and_, cast, func, or_, select
+from sqlalchemy import and_, cast, func, literal, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -15,6 +15,7 @@ from app.models import Store
 from app.models.store import STORE_GEOGRAPHY
 from app.schemas.common import ApiMeta, ErrorCode
 from app.schemas.nearby import NearbyMarker, NearbyQuery
+from app.services.chains import ChainSelection
 from app.services.franchise import (
     brand_context,
     effective_franchise,
@@ -50,7 +51,9 @@ def effective_date(reference: date, minimum: date | None, month: str | None) -> 
     )
 
 
-def attribute_filters(query: NearbyQuery) -> list[ColumnElement[bool]]:
+def attribute_filters(
+    query: NearbyQuery, chain: ChainSelection | None = None
+) -> list[ColumnElement[bool]]:
     """Zero area is unknown, independently from the franchise unknown toggle."""
     area_ranges = {
         "all": Store.area_m2 > 0,
@@ -62,7 +65,7 @@ def attribute_filters(query: NearbyQuery) -> list[ColumnElement[bool]]:
     area = area_ranges[query.area]
     if query.include_unknown_area:
         area = or_(area, Store.area_m2.is_(None), Store.area_m2 == 0)
-    return [area, franchise_filter(query)]
+    return [area, franchise_filter(query) if chain is None else chain.predicate()]
 
 
 @dataclass(frozen=True)
@@ -73,14 +76,16 @@ class SpatialStores:
     meta: ApiMeta
 
 
-def get_spatial_stores(session: Session, query: NearbyQuery, *, rule_version: str) -> SpatialStores:
+def get_spatial_stores(
+    session: Session, query: NearbyQuery, *, rule_version: str, chain: ChainSelection | None = None
+) -> SpatialStores:
     batches, reference = current_provenance(session)
     cohort = temporal_cohort(query, reference)
     minimum = session.scalar(select(func.min(Store.open_date)).where(*cohort))
     target = effective_date(reference, minimum, query.as_of)
     conditions = [
         *cohort,
-        *attribute_filters(query),
+        *attribute_filters(query, chain),
         Store.open_date <= target,
         or_(Store.close_date.is_(None), Store.close_date > target),
     ]
@@ -99,7 +104,7 @@ def get_spatial_stores(session: Session, query: NearbyQuery, *, rule_version: st
             distance.label("distance_m"),
             func.ST_Y(Store.geom),
             func.ST_X(Store.geom),
-            effective_franchise(),
+            effective_franchise() if chain is None else literal(None),
         )
         .where(
             *conditions,
@@ -111,7 +116,7 @@ def get_spatial_stores(session: Session, query: NearbyQuery, *, rule_version: st
     ).all()
     batch_map = {batch.batch_id: batch for batch in batches}
     markers: list[NearbyMarker] = []
-    branding = brand_context(session)
+    branding = brand_context(session) if chain is None else None
     for store, raw_distance, lat, lng, franchise_value in rows:
         months, reason, opened, closed = operating_period(
             store, reference, batch_map.get(store.batch_id)
@@ -136,7 +141,11 @@ def get_spatial_stores(session: Session, query: NearbyQuery, *, rule_version: st
                     "current_status": store.status
                     if store.status in {"open", "closed"}
                     else "other",
-                    **franchise_fields(store, franchise_value, branding),
+                    **(
+                        franchise_fields(store, franchise_value, branding)
+                        if branding
+                        else {"franchise": "unknown"}
+                    ),
                     "area_m2": float(store.area_m2)
                     if store.area_m2 is not None and store.area_m2 > 0
                     else None,
@@ -151,5 +160,6 @@ def get_spatial_stores(session: Session, query: NearbyQuery, *, rule_version: st
         "excluded_no_coord_scope": NO_COORD_SCOPE,
         "operating_period_basis": "latest_data",
     }
-    enrich_meta(meta, branding)
+    if branding is not None:
+        enrich_meta(meta, branding)
     return SpatialStores(as_of=target, markers=markers, excluded_no_coord=excluded, meta=meta)
