@@ -6,19 +6,19 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.geocode import Category
+from app.schemas.market_activity import YEARLY_TREND_START_YEAR
 from app.schemas.risk import IndicatorId
 from app.schemas.stores import SubCategory
 
 IndicatorReason = Literal[
     "boundary_period_not_verified",
-    "official_values_not_collected",
     "population_aggregation_and_grid_time_unverified",
     "zero_denominator",
     "insufficient_sample",
 ]
 ComparisonReason = Literal["not_applicable", "zero_denominator", "insufficient_sample"]
 Space = Literal["radius_300m", "radius_500m", "radius_1000m", "market", "grid"]
-Source = Literal["R1", "R2", "R4", "R5", "R6"]
+Source = Literal["R2", "R4", "R5", "R6"]
 Limit = Literal[
     "license_records_not_business_outcomes",
     "ownership_transfer_not_separated",
@@ -58,7 +58,7 @@ class ContextIndicator(ContextModel):
         pattern=r"^(?:\d{4}-\d{2}-\d{2}|\(\d{4}-\d{2}-\d{2}, \d{4}-\d{2}-\d{2}\])$"
     )
     source: tuple[Source, ...]
-    status: Literal["fact", "pending", "link_only"]
+    status: Literal["fact", "pending"]
     reason: IndicatorReason | None
 
 
@@ -117,7 +117,7 @@ class ContextActivityMethodology(ContextModel):
 
 
 class ContextYear(ContextModel):
-    year: int = Field(ge=1960, le=9999)
+    year: int = Field(ge=YEARLY_TREND_START_YEAR, le=9999)
     opened: int = Field(ge=0)
     closed: int = Field(ge=0)
     start: date

@@ -305,8 +305,13 @@ def assert_consistent(result):
     assert all(m["collected_at"] is None and m["source"] == ["R5", "R6"] for m in metas)
     assert a["sales"] is a["living_pop"] is None
     assert a["flags"]["missing"] == ["sales", "living_pop"]
-    official = next(i for i in r["indicators"] if i["id"] == "official_closure_rate")
-    assert official["status"] == "pending" and official["value"] is None
+    assert [i["id"] for i in r["indicators"][:4]] == [
+        "closure_rate_12m",
+        "survival_rate_1y",
+        "survival_rate_3y",
+        "competitor_count",
+    ]
+    assert not {"official_closure_rate", "official_risk"} & {i["id"] for i in r["indicators"]}
     return n["count"]
 
 

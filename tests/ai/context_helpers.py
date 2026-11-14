@@ -48,11 +48,7 @@ def response(q=None, local=None, seoul=None):
         survival_3_den=10,
     )
     refs = reference_indicators(local, seoul, DATE, q.radius)
-    indicators = [
-        pending_indicator("official_closure_rate", "boundary_period_not_verified"),
-        pending_indicator("official_risk", "official_values_not_collected"),
-        *refs,
-    ]
+    indicators = [*refs]
     if "market_change" in q.include:
         indicators.append(pending_indicator("market_change", "boundary_period_not_verified"))
     if "day_night_ratio" in q.include:
@@ -119,7 +115,7 @@ def response(q=None, local=None, seoul=None):
             "stores_batch_ids": [str(UUID(int=66))],
             "trdar_quarter": None,
             "map_version": "synthetic-map",
-            "rule_version": "risk-reference-fixed-anniversary-v1",
+            "rule_version": "risk-reference-fixed-anniversary-v2",
             "name_exclusion_version": "store-name-keywords-v1",
         },
     }
@@ -158,7 +154,7 @@ def activity_response(risk, q=None, *, opened=3, months=41):
         flags=ActivityFlags(missing=[]),
     )
     version = copy.deepcopy(risk.meta["data_version"])
-    version["rule_version"] = "market-activity-license-ytd-v1"
+    version["rule_version"] = "market-activity-license-ytd-v2"
     meta = {
         "source": ["R5", "R6"],
         "data_updated_at": risk.meta["data_updated_at"],

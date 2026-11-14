@@ -41,7 +41,7 @@ from app.schemas.franchise import (
     BrandDataVersion,
     EstimatedClassification,
 )
-from app.schemas.market_activity import ActivityQuery, MarketActivity
+from app.schemas.market_activity import YEARLY_TREND_START_YEAR, ActivityQuery, MarketActivity
 from app.schemas.risk import Risk, RiskIndicator, RiskQuery
 from app.schemas.stores import HistoryQuery, StoreHistory
 from app.services.market_activity import RULE_VERSION as ACTIVITY_RULE_VERSION
@@ -69,7 +69,7 @@ class _DataVersion(ContextModel):
     stores_batch_ids: tuple[UUID, ...] = Field(min_length=1)
     trdar_quarter: None
     map_version: str | None
-    rule_version: Literal["risk-reference-fixed-anniversary-v1"]
+    rule_version: Literal["risk-reference-fixed-anniversary-v2"]
     name_exclusion_version: Literal["store-name-keywords-v1"]
     brand_mapping: BrandDataVersion | None = None
 
@@ -361,7 +361,8 @@ def _activity(
         expected = {"start": f"{row.year}-01-01", "end": end.isoformat()}
         periods = meta.get("yearly_periods")
         if (
-            row.year > risk.query.as_of.year
+            row.year < YEARLY_TREND_START_YEAR
+            or row.year > risk.query.as_of.year
             or meta.get("yearly_comparison_basis") != "same_month_day_ytd"
             or not isinstance(periods, dict)
             or periods.get(str(row.year)) != expected

@@ -44,8 +44,7 @@ from app.services.spatial_stores import (
 from app.services.store_cohort import current_provenance, provenance_meta, temporal_cohort
 from app.services.store_scope import NAME_EXCLUSION_LIMITATION
 
-RULE_VERSION = "risk-reference-fixed-anniversary-v1"
-OFFICIAL_RISK_URL = "https://golmok.seoul.go.kr/stateDistrict.do"
+RULE_VERSION = "risk-reference-fixed-anniversary-v2"
 INCLUDE_ORDER: tuple[RiskInclude, ...] = ("market_change", "day_night_ratio")
 SURVIVAL_IDS: tuple[tuple[int, IndicatorId], ...] = (
     (1, "survival_rate_1y"),
@@ -185,18 +184,16 @@ def aggregate_counts(
     return ReferenceCounts.model_validate(dict(row))
 
 
-def pending_indicator(identifier: IndicatorId, reason: str) -> RiskIndicator:
-    official = identifier in {"official_closure_rate", "official_risk", "market_change"}
+def pending_indicator(identifier: RiskInclude, reason: str) -> RiskIndicator:
+    official = identifier == "market_change"
     return RiskIndicator(
         id=identifier,
         type="official" if official else "reference",
         value=None,
         space="market" if official else "grid",
-        source=["R1"] if identifier == "official_risk" else ["R2"] if official else ["R4"],
-        status="link_only" if identifier == "official_risk" else "pending",
+        source=["R2"] if official else ["R4"],
+        status="pending",
         reason=reason,
-        link=OFFICIAL_RISK_URL if identifier == "official_risk" else None,
-        source_url=OFFICIAL_RISK_URL if identifier == "official_risk" else None,
     )
 
 
@@ -262,11 +259,7 @@ def _get_risk(session: Session, query: RiskQuery, settings: Settings) -> ApiResp
         else "boundary_period_not_verified",
         spatial_candidate=candidate,
     )
-    indicators = [
-        pending_indicator("official_closure_rate", "boundary_period_not_verified"),
-        pending_indicator("official_risk", "official_values_not_collected"),
-        *refs,
-    ]
+    indicators = [*refs]
     for identifier in INCLUDE_ORDER:
         if identifier in query.include:
             indicators.append(
@@ -303,8 +296,7 @@ def _get_risk(session: Session, query: RiskQuery, settings: Settings) -> ApiResp
             missing=[
                 r.id
                 for r in indicators
-                if r.status == "pending"
-                and r.id in {"official_closure_rate", "market_change", "day_night_ratio"}
+                if r.status == "pending" and r.id in {"market_change", "day_night_ratio"}
             ],
         ),
     )

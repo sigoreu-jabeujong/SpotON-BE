@@ -15,6 +15,7 @@ from app.models import Store
 from app.models.store import STORE_GEOGRAPHY
 from app.schemas.common import ApiMeta, ApiResponse, ErrorCode
 from app.schemas.market_activity import (
+    YEARLY_TREND_START_YEAR,
     ActivityFlags,
     ActivityInclude,
     ActivityQuery,
@@ -34,7 +35,7 @@ from app.services.spatial_stores import (
 from app.services.store_cohort import current_provenance, provenance_meta, temporal_cohort
 from app.services.store_history import complete_months
 
-RULE_VERSION = "market-activity-license-ytd-v1"
+RULE_VERSION = "market-activity-license-ytd-v2"
 INCLUDE_ORDER: tuple[ActivityInclude, ...] = ("sales", "living_pop")
 RESTAURANT_ORDER: tuple[SubCategory, ...] = ("korean", "chinese", "japanese", "western")
 PENDING_REASONS = {
@@ -90,7 +91,7 @@ def aggregate_activity(
         recent_opened += lower < row.open_date <= target
         recent_closed += row.close_date is not None and lower < row.close_date <= target
         for event, counter in ((row.open_date, opened), (row.close_date, closed)):
-            if event is not None and event <= target:
+            if event is not None and event <= target and event.year >= YEARLY_TREND_START_YEAR:
                 years.add(event.year)
                 if event <= year_cutoff(target, event.year):
                     counter[event.year] += 1

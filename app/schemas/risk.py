@@ -10,8 +10,6 @@ MIN_CLOSURE_SAMPLE = 10
 MIN_SURVIVAL_SAMPLE = 5
 RiskInclude = Literal["market_change", "day_night_ratio"]
 IndicatorId = Literal[
-    "official_closure_rate",
-    "official_risk",
     "closure_rate_12m",
     "survival_rate_1y",
     "survival_rate_3y",
@@ -20,8 +18,6 @@ IndicatorId = Literal[
     "day_night_ratio",
 ]
 REQUIRED_IDS = (
-    "official_closure_rate",
-    "official_risk",
     "closure_rate_12m",
     "survival_rate_1y",
     "survival_rate_3y",
@@ -89,42 +85,29 @@ class RiskIndicator(RiskModel):
     space: str
     period: str | None = None
     source: list[str]
-    source_url: str | None = None
-    status: Literal["fact", "pending", "link_only"]
+    source_url: None = None
+    status: Literal["fact", "pending"]
     reason: str | None
-    link: str | None = None
+    link: None = None
     copy_text: None = None
 
     @model_validator(mode="after")
     def consistent_value(self) -> Self:
-        official = self.id in {"official_closure_rate", "official_risk", "market_change"}
+        official = self.id == "market_change"
         if (self.type == "official") != official:
             raise ValueError("invalid indicator type")
         expected_source = (
-            ["R1"]
-            if self.id == "official_risk"
-            else ["R2"]
-            if official
-            else ["R4"]
-            if self.id == "day_night_ratio"
-            else ["R5", "R6"]
+            ["R2"] if official else ["R4"] if self.id == "day_night_ratio" else ["R5", "R6"]
         )
         if self.source != expected_source:
             raise ValueError("invalid indicator source")
-        if (
-            self.id in {"official_closure_rate", "market_change", "day_night_ratio"}
-            and self.status != "pending"
-        ):
+        if self.id in {"market_change", "day_night_ratio"} and self.status != "pending":
             raise ValueError("unverified data cannot be activated")
         if self.status == "fact":
             if self.value is None or self.reason is not None:
                 raise ValueError("fact requires a value")
         elif self.value is not None or not self.reason or self.numerator is not None:
             raise ValueError("pending indicator cannot have a value")
-        if (self.status == "link_only") != (self.id == "official_risk"):
-            raise ValueError("link_only is reserved for official risk")
-        if (self.link is not None) != (self.status == "link_only"):
-            raise ValueError("invalid link")
         for num, den in (
             (self.numerator, self.denominator),
             (self.seoul_numerator, self.seoul_denominator),
@@ -210,8 +193,7 @@ class Risk(RiskModel):
         expected_missing = [
             r.id
             for r in self.indicators
-            if r.status == "pending"
-            and r.id in {"official_closure_rate", "market_change", "day_night_ratio"}
+            if r.status == "pending" and r.id in {"market_change", "day_night_ratio"}
         ]
         if self.flags.missing != expected_missing:
             raise ValueError("invalid missing flags")
