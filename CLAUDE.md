@@ -14,9 +14,9 @@ Docker app.runtime·PORT10000·비root 실행이며 시작 시 migration/ETL은 
 
 Render 전용 MD는 [현재 구성·복원·만료 안내](docs/render-free-validation.md)와 [FE 연결 안내](docs/fe-render-validation-api-request.md) 두 개로 관리한다. DB 만료일은2026-12-13이다. 설정을 갱신할 때 두 문서와 이 기준의 불일치를 함께 정리한다.
 
-2026-11-14 #122에서 실제 Claude Code 검토2회와 Free DB/동시 API 비교 후, 풀2 후보는 최초 지연 악화로1로 복구하고 검증된8958ba7(#118 출처 고아 검사 최적화)만 별도로 배포했다. 현재 live는dep-dbs37aek1f9s73858g6g이며 SQL10초·풀1/대기15초·워커1·예산8과 키/DB/인덱스는 그대로다. 최종 동시5 GET×6묶음은30건200·본문 동일, 최초/반복 중앙값9.688/6.110초다. [설계·실제 검토·한계](docs/designs/feat122-fe-feedback.md)를 따른다. 원본 업태가 한식인 치킨/주점 상호의 실제 업종 보정·AI 활성화·FE CI 테스트 추가는 후속이며 FE를 직접 수정하지 않는다. 전체500·절전 복귀 해결로 확대하지 않는다.
+2026-11-14 #122에서 실제 Claude Code 검토2회와 Free DB/동시 API 비교 후, 풀2 후보는 최초 지연 악화로1로 복구하고 검증된8958ba7(#118 출처 고아 검사 최적화)만 별도로 배포했다. 당시 live는dep-dbs37aek1f9s73858g6g이며 SQL10초·풀1/대기15초·워커1·예산8과 키/DB/인덱스는 그대로였다. 당시 동시5 GET×6묶음은30건200·본문 동일, 최초/반복 중앙값9.688/6.110초다. [설계·실제 검토·한계](docs/designs/feat122-fe-feedback.md)를 따른다. 원본 업태가 한식인 치킨/주점 상호의 실제 업종 보정·AI 활성화는 후속이며 FE를 직접 수정하지 않는다. 전체500·절전 복귀 해결로 확대하지 않는다.
 
-#124의 개발 코드는 ready 단일 검사의 실행별Future 결과를 동시 요청자가 HTTP2.5초 안에서 공유한다. SQL750ms·TTL10/1초·별도 연결 최대1·실패500/no-store·닫힘/취소 안전성을 유지하며, 미완료/만료 성공을 정상으로 만들지 않는다. ready 고정 경로와 원문 없는readiness_probe 사유 로그를 추가했다. [설계·실제 Claude 검토·검증](docs/designs/feat124-readiness-followup.md)을 따르고 운영 배포 완료는 Render 안내의 실제commit/live 검증으로 구분한다. FE PR52의업태안내·PR53의CI98개 통과는 담당자 반영을 확인했다. 실제 업종 보정·AI 활성화는 여전히 후속이다.
+#124는 ready 단일 검사의 실행별 Future 결과를 동시 요청자가 HTTP2.5초 안에서 공유한다. SQL750ms·TTL10/1초·별도 연결 최대1·실패500/no-store·닫힘/취소 안전성을 유지하며, 미완료/만료 성공을 정상으로 만들지 않는다. ready 고정 경로와 원문 없는 readiness_probe 사유 로그를 추가했다. 현재 live는7d4846c/dep-dbs3norl550s73fbvskg이며 모든 환경값·풀1·DB/인덱스는 보존했다. ready24건/업무30건200·본문 동등성·CORS/AI503·검증 구간 HTTP500로그0을 확인했다. [설계·실제 Claude 검토2회·검증](docs/designs/feat124-readiness-followup.md)을 따른다. FE PR52의 업태 안내·PR53의 CI98개 통과는 담당자 반영을 확인했다. 실제 업종 보정·AI 활성화는 여전히 후속이다.
 
 ## 상세 위치 파서 지명 오인 수정 (BE #102)
 

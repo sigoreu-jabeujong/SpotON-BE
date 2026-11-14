@@ -88,7 +88,7 @@ FE에는 최신 전달MD의브라우저 재검증·CI test 단계 추가 요청�
 
 비비큐치킨 명동스타점↔BBQ 명동스타점은치킨 분류·API거리0m였으나명칭이 다르고, 인생주점은검색결과가 없어추정하지 않는다. 같은좌표·비슷한상호나지도분류는동일인허가/과거업종의확정근거가아니다. [Kakao 공식 Local API](https://developers.kakao.com/docs/ko/local/dev-guide)의place_name/category_name/distance/place_url을근거후보로사용한다. API분류를인허가공식분류로바꾸지않는다.
 
-저장소 밖 검토CSV/JSON에source+license_no·원래상호/업태·지도후보명/분류/거리/링크·확인시각·unverified를보관했다. 전화번호/키는저장하지않았다. 최종보정의최소조건은 ①정확한제보18개키/조회조건 ②주소/위치·명칭·인허가의동일성검토 ③제외판정근거와확인일/검토자/버전 ④현재분류보정과과거업종보장의구분 ⑤재적재시원문지문변경재검토 ⑥API목록/전체집계/캐시·메타의일관성검증이다. 지금은실DB UPDATE·자동재분류·FE목록숨김을하지않는다.
+저장소 밖 검토CSV/JSON에 source+license_no·원래상호/업태·지도후보명/분류/거리/링크·확인시각·unverified를 보관했다. 전화번호/키는 저장하지 않았다. 최종 보정의 최소 조건은 ①검토 대상의 정확한 키/조회 조건(현재 재현 가능한13개 범위) ②주소/위치·명칭·인허가의 동일성 검토 ③제외 판정 근거와 확인일/검토자/버전 ④현재 분류 보정과 과거 업종 보장의 구분 ⑤재적재 시 원문 지문 변경 재검토 ⑥API 목록/전체 집계/캐시·메타의 일관성 검증이다. 지금은 실DB UPDATE·자동 재분류·FE 목록 숨김을 하지 않는다.
 
 ### 8.3 Claude Code 구현 재검토
 
@@ -125,4 +125,17 @@ FE에는 최신 전달MD의브라우저 재검증·CI test 단계 추가 요청�
 
 ### 8.5 배포 후 검증
 
-수동 배포·실측 후 기록한다.
+- PR125의 일반/격리·CodeQL 검사가 모두 성공한 뒤 develop에 Squash 병합했다. 병합commit7d4846c61291897993a1146e16945c06ca1255b1의 app/etl/migrations/tests/의존성/Docker 실행 코드가 검증한 head697d4a3과 같음을 git diff로 확인하고 수동 배포했다.
+- dep-dbs3norl550s73fbvskg가2026-11-14 19:46:35 KST live가 됐다. 배포 전후 서비스·Free·자동 배포off·healthCheckPath=/api/ready·전체 환경변수/키 목록 해시가 일치한다. 풀1/overflow0/대기15초·SQL10초·워커1·예산8·expected revision0011을 보존했다. DB/schema/인덱스·로컬.env·FE를 변경하지 않았다.
+- 실제 Render에서 ready6동시 초기/최종 각1회와 업무묶음마다ready2동시를 실행해 ready24건 전부200이었다. 업무5 GET×300/500/1000m×최초/반복30건도 전부200·기존8958ba7의 동일 조건 전체 JSON SHA256과 같았다. 업무묶음 최대 시간 중앙값은 최초8.428초·반복5.520초이며 추가 ready 요청이 있는 이번 관측이다. 성능 보장으로 사용하지 않는다.
+- health200·세 허용 origin GET/POST preflight6건/실제GET3건·미허용/유사domain/localhost5181 차단·AI503 AI_UNAVAILABLE을 확인했다. 실모델 호출은0이다.
+- 검증 시작/종료 UTC 구간을 고정하고 Render 로그를100행씩 nextStartTime/nextEndTime으로 끝까지 수집했다. 서버 ready API 이벤트28건(플랫폼 호출 포함)·readiness_probe4회 모두ok·해당 구간 HTTP500 이벤트0을 확인했다. ready는 이제 정확한 경로로 기록되고 실제 검사 이벤트는 요청 수와 구분된다. 이 결과로 과거 두unmatched500의 경로/원인을 사후 확정하지 않는다.
+- 느린 정상 검사 고정 TestClient 재현도 검사 실행1회·두 요청 모두200·readiness_probe1개/ready 경로 API로그2개를 확인했다. 기존 같은 재현은200/500·두unmatched였다. 실제 DB의 장애/권한 변경은 강제하지 않았고 실패/취소/닫힘은 격리/모의 검증과 구분한다.
+- 운영 문서 두 개·CLAUDE.md·통합 작업계획을 현재 배포와 일치시켰다. 이번 후속 문서 PR 병합으로 배포 commit을 다시 바꾸지 않는다(자동 배포off).
+
+### 8.6 추가 명단 미확보에 따른 범위 확정·증빙
+
+- 사용자가 추가18개 명단이 없다고 답했다. 이를 현재13개 후보 전체의 조사 중단 조건으로 삼지 않고, 직접 재현한13개를 먼저 검토한다. 제보18개 전체가 해결됐다고 표시하지 않는다.
+- 현재 Render의13개 원본 행을 source+license_no로 다시 읽고 상호/한식 업태/review/deleted 조건이 같음을 확인했다. 원본 도로명/지번 주소·배치와 지문을 검토CSV에 추가해 지도 후보 주소와 대조할 수 있게 했다. 문자열 검사의 Windows stdin 인코딩 오류는 Unicode escape로 수정해 재확인했으며 DB 변경은 없었다.
+- 자동 제외0·실제 업종 보정 미완료·AI 비활성을 유지한다. FE의 업태 안내와 CI는 담당자 반영 완료로 갱신했으며 실제 배포 화면 수용 검사는 FE 요청으로 남긴다. 전체500·대량 부하·실제15분 절전 복귀 완료로 확대하지 않는다.
+- 설계/Claude 검토JSON2개·전후 재현·격리JUnit·배포/환경값 보존·실측/로그·13개 검토CSV와 근거는 저장소 밖 `%USERPROFILE%\SpotON-private-backups\render-free-20261113\readiness-followup-20261114\`에 보관한다. 원본 점포 키/주소·키/URI·예외 원문은 커밋하지 않는다.
