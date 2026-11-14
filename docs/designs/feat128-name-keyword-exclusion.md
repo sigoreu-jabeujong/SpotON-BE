@@ -166,3 +166,17 @@ Risk 캐시 키는 정책 버전을 포함한다. AI의 엄격한 내부 _DataVe
 실제 Claude Code 2차는 exit0/is_error=false, 18턴, 권한 거절0건으로 완료했다. D1/E1을 반영해 빈/비어 있지 않은 AI 이력 문장과 내부 history basis를 분석 대상 기준으로 맞췄다. E3/E4도 반영해 v1 패턴 SHA256 golden·AI Literal 동기화·키워드 문자 범위를 테스트한다. E5의 분해 한글은 normalize 호출로 명시했다. E2의 새 AI 결과 항목은 추가하지 않는다(이미 메타와 안전 문맥에 한계가 있고 기존 결과 구조를 유지한다). E6은 실제 Free 계획으로 검증하며 E7은 이력 목록과 같은 분석 범위를 유지한다.
 
 검토 수정 후 일반1,718개, ruff/format·mypy159 files가 통과했다. 격리 전체270개와 검토 전후 관련26개 통과, 추가 문구 변경의 관련 회귀를 다시 확인한다. 실제 Free의 기존 응답은 한식454곳이고 고정 키워드로20곳이 제외될 것으로 사전 대조했다. #127의 LLM 설정·기존 live/전체 환경 hash를 기록했다. 전체 행의 JSON/text 직렬화 감사는 owner의90초 제한으로 취소되어 네이티브 composite hash(geom은 EWKB)로 바꿔689,440행 감사 기준을 확보했다. 앱의 SQL10초·풀 설정은 바꾸지 않았다.
+
+
+## 10. 운영 적용과 최종 검증
+
+- 실제 Claude Code 설계/구현 검토2회 후 D1/E1/E3/E4를 반영했다. 로컬 일반1,718개·격리 전체270개·관련40개·정책39개, ruff/format·mypy159 files 통과. PR131의 push/PR CI·CodeQL 성공과 develop c4de3ed 병합을 확인했다.
+- 13개 기존 검토CSV의 source/license_no가 baseline454에 모두 있었고 이름 필터로13개 모두 빠지는 것을 독립 확인했다. 전체 제외20개·남는434개 marker가 오라클과 정확히 같았다. 실제 업종의 정답 판정이나 제보18개 전체 확정은 아니다.
+- 인덱스 생성 전 DB721,131,187 bytes/최종·일시 여유 gate 통과, 생성 후761,124,531 bytes/새 인덱스39,993,344 bytes. 기존 cover/provenance 정의·유효성·크기와689,440행 전체 composite hash(두 seed·geom EWKB)를 보존했고 기존 앱10개 전체 응답도 같았다. 앱/migration0011 불변이며 새 객체는 Free 운영 인덱스다.
+- Free 실제 reader 후보10개 GET200, D/배치 불변·cafe data 동등(교차 업종 이력 제외). 실제 서울 Risk의 direct/generic 계획은 새 Index Only Scan, Heap Fetches0·name heap Filter 없음으로 각각1.798/2.683초였다. 작은 격리 적격성 결과를 실제 Free에서도 확인했다.
+- 검증한 실행 트리와 병합 commit의 app/etl/tests/migrations/Docker/lock/SQL 동등성을 확인한 뒤 수동 배포했다. 현재 live는c4de3ed802c220d80fdd03040e53004e3620e515 / dep-dbs5fus9v7es73boe6dg(21:46:27 KST). LLM 포함17개 환경값 전체 hash, Free/자동배포off·풀1/SQL10초·예산8·reader 설정은 동일하다.
+- 운영의 후보10개 전체 JSON 일치·최신454→434·과거snapshot455→435·상태 파티션 일치. 동시5 GET×6묶음30건200/반복 본문 동일/목록=활동=Risk 경쟁점 수, ready24건200·CORS 허용/차단을 확인했다. 묶음 최초/반복 중앙값10.380/7.410초, 시간 보장이나 이전 성능과 통제 비교는 아니다.
+- 실제 AI 한식+이력1건200/9.783초·숫자57개 검증·불일치0·재생성false·no-store/CORS 확인. 키워드/상호는 새로 전송하지 않고 안전한 집계/한계 식별자만 사용한다. 검증 구간 API 로그111건·HTTP500이상0건이다.
+- 마지막 전체 행 지문·원래 인덱스가 사전 기준과 같았다. FE 저장소·로컬.env·원본 DML·원천 매핑 버전은 바꾸지 않았다. 두 Render 운영 MD·BE CLAUDE/작업계획·BE의 FE 이력 전달 문서를 현재값과 함께 반영한다.
+
+남은 한계는 오탐/미탐·현재 이름으로 과거 이력에도 적용·제보18개 전체 명단 미확보·최소 조회 월 이동 가능성·Free 절전/다중 사용자/공급자 quota 비보장이다. 추가 상호 예외나 실제 업종 정답 보정은 새 근거/버전으로 별도 검토한다.
