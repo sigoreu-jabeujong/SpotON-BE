@@ -1,0 +1,10 @@
+{
+  "schema": "chain-registry-v1",
+  "brands": [
+    {"key":"starbucks-kr","name":"스타벅스","aliases":["스타벅스","Starbucks"],"legal_prefixes":["(주)에스씨케이컴퍼니","주식회사 에스씨케이컴퍼니"],"source_url":"https://www.starbucks.co.kr/store/store_map.do","reviewed_on":"2026-11-15","branch_patterns":true},
+    {"key":"pascucci-kr","name":"파스쿠찌","aliases":["파스쿠찌","PASCUCCI","카페파스쿠찌","카페 파스쿠찌"],"legal_prefixes":["(주)파리크라상","주식회사 파리크라상"],"source_url":"https://www.pascucci.co.kr/store/storeList.asp","reviewed_on":"2026-11-15","branch_patterns":true},
+    {"key":"cocoichibanya-kr","name":"코코이찌방야","aliases":["코코이찌방야","CoCoICHIBANYA"],"legal_prefixes":["(주)농심","주식회사 농심"],"source_url":"https://www.cocoichibanya.co.kr/","reviewed_on":"2026-11-15","branch_patterns":true,"ftc_refs":[["BRD_20100100189","JNG_000555"]]},
+    {"key":"bonjuk-kr","name":"본죽","aliases":["본죽"],"approved_short_aliases":["본죽"],"source_url":"https://www.bonif.co.kr/brand/store","reviewed_on":"2026-11-15","branch_patterns":true,"ftc_refs":[["BRD_20080100243","JNG_018965"]]},
+    {"key":"bonjuk-bibimbap-kr","name":"본죽&비빔밥","aliases":["본죽&비빔밥","본죽앤비빔밥","본죽&비빔밥 cafe","본죽&비빔밥cafe"],"source_url":"https://www.bonif.co.kr/brand/store","reviewed_on":"2026-11-15","branch_patterns":true,"ftc_refs":[["BRD_20141221","JNG_018965"]]}
+  ]
+}

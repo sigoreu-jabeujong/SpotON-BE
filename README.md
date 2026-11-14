@@ -1,5 +1,21 @@
 # SpotON-BE
 
+## 브랜드·체인 점포 대조 기반 (#143)
+
+이 CLI의 lifecycle stderr 로그는 기존 브랜드 작업과 `source=brands`를 공유합니다. 명령의 stdout `mode`와 실행 기록으로 구분하며, stderr source 필드만으로 두 명령을 구별할 수는 없습니다.
+
+가맹·직영·소규모 체인을 함께 다루는 별도 `etl.chains` 기반을 추가했습니다. 공식 브랜드 seed와 공정위 정확 이름·소진공의 별도 지점/주소 근거로 소속을 **추정**하며 실제 가맹계약·직영 여부·과거 소속을 확정하지 않습니다. 기존 공개 가맹 필터·원본 stores·DB schema는 유지합니다. [범위·설계·실제 검수/검증](docs/designs/feat143-brand-chain-foundation.md)을 확인합니다.
+
+```powershell
+uv run --locked --extra dev python -m etl.chains --collect-semas --output "<저장소 밖 새 semas.json>"
+uv run --locked --extra dev python -m etl.chains --compare-local --snapshot "<기존 semas.json>" --plan-output "<저장소 밖 새 plan.json>"
+uv run --locked --extra dev python -m etl.chains --compare-local
+```
+
+기존 `DATA_GO_KR_SERVICE_KEY`를 환경에서 읽고 키 인자는 받지 않습니다. 수집은 서울 I2 고정·최대251회·페이지5MiB/전체256MiB·redirect/retry0이며 기준월/전체 수/중복 ID·첫 페이지를 검증한 최소 필드 snapshot만 저장합니다. 원문 인증 URL/사업자·대표자·연락처를 저장하지 않습니다. snapshot과 선택적인 인허가 증거 계획은 다른 Git checkout을 포함해 저장소 내부 저장·기존 파일 덮어쓰기를 거절하며 완성 파일만 원자적으로 공개합니다.
+
+`--compare-local`은 `spoton_dev`/`spoton_app`·head0011 가드 뒤 READ ONLY REPEATABLE READ로 동작합니다. 기존 카탈로그가 없으면 검수 seed만 쓰며 미매칭은 unknown입니다. 별도 `--registry` 파일로 근거/검수일을 갖춘 소규모 체인을 추가할 수 있습니다. 공정위 전체 목록의 지점명 패턴을 열지는 않으며, 개별 소진공 점포의 별도 지점명·동일 주소·인허가1:1 연결을 만족할 때만 별도 추정합니다. 출력은 집계와 지문뿐이고 raw 상호/주소/인허가번호를 출력하지 않습니다. 현재 FE 개선으로 연결하려면 후속 publication/v2 공통 조회와 FE 담당 반영이 필요합니다.
+
 ## Render 무료 검증 배포
 
 현재 [API 문서](https://spoton-be-free.onrender.com/docs)와 [DB 준비 상태](https://spoton-be-free.onrender.com/api/ready)를 사용할 수 있다. Free 웹1/DB1, SQL10초·풀1/overflow0/대기15초·워커1·연결 예산8을 사용한다. Docker 시작 시 migration/ETL은 실행하지 않고, 자동 배포는 꺼 둔다.
