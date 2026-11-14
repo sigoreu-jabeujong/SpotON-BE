@@ -11,7 +11,8 @@ from decimal import Decimal
 
 from pydantic import JsonValue
 
-from app.schemas.ai_context import ContextIndicator, RiskInterpretContext
+from app.ai.chain_notices import chain_notice
+from app.schemas.ai_context import ChainRiskInterpretContext, ContextIndicator, InterpretContext
 from app.schemas.interpret import InterpretItem
 
 NOTICE = "이 해석은 공공데이터 기반 참고 정보이며 창업 성공이나 실패를 예측한 결과가 아닙니다."
@@ -50,7 +51,7 @@ class NarrativeCatalog:
         }
 
 
-def build_narrative(c: RiskInterpretContext) -> NarrativeCatalog:
+def build_narrative(c: InterpretContext) -> NarrativeCatalog:
     rows: dict[str, ContextIndicator] = {row.id: row for row in c.indicators}
     active = rows["competitor_count"].value
     if active is None:
@@ -65,6 +66,8 @@ def build_narrative(c: RiskInterpretContext) -> NarrativeCatalog:
         f"폐업 기록은 {a.recent_closed:,}건입니다. "
     )
     averages = []
+    if isinstance(c, ChainRiskInterpretContext):
+        opening += chain_notice(c) + " "
     for group in a.groups:
         if group.avg_operating_months is not None:
             averages.append(f"{LABELS[group.sub_category]} {group.avg_operating_months:,}개월")
