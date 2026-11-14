@@ -90,7 +90,6 @@ def test_period_closed_rows_distances_samples_and_seoul(db, client):
     assert result["data"]["market"]["status"] == "unverified"
     assert result["data"]["market"]["spatial_candidate"] is None
     assert result["data"]["flags"]["missing"] == [
-        "official_closure_rate",
         "market_change",
         "day_night_ratio",
     ]
@@ -98,7 +97,8 @@ def test_period_closed_rows_distances_samples_and_seoul(db, client):
         "market_change",
         "day_night_ratio",
     ]
-    assert m["official_risk"]["status"] == "link_only" and m["official_risk"]["copy_text"] is None
+    assert "official_closure_rate" not in m and "official_risk" not in m
+    assert all(r["link"] is None and r["source_url"] is None for r in m.values())
     assert m["market_change"]["type"] == "official"
     assert result["meta"]["excluded_no_coord"] == 1 and result["meta"]["denominator"] is None
     assert (
@@ -155,7 +155,7 @@ def test_fixed_anniversary_survival_cohort_boundaries_and_closure_after_horizon(
     ) == (4, 5, 80)
     assert m["survival_rate_1y"]["period"] == "(2024-11-08, 2025-11-08]"
     assert result["data"]["flags"]["insufficient_sample"] is False
-    assert result["data"]["flags"]["missing"] == ["official_closure_rate"]
+    assert result["data"]["flags"]["missing"] == []
 
 
 def test_calendar_clamp_and_unobserved_future(db, client):
@@ -231,7 +231,7 @@ def test_boundary_preview_is_unverified_and_missing_version_fails(db, client):
     result = payload(client, lat=37.5, lng=127.0)
     assert result["data"]["market"]["spatial_candidate"]["spatial_status"] == "in_market"
     assert result["data"]["market"]["market_code"] is None
-    assert metrics(result)["official_closure_rate"]["status"] == "pending"
+    assert "official_closure_rate" not in metrics(result)
     client.app.state.settings.risk_boundary_version_id = uuid4()
     r = client.get("/api/risk", params=PARAMS)
     assert r.status_code == 500 and r.json()["data"] is None

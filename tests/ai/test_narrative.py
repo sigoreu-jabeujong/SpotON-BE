@@ -170,6 +170,48 @@ def test_missing_years_are_not_filled_or_compared(sample):
     }
 
 
+def test_removed_official_metrics_and_site_guide_are_absent_from_all_candidates(sample):
+    from app.ai.interpretation import build_catalog
+
+    catalog = build_catalog(sample)
+    text = str(catalog.candidates()) + " ".join(m.text for m in catalog.missing)
+    for removed in (
+        "official_closure_rate",
+        "official_risk",
+        "공식 창업위험도",
+        "공식 폐업률",
+        "공식 서비스",
+        "golmok",
+    ):
+        assert removed not in text
+    assert {r.id for r in sample.context.indicators} == {
+        "closure_rate_12m",
+        "survival_rate_1y",
+        "survival_rate_3y",
+        "competitor_count",
+    }
+
+
+def test_pre_2010_year_is_rejected_in_public_and_ai_contracts():
+    with pytest.raises(ValueError):
+        YearlyActivity(year=2009, opened=1, closed=0)
+    with pytest.raises(ValueError):
+        ContextYear(year=2009, opened=1, closed=0, start=date(2009, 1, 1), end=date(2009, 11, 8))
+
+
+def test_tampered_pre_2010_trend_is_rejected_before_llm(monkeypatch):
+    _, activity = use_risk(monkeypatch, context_module, response())
+    activity.return_value.data.yearly_trend = [
+        YearlyActivity.model_construct(year=2009, opened=2, closed=1)
+    ]
+    activity.return_value.meta.update(
+        yearly_comparison_basis="same_month_day_ytd",
+        yearly_periods={"2009": {"start": "2009-01-01", "end": "2009-11-08"}},
+    )
+    with pytest.raises(AppError):
+        prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
+
+
 @pytest.mark.parametrize("year,end", [(2027, "2027-11-08"), (2026, "2026-12-31")])
 def test_future_or_mismatched_yearly_period_is_rejected_before_llm(monkeypatch, year, end):
     _, activity = use_risk(monkeypatch, context_module, response())

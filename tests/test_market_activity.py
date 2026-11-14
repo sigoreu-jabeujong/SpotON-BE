@@ -69,6 +69,37 @@ def test_ytd_keeps_actual_event_year_with_zero_but_does_not_invent_gap_years():
     assert aggregate_activity([], query(), date(2025, 2, 28)).yearly_trend == []
 
 
+def test_trend_filters_each_event_and_keeps_old_active_and_recently_closed_records():
+    rows = [
+        record("old-active", "2000-01-01"),
+        record("cross-boundary", "2009-12-31", "2010-01-01"),
+        record("boundary", "2010-01-01"),
+        record("recent-close", "2008-01-01", "2025-01-01"),
+        record("pre-only", "2000-01-01", "2009-12-31"),
+        record("ytd-outside", "2011-12-01", "2012-12-01"),
+    ]
+    result = aggregate_activity(rows, query(), date(2025, 2, 28))
+    assert [(r.year, r.opened, r.closed) for r in result.yearly_trend] == [
+        (2010, 1, 1),
+        (2011, 0, 0),
+        (2012, 0, 0),
+        (2025, 0, 1),
+    ]
+    assert result.recent_12m.closed == 1 and result.recent_12m.opened == 0
+    assert result.by_sub_category[0].open_count == 2
+    assert result.by_sub_category[0].avg_operating_months == (301 + 181) // 2
+
+
+@pytest.mark.parametrize("target", [date(2009, 12, 31), date(2010, 3, 1)])
+def test_pre_2010_events_still_count_in_recent_window_and_operating_average(target):
+    rows = [record("opened", "2009-06-01"), record("closed", "2008-01-01", "2009-09-01")]
+    result = aggregate_activity(rows, query(), target)
+    assert result.yearly_trend == []
+    assert result.recent_12m.opened == result.recent_12m.closed == 1
+    assert result.by_sub_category[0].open_count == 1
+    assert result.by_sub_category[0].avg_operating_months == (6 if target.year == 2009 else 9)
+
+
 def test_active_average_uses_target_not_future_closure_and_preserves_zero_and_null():
     rows = [record("a", "2024-01-31", "2026-01-01"), record("b", "2024-03-01")]
     result = aggregate_activity(rows, query(), date(2024, 3, 31))

@@ -7,9 +7,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.ai.context import prepare_risk_interpretation
 from app.core.config import Settings
 from app.main import create_app
 from app.routers import market
+from app.schemas.risk import RiskQuery
 from tests.integration.test_localdata_upsert import migrate
 from tests.integration.test_nearby import PARAMS, batch, store
 
@@ -90,7 +92,7 @@ def test_closed_events_distance_boundaries_and_mean_at_requested_date(activity_d
     assert nearby["data"]["count"] == 2 and nearby["data"]["excluded_no_coord"] == 1
     assert data["meta"]["franchise_classification"]["status"] == "pending"
     assert data["meta"]["collected_at"] is None
-    assert data["meta"]["data_version"]["rule_version"] == "market-activity-license-ytd-v1"
+    assert data["meta"]["data_version"]["rule_version"] == "market-activity-license-ytd-v2"
 
 
 def test_historical_active_period_does_not_use_future_closure_or_latest_data(
@@ -120,6 +122,74 @@ def test_historical_active_period_does_not_use_future_closure_or_latest_data(
     assert (
         nearby["data"]["markers"][0]["operating_months"] > 13
     )  # Existing latest_data contract kept.
+
+
+def test_2010_trend_boundary_keeps_entire_historical_cohort_and_risk_survivors(
+    activity_db, activity_client
+):
+    with Session(activity_db.engine) as s, s.begin():
+        b = batch(s, data_updated_at=date(2012, 11, 8))
+        store(s, b, "old-active", open_date=date(1965, 1, 1))
+        store(s, b, "survivor", open_date=date(2009, 1, 1))
+        store(
+            s,
+            b,
+            "cross-boundary",
+            open_date=date(2009, 12, 31),
+            close_date=date(2010, 1, 1),
+            status="closed",
+        )
+        store(
+            s,
+            b,
+            "recent-close",
+            open_date=date(2008, 1, 1),
+            close_date=date(2012, 6, 1),
+            status="closed",
+        )
+        store(s, b, "boundary", open_date=date(2010, 1, 1))
+        store(
+            s,
+            b,
+            "pre-only",
+            open_date=date(2000, 1, 1),
+            close_date=date(2009, 12, 31),
+            status="closed",
+        )
+    result = payload(activity_client)
+    assert [(r["year"], r["opened"], r["closed"]) for r in result["data"]["yearly_trend"]] == [
+        (2010, 1, 1),
+        (2012, 0, 1),
+    ]
+    assert set(result["meta"]["yearly_periods"]) == {"2010", "2012"}
+    assert result["meta"]["cohort_size"] == 6
+    assert result["data"]["recent_12m"]["closed"] == 1
+    assert result["data"]["by_sub_category"][0]["open_count"] == 3
+    assert result["data"]["by_sub_category"][0]["avg_operating_months"] == (574 + 46 + 34) // 3
+    risk = activity_client.get("/api/risk", params=PARAMS)
+    assert risk.status_code == 200, risk.text
+    metrics = {row["id"]: row for row in risk.json()["data"]["indicators"]}
+    assert list(metrics) == [
+        "closure_rate_12m",
+        "survival_rate_1y",
+        "survival_rate_3y",
+        "competitor_count",
+    ]
+    assert metrics["closure_rate_12m"]["denominator"] == 4
+    assert metrics["survival_rate_3y"]["denominator"] == 1
+    assert risk.json()["data"]["flags"]["missing"] == []
+    early = payload(activity_client, as_of="2009-12")
+    assert early["data"]["yearly_trend"] == [] and early["meta"]["yearly_periods"] == {}
+    assert early["meta"]["cohort_size"] == 5
+    assert early["data"]["by_sub_category"][0]["open_count"] == 4
+    with Session(activity_db.engine) as s, s.begin():
+        s.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
+        for month, years in ((None, [2010, 2012]), ("2009-12", [])):
+            q = RiskQuery(**PARAMS, **({"as_of": month} if month else {}))
+            prepared = prepare_risk_interpretation(s, q, Settings(_env_file=None))
+            assert [r.year for r in prepared.context.activity.yearly_trend] == years
+            assert "official_closure_rate" not in prepared.request.user_content
+            assert "official_risk" not in prepared.request.user_content
 
 
 def test_quality_cohort_and_source_identity(activity_db, activity_client):

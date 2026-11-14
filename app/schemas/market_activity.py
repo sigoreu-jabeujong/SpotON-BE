@@ -6,6 +6,7 @@ from app.schemas.nearby import NearbyQuery
 from app.schemas.stores import SubCategory
 
 ActivityInclude = Literal["sales", "living_pop"]
+YEARLY_TREND_START_YEAR = 2010
 
 
 class ActivityQuery(NearbyQuery):
@@ -35,7 +36,7 @@ class RecentActivity(ActivityModel):
 
 
 class YearlyActivity(ActivityModel):
-    year: int = Field(ge=1960, le=9999)
+    year: int = Field(ge=YEARLY_TREND_START_YEAR, le=9999)
     opened: int = Field(ge=0)
     closed: int = Field(ge=0)
 

@@ -82,15 +82,13 @@ def test_allowlist_and_original_risk_numbers_and_statuses(monkeypatch):
     for before, after in zip(original.data.indicators, p.context.indicators, strict=True):
         assert after.value == before.value and after.source == tuple(before.source)
         assert after.status == before.status and after.denominator == before.denominator
-    assert p.prompt_version == "risk-interpret-v8"
+    assert p.prompt_version == "risk-interpret-v9"
     assert hashlib.sha256(serialize_context(safe).encode()).hexdigest() == p.context_hash
     assert serialize_context(safe) in p.request.user_content
 
 
 def test_excluded_metadata_urls_and_internal_version_never_enter_prompt(monkeypatch):
     result = response()
-    result.data.indicators[1].link = "https://example.invalid/PRIVATE-CANARY"
-    result.data.indicators[0].source_url = "https://example.invalid/PRIVATE-CANARY"
     result.meta["raw_user"] = {
         "address": "PRIVATE-CANARY",
         "lat": 37.56789123,
@@ -117,10 +115,10 @@ def test_hash_determinism_and_version_separation_and_nested_immutability(monkeyp
     d = prepare(monkeypatch, result=result)
     assert d.context_hash == a.context_hash and d.data_version_hash != a.data_version_hash
     payload = a.json_context()
-    payload["indicators"][2]["value"] = 99
-    assert a.json_context()["indicators"][2]["value"] == 20
+    payload["indicators"][0]["value"] = 99
+    assert a.json_context()["indicators"][0]["value"] == 20
     with pytest.raises(ValidationError):
-        a.context.indicators[2].value = 99
+        a.context.indicators[0].value = 99
     with pytest.raises(dataclasses.FrozenInstanceError):
         a.context_hash = "bad"
     for rendered in (str(a), repr(a), f"{a!r}"):
@@ -143,7 +141,7 @@ def test_hash_determinism_and_version_separation_and_nested_immutability(monkeyp
 )
 def test_bad_indicator_values_are_rejected_without_context_leak(monkeypatch, path, value, caplog):
     result = response()
-    setattr(result.data.indicators[2], path, value)
+    setattr(result.data.indicators[0], path, value)
     use_risk(monkeypatch, module, result)
     with pytest.raises(AppError) as exc:
         module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
@@ -181,8 +179,8 @@ def test_pending_zero_and_negative_zero_handling(monkeypatch):
         survival_3_den=0,
     )
     p = prepare(monkeypatch, result=response(local=zero))
-    assert p.context.indicators[2].value is None
-    assert p.context.indicators[2].numerator is None and p.context.indicators[2].denominator == 0
+    assert p.context.indicators[0].value is None
+    assert p.context.indicators[0].numerator is None and p.context.indicators[0].denominator == 0
     result = response(
         local=ReferenceCounts(
             cohort_size=10,
@@ -195,7 +193,7 @@ def test_pending_zero_and_negative_zero_handling(monkeypatch):
             survival_3_den=0,
         )
     )
-    result.data.indicators[2].value = -0.0
+    result.data.indicators[0].value = -0.0
     use_risk(monkeypatch, module, result)
     with pytest.raises(AppError):
         module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
@@ -204,6 +202,23 @@ def test_pending_zero_and_negative_zero_handling(monkeypatch):
 def test_client_indicators_cannot_be_added_to_query():
     with pytest.raises(ValidationError):
         query(indicators=[{"id": "competitor_count", "value": 9999}])
+
+
+@pytest.mark.parametrize("field", ["link", "source_url"])
+def test_removed_official_links_are_rejected_before_llm(monkeypatch, field):
+    result = response()
+    setattr(result.data.indicators[0], field, "https://example.invalid/PRIVATE-CANARY")
+    use_risk(monkeypatch, module, result)
+    with pytest.raises(AppError):
+        module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
+
+
+def test_previous_risk_contract_version_is_rejected(monkeypatch):
+    result = response()
+    result.meta["data_version"]["rule_version"] = "risk-reference-fixed-anniversary-v1"
+    use_risk(monkeypatch, module, result)
+    with pytest.raises(AppError):
+        module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
 
 
 def test_invalid_radius_and_prompt_failure_are_safe(monkeypatch, caplog):
@@ -257,8 +272,8 @@ def test_generated_server_sample_reasons_match_outbound_allowlist(monkeypatch, d
     )
     p = prepare(monkeypatch, result=response(local=small, seoul=small))
     expected = "zero_denominator" if den == 0 else "insufficient_sample"
-    assert p.context.indicators[2].reason == expected
-    assert p.context.indicators[2].seoul_avg_reason == expected
+    assert p.context.indicators[0].reason == expected
+    assert p.context.indicators[0].seoul_avg_reason == expected
 
 
 def test_server_result_must_match_requested_coordinates_and_month(monkeypatch):
@@ -320,10 +335,10 @@ def test_activity_values_change_context_hash_and_rule_changes_version_hash(monke
     a = prepare(monkeypatch)
     b = prepare(monkeypatch, opened=4)
     assert a.context_hash != b.context_hash and a.data_version_hash == b.data_version_hash
-    monkeypatch.setattr(module, "ACTIVITY_RULE_VERSION", "market-activity-license-ytd-v2")
+    monkeypatch.setattr(module, "ACTIVITY_RULE_VERSION", "market-activity-license-ytd-test")
     result = response()
     _, recompute = use_risk(monkeypatch, module, result)
-    recompute.return_value.meta["data_version"]["rule_version"] = "market-activity-license-ytd-v2"
+    recompute.return_value.meta["data_version"]["rule_version"] = "market-activity-license-ytd-test"
     c = module.prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
     assert c.context_hash == a.context_hash and c.data_version_hash != a.data_version_hash
 

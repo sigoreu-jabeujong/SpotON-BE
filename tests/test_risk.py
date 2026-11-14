@@ -161,10 +161,43 @@ def test_duplicate_params_missing_db_and_openapi():
         r = client.get("/api/risk", params=BASE)
         assert r.status_code == 500 and r.json()["data"] is None
         schema = client.get("/openapi.json").json()
+        indicator_schema = schema["components"]["schemas"]["RiskIndicator"]
+        assert indicator_schema["properties"]["id"]["enum"] == [
+            "closure_rate_12m",
+            "survival_rate_1y",
+            "survival_rate_3y",
+            "competitor_count",
+            "market_change",
+            "day_night_ratio",
+        ]
+        assert indicator_schema["properties"]["status"]["enum"] == ["fact", "pending"]
+        for field in ("link", "source_url"):
+            assert indicator_schema["properties"][field]["type"] == "null"
+        assert (
+            schema["components"]["schemas"]["YearlyActivity"]["properties"]["year"]["minimum"]
+            == 2010
+        )
         assert {
             p["name"] for p in schema["paths"]["/api/risk"]["get"]["parameters"] if p["required"]
         } == {"lat", "lng", "category"}
         assert client.get("/api/health").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"id": "official_closure_rate"},
+        {"id": "official_risk"},
+        {"status": "link_only"},
+        {"source": ["R1"]},
+        {"link": "https://example.invalid"},
+        {"source_url": "https://example.invalid"},
+    ],
+)
+def test_removed_official_indicator_contract_cannot_be_reintroduced(changes):
+    data = service.pending_indicator("market_change", "boundary_period_not_verified").model_dump()
+    with pytest.raises(ValidationError):
+        RiskIndicator.model_validate({**data, **changes})
 
 
 def test_model_failure_safe500_without_context(monkeypatch, caplog):

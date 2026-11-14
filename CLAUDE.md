@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-15 #140 사용자 결정이 이전 공식 지표 제공 기준보다 우선한다. 공식 폐업률·공식 창업위험도 ID/링크/AI 안내를 제거하고 Risk 필수 지표를 4개로 줄인다. 선택 market_change/day_night_ratio와 공식 원천 테이블은 유지한다. 연도별 개폐업 추이와 기간 메타/AI 연도는 2010년부터만 반환하지만 1960년부터의 원본 코호트·현재 수·평균 개월·최근 12개월·Risk 산식은 유지한다. Risk/활동 규칙 v2·프롬프트 v9다. [설계·실제 검토](docs/designs/feat140-remove-official-indicators.md)와 [FE 요청](docs/fe-risk-reference-api-request.md)을 따른다. BE 전용 변경이며 FE 반영·Render 배포 완료로 표시하지 않는다.
+
 2026-11-15 #137은 공식 인허가 원천의 첫 페이지를 GET 1회만 진단하는 `python -m etl.localdata.probe`를 추가한다. 두 원천·서울 관청·1/100행·read 0.1~30초만 허용하고 자동 재시도/redirect/추가 인증 요청을 막는다. 상태·시간·건수·고정 사유 JSON만 출력하며 키/URL/원문을 출력·저장하지 않는다. DB·기존 수집기·공개 API·Render·FE는 바꾸지 않는다. #78 외부 지연은 이 도구의 완료와 별도로 남는다. 사용법은 README, [설계·실제 Claude 검토·검증](docs/designs/feat137-source-probe.md)을 따른다.
 
 BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에서 관리한다. 작업 전에 읽고 필요한 기준 변경도 통합 문서에 반영한다.

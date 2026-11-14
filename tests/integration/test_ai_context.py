@@ -69,7 +69,8 @@ def test_server_recalculation_and_real_readonly_context_match(db):
     assert [(g.sub_category, g.open_count, g.avg_operating_months) for g in context.groups] == (
         expected
     )
-    assert sum(g.open_count for g in context.groups) == actual.data.indicators[5].value == 10
+    competitor = next(r for r in actual.data.indicators if r.id == "competitor_count")
+    assert sum(g.open_count for g in context.groups) == competitor.value == 10
     assert prepared.context.as_of == date(2026, 11, 8)
     assert prepared.context.market_status == "unverified"
     assert "stores_batch_ids" not in prepared.request.user_content
@@ -167,7 +168,8 @@ def test_activity_context_matches_independent_activity_under_filters(db, changes
         for g in activity.data.by_sub_category
     )
     assert prepared.context.activity.recent_closed == activity.data.recent_12m.closed
-    assert sum(g.open_count for g in groups) == risk.data.indicators[5].value
+    competitor = next(r for r in risk.data.indicators if r.id == "competitor_count")
+    assert sum(g.open_count for g in groups) == competitor.value
     assert prepared.context.activity.space == f"radius_{q.radius}m"
 
 

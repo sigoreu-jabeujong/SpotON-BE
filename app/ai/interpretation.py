@@ -50,8 +50,6 @@ ACTIVITY_LABELS = {
     "western": "양식",
 }
 MISSING_TITLES = {
-    "official_closure_rate": "공식 폐업률",
-    "official_risk": "공식 창업위험도",
     "market_change": "상권변화 유형",
     "day_night_ratio": "주야간 인구비",
     **TITLES,
@@ -226,8 +224,6 @@ def build_catalog(prepared: PreparedRiskInterpretation) -> InterpretationCatalog
             title = MISSING_TITLES.get(row.id, row.id)
             if row.reason in {"insufficient_sample", "zero_denominator"}:
                 message = f"{title}은 표본 {row.denominator}건으로 비율을 산정하지 않았습니다."
-            elif row.id == "official_risk":
-                message = "공식 창업위험도 수치는 제공하지 않으며 공식 서비스 안내를 확인해 주세요."
             else:
                 message = f"{title}에 필요한 자료의 적용 기준을 확인 중입니다."
             missing.append(MissingItem(text=message, reason=row.reason or "not_available"))

@@ -7,7 +7,11 @@
 
 ## 1. 요청 범위와 계약 차이
 
-`GET /api/risk`의 인허가 참고지표를 연결해 주세요. 동종업체 수·최근12개월 참고 폐업률·개업 1주년/3주년 생존율과 같은 조건의 서울 비교값을 제공합니다. 공식 폐업률·상권변화 유형·주야간 인구비 수치는 아직 활성화하지 않았습니다. 공식 창업위험도는 안내 링크만 제공합니다.
+2026-11-15 #140 사용자 요청으로 공식 폐업률·창업위험도 두 카드와 링크를 삭제합니다. FE 저장소는 수정하지 않았으며 아래 계약에 맞춘 담당자 반영을 기다립니다. `src/components/summary/OfficialIndicators.tsx`의 두 카드와 빈 공식 섹션, `src/pages/ReportPage.tsx`의 출력 항목, 타입·라벨·목업·테스트에서 두 ID를 제거해 주세요. 선택 상권변화 유형을 요청하는 경우 그 항목은 유지합니다.
+
+연도별 개폐업 추이는 2010년부터만 반환합니다. 그래프·진단서·목업의 축이나 기본 연도 목록도 2010년 이전을 생성하지 않게 맞춰 주세요. 사건이 없는 연도는 자동으로 채우지 않으며 `yearly_periods`에 있는 YTD 구간을 사용합니다. 2010년 이전 기준일은 추이/기간 메타만 비어 있고 현재 수·평균 개월·최근 개폐업은 계속 반환합니다. 2009년 개업·2010년 폐업은 2010년 폐업으로 반영합니다.
+
+`GET /api/risk`의 인허가 참고지표를 연결해 주세요. 동종업체 수·최근12개월 참고 폐업률·개업 1주년/3주년 생존율과 같은 조건의 서울 비교값을 제공합니다. 선택 상권변화 유형·주야간 인구비 수치는 아직 활성화하지 않았습니다.
 
 아래 계산은 원본 v1.2의 모호한 구간 정의와 FE mock을 Claude 검토 후 보완한 **BE측 계약안**입니다. 원본 문서나 FE 합의가 이미 완료됐다는 뜻이 아닙니다. FE 담당자가 의미·문구를 검토하고 조정이 필요하면 BE와 합의해 주세요. FE 코드·문서·CLAUDE.md·이슈/PR은 담당자가 관리하며 이번 보고서는 BE 저장소에만 작성했습니다.
 
@@ -31,8 +35,8 @@
 - 빈 값/토큰·중복·공백·대소문자 오류·LQ·미지원 인자·중복 쿼리는422입니다. 주소나 경계 UUID를 이 API에 보내지 않습니다.
 - as_of는 YYYY-MM입니다. 최신 월은 검증된 전역 인허가 갱신일 D, 과거 월은 월말 T이며 실제 적용일은 data.query.as_of/meta.as_of입니다. 범위 밖은422 AS_OF_OUT_OF_RANGE입니다.
 - 공통 `{data,meta,error}`를 유지합니다. data는 query/market/indicators/flags입니다. query에는 서버가 해석한 좌표·업종·반경·시점·필터가 있으며 주소는 없습니다.
-- 필수 지표 순서는 official_closure_rate, official_risk, closure_rate_12m, survival_rate_1y, survival_rate_3y, competitor_count입니다. 선택 지표는 요청 순서와 무관하게 market_change,day_night_ratio 순서로 뒤에 붙습니다.
-- source는 배열이며 source_url은 원문/안내 URL 또는null입니다. 각 지표의 source를 표시하고 공통 meta.source를 공식 수치 출처로 대신 쓰지 않습니다. official_risk의 source_url/link는 같은 공식 안내를 가리킵니다.
+- 필수 지표 순서는 closure_rate_12m, survival_rate_1y, survival_rate_3y, competitor_count입니다. 선택 지표는 요청 순서와 무관하게 market_change,day_night_ratio 순서로 뒤에 붙습니다. 기본 `flags.missing=[]`이며 소표본 여부는 기존 `insufficient_sample`로 표시합니다.
+- source는 배열이며 각 지표의 source를 표시합니다. `link`·`source_url`은 null만 허용하고 status는 fact/pending만 허용합니다. OpenAPI의 IndicatorId 축소는 RiskIndicator·RiskFlags·AI indicator_ids·used_indicator_ids에 함께 적용됩니다. `YearlyActivity.year` 최소값도 2010으로 바뀝니다. AI `official_values` 필드명은 호환을 위해 유지하지만 삭제된 지표를 담지 않습니다.
 - 모든 응답은 no-store이며 준비/DB 실패는500 INTERNAL_ERROR입니다. 실패를 정상0건으로 바꾸지 않습니다.
 
 ## 3. 참고지표 계산과 표시
@@ -68,14 +72,12 @@ n=1/3일 때 진입 코호트는 `(T-(n+1)년, T-n년]`에 개업한 점포입�
 
 | 지표/상태 | 동작 |
 |---|---|
-| official_closure_rate | value=null,pending·boundary_period_not_verified |
-| official_risk | value=null,link_only. 서버 link의 공식 안내로 이동, copy_text=null |
 | market_change 요청 | official/null/pending·boundary_period_not_verified |
 | day_night_ratio 요청 | reference/null/pending·population_aggregation_and_grid_time_unverified |
 | 표본 부족 | pending·insufficient_sample, 분모 표시 |
 | 0분모 | pending·zero_denominator |
 
-`flags.insufficient_sample`은 로컬 참고 폐업률/생존율 중 표본 미달이 있으면 true입니다. 공식·선택 항목의 pending이나 서울 비교만으로 켜지지 않습니다. `flags.missing`은 필수 공식 폐업률에 필요한 검증 경계와 요청된 선택 항목만 포함하며, 단순 소표본 지표나 미요청 항목을 추가하지 않습니다.
+`flags.insufficient_sample`은 로컬 참고 폐업률/생존율 중 표본 미달이 있으면 true입니다. 선택 항목의 pending이나 서울 비교만으로 켜지지 않습니다. `flags.missing`은 요청된 선택 항목만 포함하며 기본은 빈 배열입니다. 삭제된 공식 지표·단순 소표본 지표·미요청 항목을 추가하지 않습니다.
 
 가맹 분류는 미적용pending 또는 명시 적용 후estimate/partial입니다. [추가 계약](fe-franchise-classification-api-request.md)의 목록명 일치/기준년도/역사적 선택 편향·data_version.brand_mapping·한계 사유를 함께 표시해 주세요. 원본 is_franchise는 보존하고 현재 원문과 일치한 별도 근거를 조회에 반영합니다. unknown배제0건을 실제 점포 부재로 단정하지 않습니다.
 
@@ -100,7 +102,7 @@ n=1/3일 때 진입 코호트는 `(T-(n+1)년, T-n년]`에 개업한 점포입�
 
 meta.denominator는null이며 지표별 denominator를 사용합니다. meta.cohort_size는 T이전 개업·폐업을 포함한 전체 인허가 기록 수이므로 현재 점포 수가 아닙니다. excluded_no_coord도 서울 동일 비공간 조건의 T이전 개업 전체 미확보 수이며 반경/지표별 누락 수로 합산하지 않습니다.
 
-meta.data_updated_at은 전역 인허가 D, as_of는 적용일T, collected_at은 현재null입니다. 수집일을 오늘/검증일로 채우지 않습니다. rule_version=risk-reference-fixed-anniversary-v1, survival_basis=fixed_opening_anniversary, closure_sample_basis=period_denominator 등 산식을 확인할 수 있습니다.
+meta.data_updated_at은 전역 인허가 D, as_of는 적용일T, collected_at은 현재null입니다. 수집일을 오늘/검증일로 채우지 않습니다. Risk rule_version=risk-reference-fixed-anniversary-v2, 활동 rule_version=market-activity-license-ytd-v2, AI prompt_version=risk-interpret-v9입니다. survival_basis=fixed_opening_anniversary, closure_sample_basis=period_denominator 등 산식을 확인할 수 있습니다. FE 조건별 캐시와 저장된 목업도 새 계약에 맞춰 갱신해 주세요. BE develop 반영과 실제 Render 배포·FE 적용 완료는 별도로 확인합니다.
 
 인허가 자료는 지위승계에 따른 폐업·개업을 구분하지 못하고 과거 값도 현재 보관된 날짜 구간으로 재구성합니다. 결측/오류 날짜·한시 영업·상태 모순은 기존 활동 API와 같은 규칙으로 제외합니다. 좌표 확보에 따른 선택 편향이 있을 수 있습니다. 공식 위험등급·성공/실패 확률·폐업 원인으로 표현하지 않습니다.
 
@@ -113,7 +115,8 @@ meta.data_updated_at은 전역 인허가 D, as_of는 적용일T, collected_at은
 - [ ] 개업 주년 관측 의미·n주년 당일 폐업 제외·주년 후 폐업 포함 안내
 - [ ] source 배열·로컬/서울 분모 구분·동종업체 수 비교 적용 없음
 - [ ] unverified를 outside로 바꾸지 않고 공간 후보를 확정 상권으로 승격하지 않음
-- [ ] 공식 위험 링크·copy_text=null·조건부 요청/미요청·missing/표본 부족 구분
+- [ ] 공식 폐업률·창업위험도 카드/링크/빈 공식 섹션 제거와 조건부 요청/미요청·missing/표본 부족 구분
+- [ ] 연도별 추이·진단서·목업의 2010년 하한, 과거 기준일 빈 추이와 전체 집계 구분
 - [ ] 가맹 미확인·기준일/수집일·좌표 미확보 범위 안내
 - [ ] 422/500·재시도·로딩, 기존 API 연결 회귀·lint/build/테스트
 - [ ] FE 계약·CLAUDE.md 반영 및 계산 보완안 검토 결과를 BE에 전달
