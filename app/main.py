@@ -11,6 +11,7 @@ from app.core.exception_handlers import register_exception_handlers
 from app.core.middleware import UnhandledErrorMiddleware
 from app.core.request_logging import OperationLogMiddleware
 from app.db.dependencies import DatabaseResources
+from app.routers.chain_interpret import router as chain_interpret_router
 from app.routers.chains import router as chains_router
 from app.routers.geocode import router as geocode_router
 from app.routers.health import router as health_router
@@ -71,6 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(interpret_router, prefix="/api")
     application.include_router(support_router, prefix="/api")
     application.include_router(chains_router, prefix="/api/v2")
+    application.include_router(chain_interpret_router, prefix="/api/v2")
     return application
 
 

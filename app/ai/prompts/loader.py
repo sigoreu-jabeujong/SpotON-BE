@@ -14,6 +14,7 @@ from importlib.resources import files
 from importlib.resources.abc import Traversable
 from string import Template
 
+from app.ai.prompts.chain_version import CHAIN_PROMPT_VERSION as CHAIN_PROMPT_VERSION
 from app.ai.prompts.version import PROMPT_VERSION
 
 SYSTEM_FILE = "system.md"
@@ -61,7 +62,7 @@ def _read(directory: Traversable, name: str) -> str:
     return text
 
 
-def read_prompt_bundle(directory: Traversable) -> PromptBundle:
+def read_prompt_bundle(directory: Traversable, *, version: str = PROMPT_VERSION) -> PromptBundle:
     contents = {name: _read(directory, name) for name in PROMPT_FILES}
 
     system = Template(contents[SYSTEM_FILE])
@@ -77,7 +78,7 @@ def read_prompt_bundle(directory: Traversable) -> PromptBundle:
         raise PromptError(f"{USER_FILE}: 치환 변수는 $context_json 하나여야 합니다")
 
     return PromptBundle(
-        version=PROMPT_VERSION,
+        version=version,
         sha256=compute_prompt_sha256(contents),
         system_instruction=contents[SYSTEM_FILE],
         user_template=user,
@@ -91,3 +92,10 @@ def packaged_prompt_directory() -> Traversable:
 @lru_cache(maxsize=1)
 def load_prompt_bundle() -> PromptBundle:
     return read_prompt_bundle(packaged_prompt_directory())
+
+
+@lru_cache(maxsize=1)
+def load_chain_prompt_bundle() -> PromptBundle:
+    return read_prompt_bundle(
+        files("app.ai.prompts") / "chain_interpret", version=CHAIN_PROMPT_VERSION
+    )

@@ -77,6 +77,7 @@ API_PATHS = frozenset(
         "/api/v2/stores/snapshot",
         "/api/v2/market/activity",
         "/api/v2/risk",
+        "/api/v2/risk/interpret",
         "/docs",
         "/redoc",
         "/openapi.json",

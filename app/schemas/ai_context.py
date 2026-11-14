@@ -269,3 +269,79 @@ class RiskInterpretContext(ContextModel):
         ):
             raise ValueError("nearby cohort mismatch")
         return self
+
+
+class ContextChainFilters(ContextModel):
+    area: Literal["all", "lt33", "33to66", "66to99", "gte99"]
+    include_unknown_area: bool
+    brand_scope: Literal["all", "chain", "non_chain"]
+    brand_unknown: Literal["include", "exclude"]
+    brand_evidence: Literal["include_estimates", "confirmed_only"]
+    brand_time_basis: Literal["observed_record"] = "observed_record"
+    operation_type: Literal["any"] = "any"
+
+
+class ContextChainClassification(ContextModel):
+    status: Literal["pending", "estimate"]
+    source_drift: bool
+    catalog_year: int | None = Field(default=None, ge=2000, le=9999)
+    semas_month: str | None = Field(default=None, pattern=r"^20\d{2}-(0[1-9]|1[0-2])$")
+    coverage: Literal["partial"] = "partial"
+    policy: Literal["franchised_direct_small_chains"] = "franchised_direct_small_chains"
+    time_basis: Literal["observed_record"] = "observed_record"
+    historical_membership: Literal["not_verified"] = "not_verified"
+    operation_type: Literal["unknown"] = "unknown"
+    limitations: tuple[
+        Literal[
+            "estimated_membership_not_contract",
+            "license_records_not_outlet_count",
+            "historical_membership_not_verified",
+            "unknown_is_not_non_chain",
+        ],
+        ...,
+    ] = (
+        "estimated_membership_not_contract",
+        "license_records_not_outlet_count",
+        "historical_membership_not_verified",
+        "unknown_is_not_non_chain",
+    )
+
+
+class ChainRiskInterpretContext(ContextModel):
+    """Independent outbound allowlist; no legacy franchise or publication identifiers."""
+
+    category: Category
+    sub_category: tuple[SubCategory, ...]
+    radius_m: Literal[300, 500, 1000]
+    filters: ContextChainFilters
+    brand_classification: ContextChainClassification
+    as_of: date
+    data_updated_at: date
+    collected_at: None = None
+    collection_reason: Literal["source_completion_time_not_recorded"] = (
+        "source_completion_time_not_recorded"
+    )
+    market_status: Literal["unverified"] = "unverified"
+    indicators: tuple[ContextIndicator, ...] = Field(repr=False)
+    flags: ContextFlags
+    methodology: ContextMethodology = Field(default_factory=ContextMethodology)
+    activity: ContextActivity = Field(repr=False)
+    history: ContextHistory | None = Field(default=None, repr=False)
+    nearby: ContextNearby | None = Field(default=None, repr=False)
+
+    @model_validator(mode="after")
+    def activity_scope(self) -> Self:
+        if (
+            tuple(g.sub_category for g in self.activity.groups) != self.sub_category
+            or self.activity.space != f"radius_{self.radius_m}m"
+            or self.as_of > self.data_updated_at
+            or self.history is not None
+            and self.history.data_updated_at != self.data_updated_at
+            or self.nearby is not None
+            and self.nearby.active_at_as_of != sum(g.open_count for g in self.activity.groups)
+        ):
+            raise ValueError("chain context scope mismatch")
+        return self
+
+
+InterpretContext = RiskInterpretContext | ChainRiskInterpretContext

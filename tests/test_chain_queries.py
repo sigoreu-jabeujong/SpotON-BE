@@ -77,7 +77,7 @@ def test_v2_invalid_input_never_opens_database(monkeypatch):
             client.get("/api/stores/nearby", params={**PARAMS, "brand_scope": "all"}).status_code
             == 422
         )
-        assert client.post("/api/v2/risk/interpret", json={}).status_code == 404
+        assert client.post("/api/v2/risk/interpret", json={}).status_code == 422
 
 
 @pytest.mark.parametrize(

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.client import LlmRequest
 from app.ai.prompts.builder import build_interpret_request, serialize_context
-from app.ai.prompts.loader import PromptError, load_prompt_bundle
+from app.ai.prompts.loader import PromptBundle, PromptError, load_prompt_bundle
 from app.core.cache import CacheResources
 from app.core.config import Settings
 from app.core.errors import AppError
@@ -32,9 +32,10 @@ from app.schemas.ai_context import (
     ContextModel,
     ContextNearby,
     ContextYear,
+    InterpretContext,
     RiskInterpretContext,
 )
-from app.schemas.common import ApiResponse, ErrorCode
+from app.schemas.common import ApiMeta, ApiResponse, ErrorCode
 from app.schemas.franchise import (
     CLASSIFICATION,
     ESTIMATE_LIMIT,
@@ -82,13 +83,15 @@ class _DataVersion(ContextModel):
 
 @dataclass(frozen=True)
 class PreparedRiskInterpretation:
-    context: RiskInterpretContext = field(repr=False, compare=False, hash=False)
+    context: InterpretContext = field(repr=False, compare=False, hash=False)
     request: LlmRequest = field(repr=False, compare=False, hash=False)
     context_hash: str
     data_version_hash: str
     prompt_version: str
     prompt_sha256: str
     snapshot_token: str | None = field(default=None, repr=False)
+    bundle: PromptBundle | None = field(default=None, repr=False, compare=False)
+    response_meta: ApiMeta | None = field(default=None, repr=False, compare=False)
 
     def json_context(self) -> dict[str, JsonValue]:
         return self.context.model_dump(mode="json")
@@ -224,6 +227,10 @@ def _history(
     history: HistoryQuery,
     category: str,
     reference: date,
+    *,
+    classification_key: Literal[
+        "franchise_classification", "brand_classification"
+    ] = "franchise_classification",
 ) -> ContextHistory:
     """Same-session recomputation of #36 history; identifier-free aggregates only (§4·§5)."""
     if building.error is not None or building.data is None:
@@ -235,7 +242,7 @@ def _history(
         updated is None
         or updated != risk_meta.get("data_updated_at")
         or meta.get("as_of") != updated
-        or meta.get("franchise_classification") != risk_meta.get("franchise_classification")
+        or meta.get(classification_key) != risk_meta.get(classification_key)
         or meta.get("collected_at") is not None
         or meta.get("source") != ["R5", "R6"]
         or type(meta.get("denominator")) is not int
@@ -300,13 +307,17 @@ def _activity(
     risk_meta: dict[str, JsonValue],
     sub: tuple[str, ...],
     radius: int,
+    *,
+    classification_key: Literal[
+        "franchise_classification", "brand_classification"
+    ] = "franchise_classification",
 ) -> ContextActivity:
     """Same-session recomputation; reject any drift from the Risk cohort (design §4)."""
     if activity.error is not None or activity.data is None:
         raise ValueError("activity result unavailable")
     data = MarketActivity.model_validate(activity.data.model_dump(warnings="error"))
     meta = activity.meta
-    for key in ("as_of", "data_updated_at", "franchise_classification", "cohort_size"):
+    for key in ("as_of", "data_updated_at", classification_key, "cohort_size"):
         if key not in meta or meta.get(key) != risk_meta.get(key):
             raise ValueError("activity provenance mismatch")
     cohort = meta.get("cohort_size")
@@ -469,7 +480,13 @@ def _extract_context(
     version_json["activity_rule_version"] = ACTIVITY_RULE_VERSION
     if history is not None:
         version_json["history_rule_version"] = HISTORY_RULE_VERSION
-    version_hash = hashlib.sha256(serialize_context(version_json).encode("utf-8")).hexdigest()
+    # Private provenance contains identifiers that are deliberately forbidden outbound.
+    # Keep identical canonical bytes while separating hashing from the LLM allowlist.
+    version_hash = hashlib.sha256(
+        json.dumps(
+            version_json, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+    ).hexdigest()
     sub = query.sub_category or (
         ("cafe",) if query.category == "cafe" else ("korean", "chinese", "japanese", "western")
     )

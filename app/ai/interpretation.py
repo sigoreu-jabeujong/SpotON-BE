@@ -6,10 +6,11 @@ from datetime import UTC, datetime
 
 from pydantic import JsonValue
 
+from app.ai.chain_notices import chain_notice
 from app.ai.context import PreparedRiskInterpretation
 from app.ai.narrative import NarrativeCatalog, build_narrative
 from app.ai.verifier import NUMBER_PATTERN, VerifyPolicy, verify_output
-from app.schemas.ai_context import RiskInterpretContext
+from app.schemas.ai_context import ChainRiskInterpretContext, InterpretContext
 from app.schemas.interpret import (
     CandidateSelection,
     ChecklistItem,
@@ -109,7 +110,7 @@ class InterpretationCatalog:
         return schema
 
 
-def _activity_facts(c: RiskInterpretContext) -> list[InterpretItem]:
+def _activity_facts(c: InterpretContext) -> list[InterpretItem]:
     """#60 활동 집계의 참고 계산 문장. 문맥에 없는 숫자(기간 길이 등)는 쓰지 않는다."""
     a = c.activity
     facts = [
@@ -138,7 +139,7 @@ def _activity_facts(c: RiskInterpretContext) -> list[InterpretItem]:
     return facts
 
 
-def _history_items(c: RiskInterpretContext) -> tuple[list[InterpretItem], list[MissingItem]]:
+def _history_items(c: InterpretContext) -> tuple[list[InterpretItem], list[MissingItem]]:
     """#98 건물 이력 문장. 숫자 바로 뒤에 층·호를, '로'·'길' 바로 뒤에 숫자를 두지 않는다."""
     h = c.history
     if h is None:
@@ -260,19 +261,28 @@ def build_catalog(prepared: PreparedRiskInterpretation) -> InterpretationCatalog
     history_facts, history_missing = _history_items(c)
     facts.extend(history_facts)
     missing.extend(history_missing)
+    if isinstance(c, ChainRiskInterpretContext):
+        classification_notice = MissingItem(
+            text=chain_notice(c),
+            reason="chain_membership_estimate"
+            if c.brand_classification.status == "estimate"
+            else "chain_classification_pending",
+        )
+    else:
+        classification_notice = MissingItem(
+            text=(
+                "상권 적용 시점은 미확인이고 가맹 분류는 기준년도 목록과 상호의 "
+                "일치에 따른 추정입니다. 실제 가맹계약이나 과거 소속을 증명하지 않습니다."
+                if c.franchise_classification == "estimate"
+                else "상권 적용 시점과 가맹 분류는 미확인 상태입니다."
+            ),
+            reason="franchise_name_match_estimate"
+            if c.franchise_classification == "estimate"
+            else "classification_unverified",
+        )
     missing.extend(
         [
-            MissingItem(
-                text=(
-                    "상권 적용 시점은 미확인이고 가맹 분류는 기준년도 목록과 상호의 "
-                    "일치에 따른 추정입니다. 실제 가맹계약이나 과거 소속을 증명하지 않습니다."
-                    if c.franchise_classification == "estimate"
-                    else "상권 적용 시점과 가맹 분류는 미확인 상태입니다."
-                ),
-                reason="franchise_name_match_estimate"
-                if c.franchise_classification == "estimate"
-                else "classification_unverified",
-            ),
+            classification_notice,
             MissingItem(
                 text="전체 수집 완료일이 확인되지 않았으며 검증일을 수집일로 대체하지 않습니다.",
                 reason="source_completion_time_not_recorded",

@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from pydantic import JsonValue
 
 from app.ai.client import LlmRequest
-from app.ai.prompts.loader import load_prompt_bundle
+from app.ai.prompts.loader import PromptBundle, load_prompt_bundle
 
 # stores·geocode·nearby의 실제 필드명 기준. 지표 식별은 `id`, 상권명은 `market_name`을 쓴다.
 FORBIDDEN_CONTEXT_KEYS = frozenset(
@@ -37,6 +37,22 @@ FORBIDDEN_CONTEXT_KEYS = frozenset(
         "brand_id",
         "phone",
         "tel",
+        "generation",
+        "brand_key",
+        "brand_name",
+        "fingerprint",
+        "snapshot_hash",
+        "input_hash",
+        "input_sha256",
+        "registry_sha256",
+        "semas_id",
+        "source_id",
+        "published_at",
+        "semas_observed_at",
+        "publication_generation",
+        "publication_fingerprint",
+        "source_revision",
+        "snapshot_token",
     }
 )
 
@@ -79,8 +95,9 @@ def build_interpret_request(
     *,
     response_json_schema: Mapping[str, JsonValue] | None = None,
     max_output_tokens: int | None = None,
+    bundle: PromptBundle | None = None,
 ) -> LlmRequest:
-    bundle = load_prompt_bundle()
+    bundle = bundle if bundle is not None else load_prompt_bundle()
     return LlmRequest(
         system_instruction=bundle.system_instruction,
         user_content=bundle.user_template.substitute(context_json=serialize_context(context)),

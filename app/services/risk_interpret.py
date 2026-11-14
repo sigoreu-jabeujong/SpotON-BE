@@ -5,6 +5,7 @@ import time
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from sqlalchemy import event
 
+from app.ai.chain_context import chain_query_parts, prepare_chain_interpretation
 from app.ai.client import LlmClient, LlmError, LlmErrorKind
 from app.ai.context import PreparedRiskInterpretation, prepare_risk_interpretation
 from app.ai.interpretation import build_catalog, render_interpretation
@@ -14,6 +15,8 @@ from app.ai.verified import AiVerifyFailedError, generate_verified
 from app.core.cache import Flights
 from app.core.errors import AppError
 from app.db.dependencies import NO_STORE, DatabaseResources, read_only_session
+from app.schemas.ai_context import ChainRiskInterpretContext
+from app.schemas.chains import ChainRiskQuery
 from app.schemas.common import ApiMeta, ApiResponse, ErrorCode
 from app.schemas.interpret import CandidateSelection, RiskInterpretation
 from app.schemas.risk import RiskQuery
@@ -22,6 +25,7 @@ from app.services.risk_cache import query_parts
 
 MIN_REGENERATION_SECONDS = 1.0
 SELECTION_CACHE_RULE = "selection-current-validation-v4-narrative"
+CHAIN_SELECTION_CACHE_RULE = "selection-chain-current-validation-v1"
 
 
 class _CachedSelection(BaseModel):
@@ -45,7 +49,7 @@ class InterpretationResources:
 
 def _prepare(
     resources: InterpretationResources,
-    query: RiskQuery,
+    query: RiskQuery | ChainRiskQuery,
     deadline: float,
     stop: threading.Event,
     history: HistoryQuery | None = None,
@@ -59,13 +63,22 @@ def _prepare(
         connection = session.connection()
         event.listen(connection, "before_cursor_execute", check)
         try:
-            result = prepare_risk_interpretation(
-                session,
-                query,
-                resources.database.settings,
-                cache=resources.database.cache,
-                history=history,
-            )
+            if isinstance(query, ChainRiskQuery):
+                result = prepare_chain_interpretation(
+                    session,
+                    query,
+                    resources.database.settings,
+                    cache=resources.database.cache,
+                    history=history,
+                )
+            else:
+                result = prepare_risk_interpretation(
+                    session,
+                    query,
+                    resources.database.settings,
+                    cache=resources.database.cache,
+                    history=history,
+                )
             check()
             return result
         finally:
@@ -73,7 +86,9 @@ def _prepare(
 
 
 async def interpret_risk(
-    resources: InterpretationResources, query: RiskQuery, history: HistoryQuery | None = None
+    resources: InterpretationResources,
+    query: RiskQuery | ChainRiskQuery,
+    history: HistoryQuery | None = None,
 ) -> ApiResponse[RiskInterpretation]:
     budget = resources.database.settings.llm_time_budget
     deadline = time.monotonic() + budget
@@ -91,9 +106,22 @@ async def interpret_risk(
                 "analysis": prepared.json_context(),
                 "candidates": catalog.candidates(),
             }
-            request = build_interpret_request(
-                payload, response_json_schema=catalog.selection_schema()
-            )
+            is_chain = isinstance(query, ChainRiskQuery)
+            if is_chain and (
+                not isinstance(prepared.context, ChainRiskInterpretContext)
+                or prepared.bundle is None
+                or prepared.bundle.version != prepared.prompt_version
+                or prepared.bundle.sha256 != prepared.prompt_sha256
+            ):
+                raise ValueError("chain prompt context mismatch")
+            if is_chain:
+                request = build_interpret_request(
+                    payload, response_json_schema=catalog.selection_schema(), bundle=prepared.bundle
+                )
+            else:
+                request = build_interpret_request(
+                    payload, response_json_schema=catalog.selection_schema()
+                )
             cache = resources.database.cache
             config = resources.database.settings
             key = None
@@ -105,9 +133,11 @@ async def interpret_risk(
             ):
                 key = cache.key(
                     "ai",
-                    SELECTION_CACHE_RULE,
+                    CHAIN_SELECTION_CACHE_RULE if is_chain else SELECTION_CACHE_RULE,
                     prepared.snapshot_token,
-                    query_parts(query),
+                    chain_query_parts(query)
+                    if isinstance(query, ChainRiskQuery)
+                    else query_parts(query),
                     prepared.data_version_hash,
                     prepared.context_hash,
                     prepared.prompt_version,
@@ -180,6 +210,10 @@ async def interpret_risk(
                     "interpretation_method": "server_sentences_model_ordering",
                 }
                 response: ApiResponse[RiskInterpretation] = ApiResponse(data=output, meta=meta)
+                if is_chain:
+                    if prepared.response_meta is None:
+                        raise ValueError("chain response metadata missing")
+                    response.meta.update(prepared.response_meta)
                 before(1)
                 if key is not None and cached is None:
                     try:
