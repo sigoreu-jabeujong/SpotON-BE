@@ -689,3 +689,11 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - 실제 DB 전후 6개 조회 흐름과 원천별 복구 표본의 주소→이력→AI 문맥을 최신 TestClient로 확인했다(88요청 모두200, 실제 Kakao·모의 AI4회·실제 LLM0). 비위치 API data hash·as_of/D·collected_at=null은 같고 새 batch ids·risk 캐시 키·AI 문맥/버전 hash는 바뀌었다. 로컬 BE 재시작 후 실제 HTTP8건도 새 배치와 층·호 전달을 확인했다.
 - 개발 DB는 head0011·689,440행을 유지하고 source별 새 v2 활성 배치로 연결된다. 위치 외 보호 값·다른 모델 테이블·과거 배치·브랜드 근거·sequence는 전후 동일하며 재실행은 no_op이다. 기존 명령의 커밋 후 VACUUM/ANALYZE·출처 검증도 통과했다. 백업/갱신 덤프는 저장소 밖에 보관하고 갱신 덤프 재복원본의 19개 모델 테이블 전체 내용·건수/sequence/head 동등성도 확인했다.
 - 원본상 결측·모호 값은 그대로다. 다른 팀원 DB 자동 적용·원천 최신화·FE 브라우저/진단서 검증·운영 배포 완료를 뜻하지 않는다. 한식 품질·브랜드 범위·첫 조회 성능은 별도 후속이다. API schema·모델·migration·FE·실제 .env·로컬 Docker 설정은 변경하지 않았다.
+
+## 44. 출처 배치 누적 시 조회 성능 검토 및 개선 (#118)
+
+- #78 재점검의 BE 미해결 항목 "미사용 배치 누적까지 고려한 출처 조회 성능 검토"를 브랜치 `feat#118-source-batch-query-perf`(develop `c255ded`)에서 처리했다. [측정·설계·별도 Claude Code 재검토/MD 직접 수정·결과](designs/feat118-source-batch-query-perf.md)를 따른다.
+- 일회용 PostGIS 합성 689,440행 측정에서 과거 배치 1,324개가 쌓여도 VACUUM 후 배치 목록은 1.4~3.2ms였다. 배치 누적 자체는 병목이 아니다. 재적재 직후 비용은 옛 배치 죽은 항목의 첫 확인과, 기존 고아 검사가 VACUUM 전까지 매 요청 지원 점포 전체를 확인하는 구조가 지배했다.
+- `current_provenance`의 고아 검사만 같은 의미의 recursive CTE skip scan(`orphan_exists`, 지원 점포의 서로 다른 batch_id/source 키만 `ix_stores_provenance`로 탐색 + `batch_id IS NULL` 별도 검사)으로 바꿨다. 배치 목록·get_history·응답·migration·인덱스·3초 제한·고아 500 정책은 유지한다. 인덱스가 전제이므로 0010 downgrade 시 코드도 되돌려야 한다.
+- 일반 1,655·격리 PostGIS 263(신규 동치 12사례·적격성 강화), ruff/format 344·mypy 99 files 통과. 실제 개발 DB READ ONLY에서 결과 동일·고아 검사 37~42ms → 0.1ms·LATERAL 인덱스 순서 스캔·5개 API 응답 digest 동일을 확인했다. 측정은 SLA가 아니다.
+- 재적재 직후 첫 확인(합성 콜드 약 1초)은 남으며 #82/#86의 읽기 중지→커밋→VACUUM→확인→재개 절차를 유지한다. #78은 FE 5종·간헐 동시 조회 500 원인·외부 원천 지연 추적을 위해 열어 둔다. Render 배포·FE 변경은 없다.

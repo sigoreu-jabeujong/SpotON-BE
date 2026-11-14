@@ -169,3 +169,11 @@ Claude Code 재검토자가 Read/Grep/Glob으로 이 MD 전체와 다음 소스�
 - 지원 외 업종을 NULL이 아닌 category 문자열로 저장하도록 ETL이 바뀌면 키 내부 순서 가정을 다시 검토한다.
 - 실제 개발 DB에서 LATERAL 단계 인덱스 순서 스캔, 마지막 단계·`IS NULL` 분기 버퍼 수, 변경 전후 결과·API digest 동일을 확인한 뒤 PR한다(§7 중단 조건).
 - 측정값(§2)은 단발 합성 측정이며 이번 검토에서 재현하지 않았다.
+
+## 10. 구현·검증 결과
+
+- 구현: `app/services/store_cohort.py`에 `orphan_exists()`를 추가하고 `current_provenance`의 고아 검사만 이 쿼리로 바꿨다. SQLAlchemy 컴파일 결과에서 비재귀 항의 ORDER BY/LIMIT은 괄호로 감싸진다(단위 테스트로 고정). 배치 목록·`get_history`·호출부·응답·migration·인덱스·timeout은 바꾸지 않았다.
+- 테스트: 단위 2개(컴파일 형태·세 stores 스캔의 지원 점포 조건). 격리 동치 12사례(빈 stores·전부 연결·고아 첫/중간/마지막 UUID·같은 batch 다른 source·미지원만 남은 배치 뒤 고아·미등록 키의 NULL category/미지원 source/삭제/검토대기·NULL batch 미지원 꼬리·NULL batch 지원 행·배치 340개 누적 ± 고아)에서 새 쿼리 = 기존 anti-join 기준 함수. 적격성 테스트는 `WITH RECURSIVE`를 캡처하고 모든 stores 스캔이 `ix_stores_provenance`이며 LATERAL 단계 Index Cond에 `ROW(batch_id, source) >`가 있음을 단언한다(성능 증명 아님).
+- 로컬 검사: ruff check·ruff format --check(344 files)·mypy app migrations(99 files) 통과. 일반 **1,655 passed**(기준 1,653+신규 2), 일회용 PostGIS 17-3.7 격리 **263 passed**(기준 251+신규 12). 기존 Starlette 경고 1건 유지.
+- 실제 개발 DB(READ ONLY REPEATABLE READ, `transaction_read_only=on`): 기존 anti-join과 새 쿼리 모두 false, `current_provenance` 배치 2개·기준일 2026-11-08. EXPLAIN ANALYZE 3회 기존 36.986~42.260ms → 새 0.097~0.103ms. LATERAL 단계는 `ix_stores_provenance` Index Only Scan(Index Cond에 row 비교, heap fetch 0), `IS NULL` 분기는 같은 인덱스 3블록이며 인덱스 predicate 기준 `batch_id IS NULL` 행 0건. 공개 랜드마크 좌표 1곳의 data-range·nearby·snapshot·activity·risk 5개 응답 digest가 기존 고아 검사 경로(테스트 안에서 교체)와 새 경로에서 모두 같았다. DML/DDL/VACUUM은 실행하지 않았다.
+- 한계: 측정은 단발이며 SLA가 아니다. 재적재 직후 첫 확인(합성 콜드 약 1초)은 남으며 #82/#86 운영 절차를 유지한다. 실제 누적 배치는 현재 0개라 누적 효과는 합성 데이터로만 확인했다. Render 배포는 하지 않았다(자동 배포 off, 별도 수동 결정).
