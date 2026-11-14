@@ -1,5 +1,9 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
+2026-11-15 #147은 [브랜드 조건의 v2 AI 해석](designs/feat147-chain-ai-context.md)을 구현·검증한다. 같은 RR 세션의 브랜드 Selection과 Risk/활동/전체 이력 재계산, 독립 outbound 문맥·프롬프트/선택 캐시, v1/v2 공유 한도와 숫자 검증을 따른다. v1 프롬프트v9·schema0012·FE·.env·원본/운영 DB·기존 서버·Render는 유지한다. [FE 계약](fe-chain-ai-api-request.md)을 BE 문서에만 작성한다. 아래 #145의 v2 AI 후속 설명은 이 작업으로 대체한다.
+
+#147 BE 구현과 일반1944/PostGIS286·실제 Gemini2건 검증을 완료했다. 실제 Claude 설계 검수와 정적 코드 검수(차단 결함0)를 수행했고, 최종 증거 추가 재검수는 Claude5시간 한도로 실패했다. 그 사실과 Codex 최종 대조를 설계7.4절에 기록하며 추가 Claude PASS로 표시하지 않는다. FE·운영 배포는 후속이다.
+
 2026-11-15 #145는 [브랜드 판정 공개·v2 BE 구현](designs/feat145-chain-publication-api.md) 단계다. 새 코드의 schema guard는0012이며 기존 실행/Render DB0011과 구분한다. FE·.env·원본/운영 DB는 변경하지 않고 격리 복제 DB에서 migration/publication/API를 검증한다. v2 AI는 별도 후속이다. [FE 계약 요청](fe-chain-v2-api-request.md)을 따른다.
 
 #145 BE 구현·실제 Claude 재검수 PASS, 일반1920/PostGIS278 검증을 완료했다. 아래 과거 작업 기록의 head0011은 당시 기준이며 새 코드/ETL/readiness의 현재 기준은0012다. 기존 실행/Render DB0011은 유지하고 배포 전 관리 역할 migration이 필요하다. v2 AI·FE 연결·운영 배포·세대 정리/pending 복귀는 후속이다.

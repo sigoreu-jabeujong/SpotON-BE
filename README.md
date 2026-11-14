@@ -1,5 +1,11 @@
 # SpotON-BE
 
+## 브랜드 조건을 유지하는 AI 해석 (#147)
+
+`POST /api/v2/risk/interpret`는 v2 Risk와 동일한 브랜드 조건으로 Risk·활동·선택 건물 이력을 같은 READ ONLY RR 세션에서 재계산합니다. 별도 typed 문맥과 chain-risk-interpret-v1 프롬프트를 사용하며 모델은 검증된 서버 문장 ID만 선택합니다. 내부 publication 식별자·주소·점포명·인허가/브랜드 ID·좌표는 모델에 보내지 않습니다. 추정·미확인·과거 소속의 한계와 실제 조건을 본문에 함께 표시합니다.
+
+v1 프롬프트/요청은 유지합니다. v1/v2의 요청 한도·동시 실행 자원·AI LRU 용량은 공유하고, 선택 캐시 키는 규칙/프롬프트/문맥/자료로 분리합니다. 캐시가 있어도 현재 DB를 먼저 검증합니다. [설계·실제 검수/검증](docs/designs/feat147-chain-ai-context.md), [FE 연결 계약](docs/fe-chain-ai-api-request.md)을 따릅니다. FE·기존 서버·.env·운영 DB/Render 배포는 이번에 변경하지 않습니다.
+
 ## 브랜드 판정 공개와 v2 조회 (#145)
 
 새 코드의 migration/head 가드는 **0012**입니다. 실행 중인 개발 서버와 Render의 기존0011 DB는 이번 작업에서 변경하지 않습니다. 새 코드 실행 전 격리 검증·백업을 거쳐 관리 역할로 migration을 적용하고 조회 역할에 신규5테이블 SELECT 권한을 준비합니다. trigger는 원천 변경 번호만 갱신하며 점포 업무 필드는 보존합니다.
