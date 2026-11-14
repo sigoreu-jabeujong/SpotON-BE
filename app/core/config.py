@@ -25,7 +25,9 @@ class Settings(BaseSettings):
     database_statement_timeout_ms: int = Field(default=3000, ge=1, le=60000)
     database_pool_size: int = Field(default=3, ge=1, le=20)
     database_max_overflow: int = Field(default=0, ge=0, le=20)
-    database_pool_timeout: float = Field(default=2, ge=0.1, le=30)
+    # Seconds a request waits for a pooled connection (issue #120). Cold concurrent requests
+    # hold connections ~2s, so 2s failed queued requests; keep it below the FE 15s GET limit.
+    database_pool_timeout: float = Field(default=10, ge=0.1, le=30)
     database_connection_budget: int = Field(default=8, ge=1, le=1000)
     database_expected_revision: str = Field(default="0011", pattern=r"^[0-9]{4}$")
     web_concurrency: int = Field(default=1, ge=1, le=8)

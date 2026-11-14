@@ -26,7 +26,7 @@
 
 Docker 이미지는 `docker build -t spoton-be .`로 만든다. 고정 Python·uv digest와 uv.lock, 비root UID10001을 사용하며 `python -m app.runtime`으로 실행한다. `.env`·덤프·Git·개발 의존성은 이미지에 포함하지 않는다. 시작 시 migration/ETL은 실행하지 않는다.
 
-Render 환경변수에는 아래 Free 전용 값을 명시한다. 로컬 `.env`와 코드 기본 SQL3초·풀3/대기2초 설정은 그대로 둔다.
+Render 환경변수에는 아래 Free 전용 값을 명시한다. 로컬 `.env`와 코드 기본 SQL3초·풀3/대기10초 설정은 그대로 둔다.
 
 ```dotenv
 APP_ENV=staging
