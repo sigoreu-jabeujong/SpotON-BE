@@ -276,6 +276,81 @@ def test_failed_probe_ttl_and_success_expiration():
         assert probe.check() is False and q.call_count == 3
 
 
+@pytest.mark.parametrize("close_before_publish", [False, True])
+def test_publication_gap_does_not_reprobe_or_return_success_after_close(close_before_publish):
+    entered, release = Event(), Event()
+    probe = ReadinessProbe(Settings(_env_file=None))
+
+    def slow():
+        entered.set()
+        assert release.wait(3)
+        return "ok"
+
+    with patch.object(probe, "_probe", side_effect=slow) as query, ThreadPoolExecutor(1) as pool:
+        leader = pool.submit(probe.check)
+        try:
+            assert entered.wait(3)
+            flight = probe._current
+            original = flight.set_result
+
+            def publish(result):
+                assert not probe._lock.locked()
+                if close_before_publish:
+                    probe.close()
+                else:
+                    assert probe.check() is True
+                assert query.call_count == 1
+                original(result)
+
+            with patch.object(flight, "set_result", side_effect=publish):
+                release.set()
+                assert leader.result(timeout=3) is (not close_before_publish)
+            assert flight.done() and query.call_count == 1
+        finally:
+            release.set()
+
+
+def test_expired_success_is_not_used_during_new_failed_probe():
+    entered, release, joined = Event(), Event(), Event()
+    probe = ReadinessProbe(Settings(_env_file=None))
+    calls = 0
+
+    def run():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return "ok"
+        entered.set()
+        assert release.wait(3)
+        return "database_error"
+
+    with (
+        patch.object(probe, "_probe", side_effect=run),
+        patch("app.services.readiness.monotonic", return_value=100) as clock,
+        ThreadPoolExecutor(2) as pool,
+    ):
+        assert probe.check() is True
+        clock.return_value = 111
+        leader = pool.submit(probe.check)
+        try:
+            assert entered.wait(3)
+            flight = probe._current
+            original = flight.result
+
+            def wait(*args, **kwargs):
+                joined.set()
+                return original(*args, **kwargs)
+
+            with patch.object(flight, "result", side_effect=wait):
+                waiter = pool.submit(probe.check)
+                assert joined.wait(3) and not waiter.done()
+                release.set()
+                assert waiter.result(timeout=3) is False
+            assert leader.result(timeout=3) is False and calls == 2
+        finally:
+            release.set()
+
+
 def test_state_lock_is_not_held_during_probe_completion_or_logging():
     entered, release = Event(), Event()
     probe = ReadinessProbe(Settings(_env_file=None))
