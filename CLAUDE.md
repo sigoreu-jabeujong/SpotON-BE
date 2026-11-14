@@ -174,7 +174,7 @@ docs/be-system-audit.md에 기능별 상태와 실제/격리·모의/정적/기�
 
 ## DB 연결 풀 대기 (BE #120)
 
-코드 기본 `DATABASE_POOL_TIMEOUT`은 10초다. 콜드 동시 조회에서 기본 2초가 연결 점유 시간보다 짧아 줄 선 요청이 SQLAlchemy QueuePool `TimeoutError` → 500 INTERNAL_ERROR가 된 것을 재현·수정했다(SQL statement timeout은 0건). 풀 대기는 SQL 문장 제한(기본 3초)과 별개이며 FE GET 제한 15초보다 짧게 유지한다. 풀 크기·연결 예산·오류 코드는 그대로다. Render(풀1/대기15초)의 풀 크기 권장안은 docs/render-free-validation.md 7절에 미적용으로 기록했다. 근거는 docs/designs/feat120-concurrent-query-500.md를 따른다.
+코드 기본 `DATABASE_POOL_TIMEOUT`은 10초다. 최초 콜드 동시 조회에서 기본2초가 연결 점유보다 짧아 줄 선 요청이 QueuePool `TimeoutError` →500이 된 것을 재현·수정했다(SQL statement timeout0건). 풀 대기는 SQL 문장 제한(기본3초)과 별개이며 전체 HTTP 마감이 아니다. 초기 FE15초는 당시 기준이고 최신 FE4bf012f는 일반45초·초기60초다. 풀 크기·연결 예산·오류 코드는 그대로다. Render는 명시된 풀1/대기15초를 유지하며, 과거 풀2 후보는 후속 #122의 지연 악화로 미채택됐다. 현재/과거 구분은 docs/render-free-validation.md 7절, 설계·실제 검토와 rebase 회귀는 docs/designs/feat120-concurrent-query-500.md를 따른다.
 
 ## 생활인구 원자료 상태 진단 (BE #84)
 

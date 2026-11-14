@@ -153,3 +153,50 @@
 - 로컬 검사: ruff check·ruff format --check(345 files)·mypy app migrations(99 files) 통과. 일반 **1,657 passed**(기준 1,655+신규 2), 일회용 PostGIS 17-3.7 격리 **264 passed**(기준 263+신규 1). 기존 Starlette 경고 1건.
 - 실제 개발 DB 재검증(일반 uvicorn, 설정 덮어쓰기·진단 실행기 없음, `.env`에 풀 키 없음 → 새 기본값): §3.1과 같은 콜드 화면3(15동시)+웜 1회차 × 3시행, 총 90요청 모두 200·앱 500 이벤트 0·PG statement timeout 0. 콜드 회차 최대 1,907~2,156ms, 웜 203~288ms. 같은 조건의 기존 기본값은 5시행 중 3시행에서 500 7건이었다(§3.1). 단발 측정이며 SLA·부하 상한 검증이 아니다.
 - Render: 코드 기본값 변경은 Render에 영향이 없다(Render는 `DATABASE_POOL_TIMEOUT=15`를 명시). 풀1 직렬 문제는 환경변수 권장안(§4.3, 문서 7절)으로만 남겼고 적용·재배포·재측정은 사용자 결정이다.
+
+## 11. 최신 develop rebase (2026-11-14)
+
+- 사용자 요청으로 FE develop을47커밋 최신화해4bf012f에 맞추고108개 테스트·타입/빌드를 통과한 뒤, BE #120 브랜치를 최신 develop05790fa(#133 AI 문단 개편 포함) 위로 rebase했다. FE는 일반45초·초기60초이며 위15초 서술은 초기 측정 당시 기준이다.
+- 기존 HEAD d9d1884를 로컬 `backup/feat120-before-rebase-20261114-221813`로 보존했다. 원래3커밋 중 설계/구현2커밋은 range-diff상 동일하며, 결과 문서 커밋의 두 충돌만 최신 내용과 통합했다. 기본값10초·SQL3초·풀3·예산8과 기존 테스트 의미는 보존했다.
+- `docs/be-work-plan.md`의45절을 최신46/47절 앞에 배치하고 이후 #122/#124/#128/#130 사실을 보존했다. Render 문서7절은 과거 풀2/대기12초 후보를 현재 권장으로 되살리지 않고, #122에서 풀2 지연 악화 후 풀1/대기15초를 유지한 실제 후속과 구분한다. 최신 키워드 정책·ready·AI 문단 구현을 그대로 포함한다.
+- config와.env.example의 주석만 현재 FE 제한과 혼동하지 않게 정리했다. 동작은 기존 #120의2→10초 외에 추가 변경이 없고 HTTP 전체 응답 시간 상한을 보장하지 않는다. 실제.env·개발/Render DB·배포 설정·FE 파일은 수정하지 않는다.
+- rebase 후 일반1,735개·격리 PostGIS271개(skip0), ruff/check·format355 files·mypy160 files가 통과했다. 과거90건의 실제 콜드 검증을 이번 재실행으로 표시하지 않는다.
+
+## 12. rebase 회귀 검토 (Claude Code, 2026-11-14)
+
+### 12.1 범위·성격
+
+- **rebase 회귀 검토**다. 실제 개발 DB 콜드 재현, Render 배포·측정은 새로 하지 않았다. §10의 90요청 검증과 §3.3의 Render 관측은 과거 기록 그대로다.
+- 실제로 읽은 파일: 이 MD, `app/core/config.py`, `.env.example`(공개 예시), `app/db/session.py`, `tests/test_config.py`, `tests/integration/test_render_deployment.py`, `CLAUDE.md`, `docs/be-work-plan.md`(상단 Render 절, 1·22~32·42~47절), `docs/render-free-validation.md`(전체, 7절 포함). Read와 이 MD Edit만 했다. 명령·테스트·Git·네트워크는 실행하지 않았고, 실제 `.env`·비밀·비공개 스크립트·FE 파일은 열지 않았다.
+- range-diff 일치(주석만 바뀐 갱신 전 원래 구현 커밋과 동일), 일반1,735·ruff/format·mypy160 통과, 격리 PostGIS 실행 중이라는 내용은 작업자 보고이며 검토자가 다시 확인하지 않았다.
+
+### 12.2 확인 결과
+
+- **2→10초 변경 보존**: `database_pool_timeout` 기본 10·`ge=0.1`·`le=30`(config.py:31), `create_db_engine`의 `pool_timeout` 전달(session.py:67), `.env.example` `DATABASE_POOL_TIMEOUT=10`. SQL 3초·풀3/overflow0·예산8·연결 예산 validator는 그대로다.
+- **테스트 보존**: 단위 `test_pool_wait_default_covers_cold_concurrent_requests`(환경변수 제거·10·SQL 제한 초과·풀3/0)와 `test_env_example_pool_wait_matches_code_default`, 격리 `test_queued_request_gets_connection_after_release`(반납 전 미완료 → 반납 후 성공, future timeout·dispose), 기존 `test_pool_capacity_timeout_and_return_recovery`(0.1초) 모두 남아 있다.
+- **주석**: config.py 주석과 `.env.example` 주석 모두 "전체 HTTP 응답 시간 상한이 아님"이라고 쓰고, FE 제한 값은 적지 않는다. HTTP 마감을 약속하는 문구는 없다.
+- **현재 Render 값 보존**: CLAUDE.md 13행, work-plan 상단, render 문서 2절의 환경변수 블록이 SQL10초·풀1/overflow0/대기15초·워커1·예산8이다. render 문서 27행은 코드 기본 "풀3/대기10초"다.
+- **후속 작업 보존**: work-plan 46(#122)·47(#124)절, render 문서의 #122 풀2 악화·풀1 복구, #124 ready, #127 LLM, #128 이름 키워드(c4de3ed), CLAUDE.md의 #128·#130 AI 문단 기준이 그대로 있다. 이 rebase가 이를 덮어쓴 흔적은 없다.
+- **과거 권장안 구분**: render 문서 7절은 풀2/대기12초를 "당시 미적용·미검증 후보"로, #122 풀2 악화와 풀1 유지를 현재 기준으로, FE 4bf012f를 45초/60초로 적었다. work-plan 714행과 이 MD §11도 FE15초를 당시 기준으로 밝힌다.
+
+### 12.3 차단 이슈
+
+- **없음.** 동작 변경은 원래의 기본값 2→10초뿐이고 테스트 의미도 보존됐다.
+- 병합 전 조건(결함이 아니라 완료 조건): 실행 중인 격리 PostGIS 전체 결과를 §11에 기록한다. 실패하면 병합하지 않는다.
+
+### 12.4 병합 전 수정 권장(비차단, 동작 영향 없음)
+
+- `CLAUDE.md` 175행(#120 절)에 "FE GET 제한 15초보다 짧게 유지한다", "Render(풀1/대기15초)의 풀 크기 권장안은 … 7절에 미적용으로 기록"이 아직 현재형으로 남아 있다. CLAUDE.md는 매 세션 기준으로 읽히므로 "초기 FE15초 기준, 현재 FE 45/60초", "풀2 후보는 #122에서 악화로 미채택, 7절은 과거 기록"으로 고치는 것을 권장한다.
+
+### 12.5 선택 제안
+
+- work-plan 713행의 "Render 환경변수 권장안은 7절에 미적용으로 기록"을 "과거 권장안(현재 미채택)"으로 바꾸면 714행 설명과 더 잘 맞는다. 714행은 앞 목록 항목에 붙은 연속 문단이 되므로 `- `를 붙이거나 앞에 빈 줄을 넣는다.
+- render 문서 132행(FE dcf8af1)과 7절(FE 4bf012f)의 FE commit 표기가 다르다. 둘 다 45/60초라 의미는 같지만 하나로 통일할 수 있다.
+- §11 본문의 붙어 쓴 숫자·단어("develop을47커밋", "config와.env.example" 등)는 띄어 쓰면 읽기 쉽다.
+- §4.1·§4.3·§9의 FE15초·풀2 서술은 §11에서 이미 당시 기준이라고 밝혔으므로 본문은 원래 기록대로 둔다.
+
+## 13. rebase 검토 후 Codex 판단
+
+실제 Claude Code 검토는 exit0/is_error=false·13턴·권한 거절0으로 완료했다. 차단 결함은 없었고 현재형으로 남은 CLAUDE.md #120 설명을 초기 FE15초/현재45·60초와 Render 풀2 미채택 기준으로 정리했다. config/.env.example 변경은 주석뿐이며 기본값10초와 기존 회귀 의미는 그대로다. 격리 전체271개가 실패/skip 없이 통과해 검토 완료 조건도 확인했다.
+
+검증 중 develop에 #135 운영 배포 결과 문서 commit c6e8152가 추가된 것을 확인했다. 05790fa와의 차이는 BE MD4개뿐이고 실행 코드/테스트/설정/모델/migration은 동일하므로 이미 통과한 검증을 반복하지 않는다. 새 배포/브라우저 결과를 보존하면서 최종 rebase 기준도 c6e8152로 갱신한다. 실제 환경·DB·Render/FE 배포는 이번 rebase 범위에서 변경하지 않는다.
