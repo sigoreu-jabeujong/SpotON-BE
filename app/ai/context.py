@@ -30,6 +30,8 @@ from app.schemas.ai_context import (
     ContextIndicator,
     ContextMethodology,
     ContextModel,
+    ContextNearby,
+    ContextYear,
     RiskInterpretContext,
 )
 from app.schemas.common import ApiResponse, ErrorCode
@@ -353,6 +355,27 @@ def _activity(
         or (closure.numerator is not None and closure.numerator != closed)
     ):
         raise ValueError("activity counts mismatch")
+    years = []
+    for row in data.yearly_trend:
+        end = year_cutoff(risk.query.as_of, row.year)
+        expected = {"start": f"{row.year}-01-01", "end": end.isoformat()}
+        periods = meta.get("yearly_periods")
+        if (
+            row.year > risk.query.as_of.year
+            or meta.get("yearly_comparison_basis") != "same_month_day_ytd"
+            or not isinstance(periods, dict)
+            or periods.get(str(row.year)) != expected
+        ):
+            raise ValueError("yearly comparison period mismatch")
+        years.append(
+            ContextYear(
+                year=row.year,
+                opened=row.opened,
+                closed=row.closed,
+                start=date(row.year, 1, 1),
+                end=end,
+            )
+        )
     return ContextActivity.model_validate(
         {
             "space": f"radius_{radius}m",
@@ -367,6 +390,7 @@ def _activity(
                 )
                 for g in groups
             ),
+            "yearly_trend": tuple(years),
         }
     )
 
@@ -470,6 +494,9 @@ def _extract_context(
         ),
         methodology=method,
         activity=_activity(activity, data, meta, ordered_sub, query.radius),
+        nearby=None
+        if activity.meta.get("record_profile") is None
+        else ContextNearby.model_validate(activity.meta["record_profile"]),
         history=None
         if building is None or history is None
         else _history(building, meta, history, query.category, reference),

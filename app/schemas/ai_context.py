@@ -113,7 +113,21 @@ class ContextActivityMethodology(ContextModel):
     avg_operating_months_rounding: Literal["floor_mean_of_completed_months"] = (
         "floor_mean_of_completed_months"
     )
-    yearly_trend_included: Literal[False] = False
+    yearly_trend_included: Literal[True] = True
+
+
+class ContextYear(ContextModel):
+    year: int = Field(ge=1960, le=9999)
+    opened: int = Field(ge=0)
+    closed: int = Field(ge=0)
+    start: date
+    end: date
+
+    @model_validator(mode="after")
+    def valid_period(self) -> Self:
+        if self.start != date(self.year, 1, 1) or self.end.year != self.year:
+            raise ValueError("invalid yearly period")
+        return self
 
 
 class ContextActivity(ContextModel):
@@ -124,6 +138,7 @@ class ContextActivity(ContextModel):
     recent_opened: int = Field(ge=0)
     recent_closed: int = Field(ge=0)
     groups: tuple[ContextActivityGroup, ...] = Field(min_length=1)
+    yearly_trend: tuple[ContextYear, ...] = ()
     methodology: ContextActivityMethodology = Field(default_factory=ContextActivityMethodology)
 
     @model_validator(mode="after")
@@ -131,6 +146,40 @@ class ContextActivity(ContextModel):
         names = [g.sub_category for g in self.groups]
         if names != sorted(set(names)):
             raise ValueError("duplicate or unordered activity groups")
+        years = [row.year for row in self.yearly_trend]
+        if years != sorted(set(years)):
+            raise ValueError("duplicate or unordered years")
+        return self
+
+
+class ContextNearby(ContextModel):
+    """Per-record attributes reduced to non-identifying summaries; latest != as_of."""
+
+    active_at_as_of: int = Field(ge=0)
+    closed_since_as_of: int = Field(ge=0)
+    latest_open: int = Field(ge=0)
+    latest_closed: int = Field(ge=0)
+    latest_other: int = Field(ge=0)
+    known_area: int = Field(ge=0)
+    unknown_area: int = Field(ge=0)
+    min_distance_m: float | None = Field(ge=0)
+    max_distance_m: float | None = Field(ge=0)
+
+    @model_validator(mode="after")
+    def consistent_partition(self) -> Self:
+        if (
+            self.known_area + self.unknown_area != self.active_at_as_of
+            or self.latest_open + self.latest_closed + self.latest_other != self.active_at_as_of
+            or self.closed_since_as_of > self.active_at_as_of
+            or (self.active_at_as_of == 0) != (self.min_distance_m is None)
+            or (self.min_distance_m is None) != (self.max_distance_m is None)
+            or (
+                self.min_distance_m is not None
+                and self.max_distance_m is not None
+                and self.min_distance_m > self.max_distance_m
+            )
+        ):
+            raise ValueError("inconsistent nearby profile")
         return self
 
 
@@ -204,6 +253,7 @@ class RiskInterpretContext(ContextModel):
     methodology: ContextMethodology = Field(default_factory=ContextMethodology)
     activity: ContextActivity = Field(repr=False)
     history: ContextHistory | None = Field(default=None, repr=False)
+    nearby: ContextNearby | None = Field(default=None, repr=False)
 
     @model_validator(mode="after")
     def activity_scope(self) -> Self:
@@ -214,4 +264,8 @@ class RiskInterpretContext(ContextModel):
             raise ValueError("activity scope mismatch")
         if self.history is not None and self.history.data_updated_at != self.data_updated_at:
             raise ValueError("history reference mismatch")
+        if self.nearby is not None and self.nearby.active_at_as_of != sum(
+            g.open_count for g in self.activity.groups
+        ):
+            raise ValueError("nearby cohort mismatch")
         return self

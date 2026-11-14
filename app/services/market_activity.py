@@ -143,7 +143,14 @@ def _get_activity(session: Session, query: ActivityQuery) -> ApiResponse[MarketA
     geography = cast(Store.geom, STORE_GEOGRAPHY)
     values = session.execute(
         select(
-            Store.source, Store.license_no, Store.open_date, Store.close_date, Store.sub_category
+            Store.source,
+            Store.license_no,
+            Store.open_date,
+            Store.close_date,
+            Store.sub_category,
+            Store.area_m2,
+            Store.status,
+            func.ST_Distance(geography, point, True).label("distance_m"),
         ).where(
             *conditions,
             Store.geom.is_not(None),
@@ -162,6 +169,11 @@ def _get_activity(session: Session, query: ActivityQuery) -> ApiResponse[MarketA
         for row in values
     ]
     data = aggregate_activity(records, query, target)
+    active_rows = [r for r in values if r.close_date is None or r.close_date > target]
+    distances = [float(r.distance_m) for r in active_rows]
+    known_area = sum(r.area_m2 is not None and r.area_m2 > 0 for r in active_rows)
+    latest_open = sum(r.status == "open" for r in active_rows)
+    latest_closed = sum(r.status == "closed" for r in active_rows)
     optional: ApiMeta = {
         value: {"status": "pending", "reason": PENDING_REASONS[value]}
         for value in INCLUDE_ORDER
@@ -183,6 +195,19 @@ def _get_activity(session: Session, query: ActivityQuery) -> ApiResponse[MarketA
             for row in data.yearly_trend
         },
         "operating_period_basis": "elapsed_months_of_active_at_as_of",
+        "record_profile": {
+            "active_at_as_of": len(active_rows),
+            "closed_since_as_of": sum(
+                r.close_date is not None and target < r.close_date <= reference for r in active_rows
+            ),
+            "latest_open": latest_open,
+            "latest_closed": latest_closed,
+            "latest_other": len(active_rows) - latest_open - latest_closed,
+            "known_area": known_area,
+            "unknown_area": len(active_rows) - known_area,
+            "min_distance_m": round(min(distances), 1) if distances else None,
+            "max_distance_m": round(max(distances), 1) if distances else None,
+        },
         "avg_operating_months_denominator": "open_count",
         "avg_operating_months_rounding": "floor_mean_of_completed_months",
         "excluded_no_coord": excluded,
