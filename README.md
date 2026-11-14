@@ -279,6 +279,40 @@ uv run --locked --extra dev pytest
 
 2026-11-12 [전체 시스템 점검·수정 기록](docs/designs/feat58-system-audit-cleanup.md): 일반893개·격리 PostGIS92개 통과. 실제 DB head0009·모델차이0·조회 API5개와 카카오 주소 검색/이력 연결을 확인했습니다. LLM 전체/요청별 시간 예산·비정상 Retry-After·과도한 지번 숫자·CSV 수집시각 이후 분기 검증을 보완했습니다. FE lint/build/format은 통과했지만 nullable/복합 식별자 등 실제 화면 연동은 기존 FE 요청 보고서 반영 대기입니다. 유료 LLM 실제 호출·미구현 분석 API·브라우저 전체 시연을 검증한 것은 아닙니다.
 
+## 인허가 원천 단발 응답 진단
+
+전체 수집 없이 첫 페이지를 1회만 요청해 원천 API 지연을 확인할 수 있습니다.
+기존 `DATA_GO_KR_SERVICE_KEY`를 `.env`에서 읽으며 키를 명령 인자로 받지 않습니다.
+
+```powershell
+uv run --locked --extra dev --no-editable python -m etl.localdata.probe --source general_restaurant --authority-code 3130000 --rows 100 --read-timeout 20
+uv run --locked --extra dev --no-editable python -m etl.localdata.probe --source general_restaurant --authority-code 3130000 --rows 1 --read-timeout 30
+uv run --locked --extra dev --no-editable python -m etl.localdata.probe --source rest_cafe --authority-code 3130000 --rows 100 --read-timeout 20
+```
+
+`--source`는 두 공식 원천, `--authority-code`는 서울 25개 관청 코드이며 둘 다 필수입니다.
+위 `3130000`은 공개된 마포구 코드입니다. `--rows`는 1 또는 100(기본 100),
+`--read-timeout`은 유한한 0.1~30초(기본 20)만 허용합니다. 각 명령은 GET 1회이며
+자동 재시도·리다이렉트·추가 인증 요청·여러 페이지 조회를 하지 않습니다.
+
+stdout은 상태·시간·HTTP 코드·건수·고정 오류 사유를 담은 JSON 한 줄입니다.
+키·URL·관청 코드·원문 행·예외 메시지는 출력하지 않습니다. 성공은 종료코드 0,
+인자/설정 실패는 2, 통신/HTTP/계약/크기/정리 실패는 1, 처리 중 중단은 130입니다.
+`--help`는 일반 도움말과 종료코드 0을 제공합니다.
+기존 Settings 검증이나 환경 proxy/인증서 구성 실패도 설정 실패로 처리합니다.
+
+성공은 해당 페이지 응답의 계약 확인이며 전체 수집·데이터 품질·업종 정답 검증이 아닙니다.
+관청 코드가 누락된 행은 기존 parser처럼 허용하되 `authority_check`가
+`matched`/`partial_missing`/`unverified`/`empty`를 구분합니다.
+선언된 Content-Length나 디코딩된 누적 본문이 2MiB를 넘으면 parser 전에 중단합니다.
+이는 압축 해제 순간을 포함한 엄격한 메모리 상한은 아닙니다.
+read timeout도 소켓 수신 대기 제한이며 전체 HTTP 완료 시간의 상한이 아닙니다.
+Windows의 차단된 소켓은 read 대기가 끝난 뒤 중단이 반영될 수 있습니다.
+
+DB·snapshot·CSV·적재·파일 저장을 사용하지 않으며 기존 수집기나 공개 API 설정도 바꾸지 않습니다.
+출력 단계 이전의 실패/중단을 요약하며 출력 중 중단이나 SIGTERM까지 JSON을 보장하지는 않습니다.
+[설계·실제 검토·검증](docs/designs/feat137-source-probe.md)에 근거와 한계를 기록합니다.
+
 ## 지방행정 인허가 ETL
 
 기존 수집·정제 모듈을 연결하는 개발용 실행기를 제공합니다. 아래 명령은 저장소 루트에서
