@@ -48,7 +48,8 @@ from app.services.risk import RULE_VERSION, get_risk, percent, period
 from app.services.risk_cache import snapshot_token
 from app.services.spatial_stores import effective_date
 from app.services.store_cohort import MIN_OPEN_DATE
-from app.services.store_history import HISTORY_RULE_VERSION, SUPPORTED_STORES, get_history
+from app.services.store_history import HISTORY_RULE_VERSION, get_history
+from app.services.store_scope import NAME_EXCLUSION_VERSION, SUPPORTED_STORES, name_exclusion_meta
 from etl.address.floor_unit import parse_floor_unit
 
 # #98: "이 건물" must be the analysed building; smallest radius choice, not the query radius.
@@ -67,6 +68,7 @@ class _DataVersion(ContextModel):
     trdar_quarter: None
     map_version: str | None
     rule_version: Literal["risk-reference-fixed-anniversary-v1"]
+    name_exclusion_version: Literal["store-name-keywords-v1"]
     brand_mapping: BrandDataVersion | None = None
 
     @model_validator(mode="after")
@@ -239,6 +241,8 @@ def _history(
         or data.total != len(data.stores)
     ):
         raise ValueError("history provenance mismatch")
+    if meta.get("name_exclusion") != name_exclusion_meta():
+        raise ValueError("history name policy mismatch")
     version, risk_version = meta.get("data_version"), risk_meta.get("data_version")
     if not isinstance(version, dict) or not isinstance(risk_version, dict):
         raise ValueError("history data version mismatch")
@@ -250,6 +254,8 @@ def _history(
         or set(map(str, batches)) != set(map(str, risk_batches))
         or version.get("map_version") != risk_version.get("map_version")
         or version.get("rule_version") != HISTORY_RULE_VERSION
+        or version.get("name_exclusion_version") != NAME_EXCLUSION_VERSION
+        or version.get("name_exclusion_version") != risk_version.get("name_exclusion_version")
         or version.get("brand_mapping") != risk_version.get("brand_mapping")
     ):
         raise ValueError("history data version mismatch")
@@ -313,6 +319,8 @@ def _activity(
         or "denominator" not in meta
     ):
         raise ValueError("activity metadata mismatch")
+    if meta.get("name_exclusion") != name_exclusion_meta():
+        raise ValueError("activity name policy mismatch")
     version, risk_version = meta.get("data_version"), risk_meta.get("data_version")
     if not isinstance(version, dict) or not isinstance(risk_version, dict):
         raise ValueError("activity data version mismatch")
@@ -324,6 +332,8 @@ def _activity(
         or set(map(str, batches)) != set(map(str, risk_batches))
         or version.get("map_version") != risk_version.get("map_version")
         or version.get("rule_version") != ACTIVITY_RULE_VERSION
+        or version.get("name_exclusion_version") != NAME_EXCLUSION_VERSION
+        or version.get("name_exclusion_version") != risk_version.get("name_exclusion_version")
         or version.get("brand_mapping") != risk_version.get("brand_mapping")
     ):
         raise ValueError("activity data version mismatch")
@@ -396,6 +406,7 @@ def _extract_context(
     if isinstance(classification, EstimatedClassification):
         method = ContextMethodology(limitations=(*method.limitations, ESTIMATE_LIMIT))
     expected_meta = {
+        "name_exclusion": name_exclusion_meta(),
         "collected_at": None,
         "collection_reason": "source_completion_time_not_recorded",
         "source": ["R5", "R6"],

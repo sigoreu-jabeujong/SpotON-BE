@@ -10,6 +10,7 @@ from app.core.config import Settings
 from app.models.brand import MAPPING_RULE
 from app.schemas.common import ApiResponse
 from app.schemas.risk import Risk, RiskQuery
+from app.services.store_scope import NAME_EXCLUSION_VERSION
 
 SNAPSHOT = text(
     "SELECT current_setting('transaction_read_only')='on', "
@@ -66,6 +67,7 @@ def risk_key(
         str(settings.risk_boundary_version_id),
         rule,
         MAPPING_RULE,
+        NAME_EXCLUSION_VERSION,
     )
 
 

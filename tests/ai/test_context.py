@@ -430,7 +430,7 @@ def test_history_aggregates_without_row_identifiers(monkeypatch, caplog):
     p = prepare_history(monkeypatch, MIXED)
     h = p.json_context()["history"]
     assert {k: v for k, v in h.items() if k != "methodology"} == {
-        "basis": "latest_data_all_supported_categories",
+        "basis": "latest_data_analysis_scope_supported_categories",
         "data_updated_at": "2026-11-08",
         "floor_unit_provided": True,
         "same_spot_comparable": True,

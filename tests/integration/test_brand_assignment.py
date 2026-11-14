@@ -42,11 +42,11 @@ def setup(temporary_database, tmp_path, monkeypatch):
     with Session(engine) as session, session.begin():
         provenance = batch(session)
         for identity, name, flag, brand in (
-            ("estimate", "Unique Cafe", None, None),
+            ("estimate", "Unique Bistro", None, None),
             ("unknown", "Other Place", None, None),
-            ("manualfalse", "Unique Cafe", False, 1),
+            ("manualfalse", "Unique Bistro", False, 1),
             ("manualtrue", "Other Place", True, 1),
-            ("opaque", "Unique Cafe", None, 999),
+            ("opaque", "Unique Bistro", None, 999),
             ("repeated", "Repeated Brand", None, None),
             ("ambiguous", "Same Brand", None, None),
         ):
@@ -71,7 +71,7 @@ def setup(temporary_database, tmp_path, monkeypatch):
     monkeypatch.setattr(apply, "check_local_database", check)
     source = catalog(
         [
-            item("001", "Unique Cafe"),
+            item("001", "Unique Bistro"),
             item("002", "Repeated Brand", jnghdqrtrsMnno="HQ_A"),
             item("002", "Repeated Alias", jnghdqrtrsMnno="HQ_B"),
             item("003", "Same Brand"),
@@ -131,7 +131,7 @@ def test_source_name_change_revert_and_manual_same_true_have_unambiguous_ownersh
         c.execute(update(Store).where(Store.license_no == "estimate").values(name="Changed"))
     assert classified(engine)["estimate"] is None
     with engine.begin() as c:
-        c.execute(update(Store).where(Store.license_no == "estimate").values(name="Unique Cafe"))
+        c.execute(update(Store).where(Store.license_no == "estimate").values(name="Unique Bistro"))
     assert classified(engine)["estimate"] is True
     with engine.begin() as c:
         c.execute(update(Store).where(Store.license_no == "estimate").values(is_franchise=True))
@@ -286,7 +286,7 @@ def test_filters_history_snapshot_activity_risk_and_internal_ai_agree(setup):
                 safe["franchise_classification"] == "estimate"
                 and safe["franchise_reference_year"] == 2025
             )
-            assert "Unique Cafe" not in str(safe) and "catalog_version_id" not in str(safe)
+            assert "Unique Bistro" not in str(safe) and "catalog_version_id" not in str(safe)
 
 
 def test_same_counts_new_snapshot_invalidate_internal_data_version_and_risk_cache(setup, tmp_path):
@@ -355,7 +355,7 @@ def test_public_ai_before_and_after_mapping_uses_safe_server_authored_limit(setu
         after = client.post("/api/risk/interpret", json={"query": PARAMS})
         assert after.status_code == 200, after.text
         assert "franchise_name_match_estimate" in after.text
-        assert provider.calls == 2 and "Unique Cafe" not in after.text
+        assert provider.calls == 2 and "Unique Bistro" not in after.text
 
 
 def test_empty_downgrade_and_nonempty_downgrade_rejection(setup):

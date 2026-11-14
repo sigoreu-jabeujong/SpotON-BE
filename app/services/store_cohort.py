@@ -12,7 +12,12 @@ from app.db.dependencies import NO_STORE
 from app.models import Store, StoreImportBatch
 from app.schemas.common import ApiMeta, ErrorCode
 from app.schemas.store_filters import CategoryFilters
-from app.services.store_history import SUPPORTED_STORES
+from app.services.store_scope import (
+    NAME_EXCLUSION_VERSION,
+    SOURCE_SUPPORTED_STORES,
+    SUPPORTED_STORES,
+    name_exclusion_meta,
+)
 
 MIN_OPEN_DATE = date(1960, 1, 1)
 
@@ -50,7 +55,7 @@ def orphan_exists() -> Select[tuple[bool]]:
     """
     first = (
         select(Store.batch_id, Store.source)
-        .where(SUPPORTED_STORES, Store.batch_id.is_not(None))
+        .where(SOURCE_SUPPORTED_STORES, Store.batch_id.is_not(None))
         .order_by(Store.batch_id, Store.source)
         .limit(1)
     )
@@ -58,7 +63,7 @@ def orphan_exists() -> Select[tuple[bool]]:
     following = (
         select(Store.batch_id, Store.source)
         .where(
-            SUPPORTED_STORES,
+            SOURCE_SUPPORTED_STORES,
             tuple_(Store.batch_id, Store.source) > tuple_(keys.c.batch_id, keys.c.source),
         )
         .order_by(Store.batch_id, Store.source)
@@ -80,7 +85,7 @@ def orphan_exists() -> Select[tuple[bool]]:
             )
         )
     )
-    null_batch = exists(select(Store.id).where(SUPPORTED_STORES, Store.batch_id.is_(None)))
+    null_batch = exists(select(Store.id).where(SOURCE_SUPPORTED_STORES, Store.batch_id.is_(None)))
     return select(or_(unlinked_key, null_batch))
 
 
@@ -91,7 +96,7 @@ def current_provenance(session: Session) -> tuple[list[StoreImportBatch], date]:
             .where(
                 exists(
                     select(Store.id).where(
-                        SUPPORTED_STORES,
+                        SOURCE_SUPPORTED_STORES,
                         Store.batch_id == StoreImportBatch.batch_id,
                         Store.source == StoreImportBatch.source,
                     )
@@ -125,11 +130,13 @@ def provenance_meta(batches: list[StoreImportBatch], reference: date, rule_versi
         "collected_at": None,
         "collection_reason": "source_completion_time_not_recorded",
         "is_demo": False,
+        "name_exclusion": name_exclusion_meta(),
         "data_version": {
             "stores_batch_ids": [str(b.batch_id) for b in batches],
             "trdar_quarter": None,
             "map_version": versions[0] if len(versions) == 1 else None,
             "rule_version": rule_version,
+            "name_exclusion_version": NAME_EXCLUSION_VERSION,
         },
         "store_batches": [
             {
