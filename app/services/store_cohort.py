@@ -3,7 +3,7 @@
 from datetime import date
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, exists, or_, select
+from sqlalchemy import Select, and_, exists, literal, or_, select, true, tuple_
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -40,6 +40,50 @@ def temporal_cohort(query: CategoryFilters, reference: date) -> list[ColumnEleme
     ]
 
 
+def orphan_exists() -> Select[tuple[bool]]:
+    """Issue #118: is any supported store unlinked from store_import_batches?
+
+    Same meaning as the former anti-join over every supported store, but it walks only the
+    distinct (batch_id, source) keys of supported stores with ix_stores_provenance (skip scan),
+    so the cost follows the key count instead of the row count. NULL batch_id never matches
+    a row comparison, so it is checked separately.
+    """
+    first = (
+        select(Store.batch_id, Store.source)
+        .where(SUPPORTED_STORES, Store.batch_id.is_not(None))
+        .order_by(Store.batch_id, Store.source)
+        .limit(1)
+    )
+    keys = first.cte("provenance_keys", recursive=True)
+    following = (
+        select(Store.batch_id, Store.source)
+        .where(
+            SUPPORTED_STORES,
+            tuple_(Store.batch_id, Store.source) > tuple_(keys.c.batch_id, keys.c.source),
+        )
+        .order_by(Store.batch_id, Store.source)
+        .limit(1)
+        .lateral("next_provenance_key")
+    )
+    keys = keys.union_all(
+        select(following.c.batch_id, following.c.source).select_from(keys).join(following, true())
+    )
+    unlinked_key = exists(
+        select(literal(1))
+        .select_from(keys)
+        .where(
+            ~exists(
+                select(literal(1)).where(
+                    StoreImportBatch.batch_id == keys.c.batch_id,
+                    StoreImportBatch.source == keys.c.source,
+                )
+            )
+        )
+    )
+    null_batch = exists(select(Store.id).where(SUPPORTED_STORES, Store.batch_id.is_(None)))
+    return select(or_(unlinked_key, null_batch))
+
+
 def current_provenance(session: Session) -> tuple[list[StoreImportBatch], date]:
     batches = list(
         session.scalars(
@@ -56,12 +100,7 @@ def current_provenance(session: Session) -> tuple[list[StoreImportBatch], date]:
             .order_by(StoreImportBatch.source, StoreImportBatch.batch_id)
         )
     )
-    linked = exists(
-        select(StoreImportBatch.batch_id)
-        .where(StoreImportBatch.batch_id == Store.batch_id, StoreImportBatch.source == Store.source)
-        .correlate(Store)
-    )
-    missing = session.scalar(select(exists(select(Store.id).where(SUPPORTED_STORES, ~linked))))
+    missing = session.scalar(orphan_exists())
     if (
         missing
         or not batches
