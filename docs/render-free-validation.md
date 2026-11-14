@@ -13,7 +13,7 @@
 | 리전 | 같은 workspace의 Singapore |
 | DB 버전 / 이름 | PostgreSQL17·PostGIS3.6.2 / spoton_free_check |
 | DB 생성 / 만료 | 2026-11-13 23:02:59 / **2026-12-13 23:02:59 KST** |
-| DB 크기 | 검증 당시721,131,187 bytes, 약721MB |
+| DB 크기 | #128 운영 인덱스 생성 후761,124,531 bytes, 약761MB |
 | Migration | 0011 |
 | 배포 commit | 7d4846c61291897993a1146e16945c06ca1255b1 (#118 조회 최적화·#124 ready 동시 검사 수정 포함) |
 | 자동 배포 | off, 검증한 commit을 수동 배포 |
@@ -53,13 +53,13 @@ LLM_MODEL=gemini-3.5-flash-lite
 
 ## 3. 운영 인덱스와 스키마
 
-앱19개 테이블과 alembic_version을 합쳐20테이블이다. 기준50인덱스·110제약·3시퀀스·head0011을 유지하며, Free DB에만 [ops_free_risk_cover](sql/render-free-risk-cover.sql) 운영 인덱스1개를 추가해 총51개다. 데이터·계산식·API SQL·앱 모델을 변경하지 않는다.
+앱19개 테이블과 alembic_version을 합쳐20테이블이다. 기준50인덱스·110제약·3시퀀스·head0011을 유지하며, Free DB에만 [ops_free_risk_cover](sql/render-free-risk-cover.sql)와 [ops_free_risk_name_v1](sql/render-free-risk-name-v1.sql) 운영 인덱스2개를 두어 총52개다. 원본 행·계산식·앱 모델/migration은 유지한다. #128 이름 정책은 분석 SQL predicate와 메타/캐시를 바꾼다.
 
-이 인덱스는 서울 전체 Risk 집계에 필요한 컬럼을 커버한다. 실제 크기45,883,392 bytes이며 동일 집계의 단일 측정이12.589초에서2.777초로 줄었다. Index Only Scan·Heap Fetches0을 확인했다. 성능 보장이나 전체 HTTP 시간 상한은 아니다.
+기존 cover는 서울 전체 Risk 집계를 커버한다. 크기45,883,392 bytes이며 도입 당시 단일 집계가12.589→2.777초로 줄었다. 새 이름 인덱스는 같은 key/include에 고정 이름 predicate를 추가한39,993,344 bytes다. 코드 배포 전에 생성했고 기존 모든689,440행 composite/EWKB hash·기존 인덱스·API 본문이 같았다. 새 코드의 실제 Free 쿼리에서 direct1.798초/generic2.683초·Index Only Scan·Heap Fetches0·name heap Filter 없음과 한식454→434의 정확한 marker 대조를 확인했다. 이 관측은 시간 보장이나 전체 HTTP 상한이 아니다.
 
-이 Free DB를 `alembic revision --autogenerate` 대상으로 쓰면 운영 인덱스 삭제가 제안될 수 있으므로 사용하지 않는다. 모델 비교에서 예외를 둘 때는 이름뿐 아니라 정확한 key/include·predicate·valid/ready/live를 확인하고 이1개만 구분한다. 컬럼/타입 변경이나 새로운 migration을 적용할 때 운영 인덱스도 재검토한다.
+이 Free DB를 `alembic revision --autogenerate` 대상으로 쓰면 운영 인덱스 삭제가 제안될 수 있으므로 사용하지 않는다. 모델 비교에서 예외를 둘 때는 이름뿐 아니라 정확한 key/include·predicate·valid/ready/live를 확인하고 이2개만 구분한다. 컬럼/타입 변경이나 새로운 migration을 적용할 때 운영 인덱스도 재검토한다.
 
-효과가 없거나 정의가 다름·생성 후800MB 초과·API 응답 회귀가 확인되면 소유 계정으로 `DROP INDEX public.ops_free_risk_cover;`를 실행하고 기준50개 상태를 확인한다. 다른 데이터·인덱스를 임의로 줄여 맞추지 않는다.
+새 이름 인덱스의 효과가 없거나 정의 불일치·생성 후800MB 초과·API 회귀가 확인되면 먼저 검증된 이전 코드를 배포하고 필요할 때 `DROP INDEX public.ops_free_risk_name_v1;`만 실행해 기존51개 상태를 확인한다. 기존 cover/provenance를 롤백용으로 유지하며 다른 행·인덱스를 줄여 맞추지 않는다. 키워드/패턴 수정은 정책 버전과 새 운영 인덱스를 함께 검토한다.
 
 ## 4. DB 복원·만료 대응
 
@@ -96,7 +96,7 @@ LLM_MODEL=gemini-3.5-flash-lite
 
    복원한 앱 테이블과 spatial_ref_sys의 SELECT를 확인한다. READONLY/NOINHERIT만을 권한 경계로 삼지 않고, 소유자 역할의 멤버가 아니며 READ WRITE 상태에서도 INSERT/CREATE/TEMP/SET ROLE이 거절되는지 검증한다. 향후 테이블에 SELECT를 자동 부여하는 default privileges는 설정하지 않았다.
 
-6. 인덱스 생성 전에 행 수·avg_width로 최종/임시 크기를 추정하고 여유를 확인한다. 현재 기준은 최종 DB800MB 이내, temp/WAL 포함 추정900MB 이내다. [운영 SQL](sql/render-free-risk-cover.sql)은 소유자 연결에서 일반 CREATE INDEX, lock_timeout5초·maintenance_work_mem16MB·statement_timeout1200초로 실행한다. 전체 해시 검사와 동시에 실행하지 않는다. 추가 후 크기·정의·실행 계획·API를 다시 검증한다.
+6. 인덱스 생성 전에 행 수·avg_width로 최종/임시 크기를 추정하고 여유를 확인한다. 현재 기준은 최종 DB800MB 이내, temp/WAL 포함 추정900MB 이내다. 원래 [cover SQL](sql/render-free-risk-cover.sql)과 #128의 [이름 정책 부분 인덱스 SQL](sql/render-free-risk-name-v1.sql)은 소유자 연결에서 일반 CREATE INDEX, lock_timeout5초·maintenance_work_mem16MB·statement_timeout1200초로 실행한다. 앱 모델50개와 별개인 운영 인덱스2개이며 autogenerate 대상이 아니다. 전체 해시 검사와 동시에 실행하지 않는다. 추가 후 크기·UTF-8 리터럴/정의·유효성·generic 계획·API를 검증하고 이름 정책 코드보다 새 부분 인덱스를 먼저 준비한다. 롤백은 이전 코드 배포 후 필요하면 새 이름 인덱스만 제거하며 기존 cover/provenance는 유지한다.
 7. Render의 DATABASE_URL만 새 내부 reader 연결로 갱신하고 다른 환경변수를 지우지 않는다. 검증한 develop commit을 명시해 수동 배포한다. migration이 필요하면 소유자의 별도 세션에서 수행하며 reader나 앱 시작 시 실행하지 않는다. head가 바뀌면 DATABASE_EXPECTED_REVISION도 맞춘다.
 8. /api/ready, 대표 API 전체 JSON, 경계·동시 요청, 주소 검색/CORS와 실제 AI 해석200·검증 통과·오류 처리를 검증한다. 대체 DB의 복원·권한·연결을 확인하기 전에 유일한 유효 사본을 삭제하지 않는다. 새 ID·만료일·검증 결과를 이 문서에 갱신한다.
 
