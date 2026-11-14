@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-15 #137은 공식 인허가 원천의 첫 페이지를 GET 1회만 진단하는 `python -m etl.localdata.probe`를 추가한다. 두 원천·서울 관청·1/100행·read 0.1~30초만 허용하고 자동 재시도/redirect/추가 인증 요청을 막는다. 상태·시간·건수·고정 사유 JSON만 출력하며 키/URL/원문을 출력·저장하지 않는다. DB·기존 수집기·공개 API·Render·FE는 바꾸지 않는다. #78 외부 지연은 이 도구의 완료와 별도로 남는다. 사용법은 README, [설계·실제 Claude 검토·검증](docs/designs/feat137-source-probe.md)을 따른다.
+
 BE의 범위·계획·API·ETL·개발 규칙은 다음 통합 문서 하나에서 관리한다. 작업 전에 읽고 필요한 기준 변경도 통합 문서에 반영한다.
 
 @docs/be-work-plan.md
