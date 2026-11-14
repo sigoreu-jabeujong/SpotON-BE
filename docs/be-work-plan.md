@@ -1,5 +1,10 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
+2026-11-15 #145는 [브랜드 판정 공개·v2 BE 구현](designs/feat145-chain-publication-api.md) 단계다. 새 코드의 schema guard는0012이며 기존 실행/Render DB0011과 구분한다. FE·.env·원본/운영 DB는 변경하지 않고 격리 복제 DB에서 migration/publication/API를 검증한다. v2 AI는 별도 후속이다. [FE 계약 요청](fe-chain-v2-api-request.md)을 따른다.
+
+#145 BE 구현·실제 Claude 재검수 PASS, 일반1920/PostGIS278 검증을 완료했다. 아래 과거 작업 기록의 head0011은 당시 기준이며 새 코드/ETL/readiness의 현재 기준은0012다. 기존 실행/Render DB0011은 유지하고 배포 전 관리 역할 migration이 필요하다. v2 AI·FE 연결·운영 배포·세대 정리/pending 복귀는 후속이다.
+
+
 ## 브랜드·체인 판별 설계와 기반 구현 (#138 / #143)
 
 2026-11-15 후속 사용자 결정은 가맹·직영·소규모 체인 모두 포함이다. 공정위 브랜드 목록·소진공 상가정보 승인을 제공했고 기존 키의 인증 소량 호출이 모두 정상이다. 점포 명부는 없으며 공식/허용 자료를 자체 확보해 진행한다. [#143 구현·검수](designs/feat143-brand-chain-foundation.md)는 검수 브랜드/별칭·서울 I2 소진공 snapshot·읽기 전용 인허가 대조 기반이다. 기존 가맹 bool/공개 API/DB를 보존하고, 소진공 대조도 추정이며 가맹/직영·역사 소속 확정을 뜻하지 않는다. v2 공개 필터/FE 연결은 별도 후속으로 구분한다. 같은 결정과 키를 다시 요청하지 않는다.

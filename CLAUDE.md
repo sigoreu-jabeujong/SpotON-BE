@@ -1,5 +1,10 @@
 # SpotON-BE 작업 기준
 
+2026-11-15 #145는 [브랜드 판정 공개·v2 BE 구현](docs/designs/feat145-chain-publication-api.md) 단계다. 새 코드의 schema guard는0012이며 기존 실행/Render DB0011과 구분한다. FE·.env·원본/운영 DB는 변경하지 않고 격리 복제 DB에서 migration/publication/API를 검증한다. v2 AI는 별도 후속이다. [FE 계약 요청](docs/fe-chain-v2-api-request.md)을 따른다.
+
+#145 BE 구현·실제 Claude 재검수 PASS, 일반1920/PostGIS278 검증을 완료했다. 아래 과거 작업 기록의 head0011은 당시 기준이며 새 코드/ETL/readiness의 현재 기준은0012다. 기존 서버/Render의 DB0011에는 migration 없이 이 코드를 실행·배포하지 않는다. FE·원본/운영 DB 변경과 배포는 완료 범위 밖이다.
+
+
 2026-11-15 #140 사용자 결정이 이전 공식 지표 제공 기준보다 우선한다. 공식 폐업률·공식 창업위험도 ID/링크/AI 안내를 제거하고 Risk 필수 지표를 4개로 줄인다. 선택 market_change/day_night_ratio와 공식 원천 테이블은 유지한다. 연도별 개폐업 추이와 기간 메타/AI 연도는 2010년부터만 반환하지만 1960년부터의 원본 코호트·현재 수·평균 개월·최근 12개월·Risk 산식은 유지한다. Risk/활동 규칙 v2·프롬프트 v9다. [설계·실제 검토](docs/designs/feat140-remove-official-indicators.md)와 [FE 요청](docs/fe-risk-reference-api-request.md)을 따른다. BE 전용 변경이며 FE 반영·Render 배포 완료로 표시하지 않는다.
 
 ## 브랜드·체인 판별 개편 제안 (#138)
