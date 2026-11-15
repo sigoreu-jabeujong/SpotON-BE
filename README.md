@@ -294,7 +294,34 @@ API·ETL·LLM의 추가 운영 이벤트는 한 줄 JSON으로 **stderr**에 기
 - 생활인구 `etl_quality`의 completed는 입력 요약 성공이며 적재 완료·원천 완전성·공간 검증 성공이 아닙니다. DB 준비 전에 기록하므로 이후 import failed가 올 수 있습니다. 6개 카운터 중 하나라도 유효하지 않거나 계산에 실패하면 counts 없이 failed/quality_summary_unavailable을 기록합니다. 로그 실패는 적재 성공 조건이 아니며 원래 실행 결과를 바꾸지 않습니다.
 - 쓰기/직렬화/ID 생성 실패는 주 작업을 바꾸지 않으며 로그 오류를 다시 출력하지 않습니다. 한 줄은 최대4096 UTF-8 bytes이고 프로세스 내 thread 쓰기를 묶습니다. 느린 stderr의 지연이나 여러 프로세스 간 원자성은 보장하지 않습니다. 기존 서버 시작/오류 메시지는 같은 stderr에 있을 수 있으므로 수집기는 event가 있는 JSON을 구분합니다.
 - 기본 앱에서 uvicorn.access를 비활성화하고 기존 `--no-access-log` 실행 안내도 유지합니다. 별도 로그 재설정·reload/gunicorn·프록시/제3자 DEBUG 전체의 개인정보 처리를 대신하지 않습니다.
-- **원본의30일 보관·삭제 요구는 아직 미충족**입니다. 앱에 파일/DB 저장을 추가하지 않았으며 실제 배포 로그 수집기의 보관 설정·삭제 검증이 후속입니다. [설계·Claude 검토·검증](docs/designs/feat72-private-operation-logs.md)을 확인합니다. FE 응답 계약은 바뀌지 않습니다.
+- **운영 환경의30일 보관·삭제 요구는 아직 미충족**입니다. 앱의 stderr 출력은 유지하며 아래 별도 수집·만료 삭제 CLI를 추가했습니다. 실제 영구 저장소·Render 전달 어댑터·주기 실행·백업 만료/누락률 검증은 후속입니다. [기존 출력 설계](docs/designs/feat72-private-operation-logs.md), [수집기 설계·검수·검증](docs/designs/feat158-operation-log-retention.md)을 확인합니다. FE 응답 계약은 바뀌지 않습니다.
+
+### 별도 운영 로그 보관·만료 삭제
+
+`python -m etl.operation_logs`는 기존 운영 JSON 이벤트6종의 **완료된 유한 배치**를 stdin으로 받아 전용 SQLite 파일에 저장합니다. EOF까지 읽고 나서 기준 UTC 시각을 한 번 정하므로 배치를 읽는 동안 발생한 이벤트를 시작 시각 기준의 미래로 오판하지 않습니다. 실시간 무한 스트림 수신기가 아닙니다. 앱이나 인허가/통계 DB에 로그 저장을 연결하지 않으며 Render wrapper/syslog/일반 콘솔 로그의 전달 어댑터는 별도로 필요합니다.
+
+운영자만 쓸 수 있는 **저장소 밖의 이미 존재하는 로컬 디렉터리**를 지정합니다. 절대 경로·`.sqlite3` 파일만 허용하고 링크/junction/UNC/장치명/ADS·Git 저장소 안·다른 SQLite·추가 schema 객체를 거절합니다. POSIX 새 파일은0600, Windows는 상위 ACL을 상속하므로 디렉터리 접근 권한은 운영자가 설정합니다. 경로 검사만으로 공격자가 쓸 수 있는 디렉터리의 파일 교체 경쟁까지 막는 것은 아닙니다.
+
+```powershell
+# 기본 실행은 변경하지 않습니다. 예시 디렉터리는 미리 준비해야 합니다.
+python -m etl.operation_logs init --db 'C:\SpotON-logs\events.sqlite3'
+python -m etl.operation_logs init --db 'C:\SpotON-logs\events.sqlite3' --execute
+
+# 완료된 JSON 배치를 stdin에 연결하고 EOF로 끝냅니다. 단독 실행하면 입력을 기다립니다.
+python -m etl.operation_logs ingest --db 'C:\SpotON-logs\events.sqlite3'
+python -m etl.operation_logs ingest --db 'C:\SpotON-logs\events.sqlite3' --execute
+python -m etl.operation_logs status --db 'C:\SpotON-logs\events.sqlite3'
+python -m etl.operation_logs prune --db 'C:\SpotON-logs\events.sqlite3'
+python -m etl.operation_logs prune --db 'C:\SpotON-logs\events.sqlite3' --execute
+```
+
+init은 새 파일만 배타 생성하며 기존 파일을 덮어쓰지 않습니다. status/ingest/prune은 없는 파일을 만들지 않습니다. SQLite를 열기 전에100바이트 헤더의 형식·rollback 모드·application_id/user_version을 확인해 다른 WAL DB의 부속 파일 생성을 막습니다. ingest/prune의 기본 dry-run은 읽기 전용 snapshot의 예상 건수이며 이후 실제 실행 결과와 달라질 수 있습니다. 쓰기는 짧은 트랜잭션과1초 SQLite 잠금 대기로 직렬화하고, 오류·중단 시 이번 변경은 rollback합니다. 기존 journal은 database_busy, WAL/SHM은 ownership으로 열기 전에 거절하므로 다른 writer가 끝난 뒤 확인합니다. journal이 남은 장애 파일은 운영자가 별도로 점검해야 합니다. 자동 복구는 하지 않습니다. Windows 원격 드라이브도 거절하며 POSIX 마운트의 로컬 여부는 운영자가 확인합니다.
+
+수집은 줄당4096 bytes·10,000행·총10MiB 상한입니다. 알 수 없는 필드/원문·중복 JSON 키·유효하지 않은 수치/UTC 시각은 rejected, 미래는 future, 정확히30일 이상 지난 행은 expired로 분류합니다. 개별 거절 행은 저장하지 않고 나머지를 처리하며 전체 입력 상한 초과는 이번 수집 전체 실패입니다. 같은 canonical 이벤트는 기존/동일 입력에서 duplicate로 계산합니다. 식별자가 없는 LLM/readiness의 동일 시각·동일 값 이벤트는 합쳐질 수 있어 보관 행 수를 정확한 실제 호출 수로 해석하지 않습니다.
+
+결과는 원문·경로 없는 stdout JSON 한 줄입니다. lines는 rejected+future+expired+duplicate+would_insert와 같습니다. inserted는 실제 쓰기 건수로 dry-run에서는0입니다. 종료0은 처리가 완료됐다는 뜻이며 거절/전달 누락이0임을 보장하지 않습니다. 실행 실패1, 사용법 오류2, 중단130, 도움말0입니다. 실패의 상세 원문이나 SQLite 메시지는 내보내지 않습니다.
+
+만료 기준은 수집 시각 대신 이벤트 UTC 기록 시각에서30×24시간입니다. **30일 후 자동 삭제가 아니라 다음 성공한 prune에서 삭제**되므로 최대 잔류는30일+prune 간격입니다. 별도 스케줄러·영구 저장소·중단 감시가 필요합니다. secure_delete로 주 SQLite 파일의 만료 행/해시를 제거하지만 상위 Render 로그·파일시스템 snapshot·백업·SSD 블록까지 소거하지 않습니다. 운영 연속 보관/삭제 완료로 표시하려면 전달 누락과 백업을 포함해 실제 저장소에서 검증해야 합니다.
 
 ## 공통 오류 응답
 
