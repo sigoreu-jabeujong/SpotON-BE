@@ -30,7 +30,10 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --extra dev
       - name: Test Windows log runner with isolated credentials and files
-        run: uv run --locked --extra dev pytest -q tests/ops/test_windows_operation_log_runner.py
+        run: >-
+          uv run --locked --extra dev pytest -q
+          tests/ops/test_windows_operation_log_runner.py
+          tests/etl/test_operation_log_backup.py
 
   lint-and-test:
     runs-on: ubuntu-latest
