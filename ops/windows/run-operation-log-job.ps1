@@ -106,6 +106,10 @@ public sealed class SpotONChildResult {
     public bool Oversize;
 }
 public static class SpotONBoundedChild {
+    public static void CommitReport(string temporary, string destination) {
+        if (File.Exists(destination)) File.Replace(temporary, destination, null);
+        else File.Move(temporary, destination);
+    }
     private sealed class Capture {
         public StringBuilder Text = new StringBuilder();
         public bool Oversize;
@@ -283,8 +287,7 @@ public static class SpotONBoundedChild {
             } finally { $stream.Dispose() }
             $latest = Join-Path $root 'latest-result.json'
             Assert-LocalPath $latest
-            if ([IO.File]::Exists($latest)) { [IO.File]::Replace($tempPath, $latest, $null) }
-            else { [IO.File]::Move($tempPath, $latest) }
+            [SpotONBoundedChild]::CommitReport($tempPath, $latest)
         } catch {
             $report.status = 'failed'; $report.error = 'report_write'; $exitCode = 1
             $report.effects_may_be_partial = [bool]($Execute -and $report.job_invocation_attempted)

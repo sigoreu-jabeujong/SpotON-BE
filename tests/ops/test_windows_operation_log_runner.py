@@ -204,6 +204,14 @@ Set-Acl -LiteralPath $Target -AclObject $acl
     latest = json.loads((root / "latest-result.json").read_text())
     assert latest == result
     checks.append("latest_safe_atomic_result")
+    second = run(
+        "existing_latest_replaced",
+        execute=True,
+        error="credential_unavailable",
+        env=env,
+    )
+    assert second["completed_at"] != result["completed_at"]
+    assert json.loads((root / "latest-result.json").read_text()) == second
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows process tree integration")
