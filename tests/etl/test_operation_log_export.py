@@ -228,7 +228,8 @@ def test_preview_does_not_create_files_or_write_sources_or_use_credentials(
         "no_generation",
     ],
 )
-def test_invalid_source_never_creates_output(files, tmp_path, kind):
+@pytest.mark.parametrize("execute", [False, True])
+def test_invalid_source_never_creates_output(files, tmp_path, kind, execute):
     owner, now = OWNER, NOW
     if kind == "target":
         owner = "tea-" + "c" * 20
@@ -254,7 +255,7 @@ def test_invalid_source_never_creates_output(files, tmp_path, kind):
                 c.execute("UPDATE backup_root SET origin=NULL,active=NULL")
     before = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
     output = tmp_path / "export.sqlite3"
-    result = act(files, output, owner=owner, now=now)
+    result = act(files, output, owner=owner, now=now, execute=execute)
     assert result.status == "failed" and not output.exists() and result.created == 0
     assert before == {p.name: p.read_bytes() for p in tmp_path.iterdir()}
     assert CANARY not in json.dumps(asdict(result))
@@ -264,6 +265,10 @@ def test_invalid_source_never_creates_output(files, tmp_path, kind):
         assert result.error == "checkpoint_expired"
     if kind == "ahead_cursor":
         assert result.error == "clock_behind_checkpoint"
+    if kind == "no_generation":
+        assert result.error == "generation_missing"
+    if kind == "header":
+        assert result.error == "source_ownership"
 
 
 @pytest.mark.parametrize(
@@ -300,6 +305,8 @@ def test_paths_and_sidecars_are_not_overwritten(files, tmp_path, kind):
     before = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
     result = act(files, output)
     assert result.status == "failed" and result.created == 0
+    if kind == "same":
+        assert result.error == "same_file"
     assert before == {p.name: p.read_bytes() for p in tmp_path.iterdir()}
 
 
@@ -402,6 +409,147 @@ def test_output_race_never_overwrites_an_existing_file(files, tmp_path, monkeypa
     result = act(files, output)
     assert result.status == "failed" and result.created == result.created_files_removed == 0
     assert output.read_bytes() == CANARY.encode() and not result.effects_may_be_partial
+
+
+def test_output_appearing_between_path_check_and_exclusive_open_is_untouched(
+    files, tmp_path, monkeypatch
+):
+    output = tmp_path / "new.sqlite3"
+    original = archive.validate_file_path
+    checks = 0
+
+    def race(path, **kwargs):
+        nonlocal checks
+        answer = original(path, **kwargs)
+        if path == output and kwargs.get("exists") is False:
+            checks += 1
+            if checks == 2:
+                # Preflight and create_file validation succeeded; O_EXCL is next.
+                path.write_bytes(CANARY.encode())
+        return answer
+
+    monkeypatch.setattr(archive, "validate_file_path", race)
+    result = act(files, output)
+    assert checks == 2 and result.error == "filesystem"
+    assert result.created == 0 and result.created_files_removed == 0
+    assert output.read_bytes() == CANARY.encode() and not result.effects_may_be_partial
+
+
+def test_interrupt_after_exclusive_open_before_creation_bookkeeping_is_conservative(
+    files, tmp_path, monkeypatch
+):
+    output = tmp_path / "new.sqlite3"
+    original = os.open
+
+    def stop_after_open(path, flags, *args, **kwargs):
+        fd = original(path, flags, *args, **kwargs)
+        if path == output and flags & os.O_CREAT:
+            os.close(fd)
+            raise KeyboardInterrupt
+        return fd
+
+    before = [byte_hash(p) for p in files]
+    monkeypatch.setattr(os, "open", stop_after_open)
+    result = act(files, output)
+    assert result.status == "interrupted" and result.phase == "create" and result.created == 0
+    assert result.effects_may_be_partial and result.orphan_files == 1
+    assert output.exists() and output.read_bytes() == b"" and result.created_files_removed == 0
+    assert before == [byte_hash(p) for p in files]
+    assert act(files, output).status == "failed" and output.read_bytes() == b""
+
+
+@pytest.mark.parametrize("failure", [KeyboardInterrupt, RuntimeError])
+def test_cleanup_accounting_failure_preserves_created_file_and_partial_effects(
+    files, tmp_path, monkeypatch, failure
+):
+    output = tmp_path / "new.sqlite3"
+    original_exists, original_unlink = Path.exists, Path.unlink
+    counting = False
+
+    def fail_verification(*args, **kwargs):
+        raise RuntimeError(CANARY)
+
+    def cannot_remove(path, *args, **kwargs):
+        nonlocal counting
+        if path == output:
+            counting = True
+            raise PermissionError(CANARY)
+        return original_unlink(path, *args, **kwargs)
+
+    def interrupted_count(path):
+        if path == output and counting:
+            raise failure(CANARY)
+        return original_exists(path)
+
+    monkeypatch.setattr(export, "verify_file", fail_verification)
+    monkeypatch.setattr(Path, "unlink", cannot_remove)
+    monkeypatch.setattr(Path, "exists", interrupted_count)
+    result = act(files, output)
+    assert result.status == ("interrupted" if failure is KeyboardInterrupt else "failed")
+    assert original_exists(output) and result.created == 1 and result.created_files_removed == 0
+    assert result.effects_may_be_partial and result.orphan_files >= 1
+    assert result.output_sha256 is None and CANARY not in json.dumps(asdict(result))
+
+
+def test_interrupt_during_cleanup_unlink_is_reported_with_known_effects(
+    files, tmp_path, monkeypatch
+):
+    output = tmp_path / "new.sqlite3"
+    original = Path.unlink
+
+    def fail_verification(*args, **kwargs):
+        raise RuntimeError(CANARY)
+
+    def stop(path, *args, **kwargs):
+        if path == output:
+            raise KeyboardInterrupt
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(export, "verify_file", fail_verification)
+    monkeypatch.setattr(Path, "unlink", stop)
+    result = act(files, output)
+    assert result.status == "interrupted" and result.error == "interrupted"
+    assert result.created == 1 and result.effects_may_be_partial and result.orphan_files == 1
+    assert output.exists() and result.created_files_removed == 0
+
+
+@pytest.mark.parametrize("kind", ["missing", "path"])
+def test_source_filesystem_error_identifies_the_source(files, tmp_path, kind):
+    source = tmp_path / "missing.sqlite3" if kind == "missing" else Path("relative.sqlite3")
+    result = export.run(source, tmp_path / "new.sqlite3", OWNER, SERVICE, NOW, execute=True)
+    assert result.error == "source_" + kind and result.created == 0
+    assert result.phase == "source" and not (tmp_path / "new.sqlite3").exists()
+
+
+@pytest.mark.parametrize("failure", [KeyboardInterrupt, RuntimeError])
+def test_cli_fallback_after_real_creation_reports_possible_effects(
+    files, tmp_path, monkeypatch, capsys, failure
+):
+    output = tmp_path / "new.sqlite3"
+    original = export.run
+
+    def escaped(source, destination, owner, service, now, **kwargs):
+        answer = original(source, destination, owner, service, NOW, **kwargs)
+        assert answer.output_verified
+        raise failure(CANARY)
+
+    monkeypatch.setattr(export, "run", escaped)
+    argv = [
+        "--backup",
+        str(files[2]),
+        "--output",
+        str(output),
+        "--owner-id",
+        OWNER,
+        "--service-id",
+        SERVICE,
+        "--execute",
+    ]
+    assert export.main(argv) == (130 if failure is KeyboardInterrupt else 1)
+    out = capsys.readouterr()
+    value = json.loads(out.out)
+    assert output.exists() and value["mode"] == "execute" and value["effects_may_be_partial"]
+    assert not out.err and CANARY not in out.out and not value["output_verified"]
 
 
 def test_change_during_hash_and_closed_output_corruption_are_detected(files, tmp_path, monkeypatch):

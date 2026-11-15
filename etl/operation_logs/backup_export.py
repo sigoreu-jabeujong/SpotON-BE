@@ -37,6 +37,7 @@ REASONS = frozenset(
         "capture_limit",
         "budget_exceeded",
         "generation_missing",
+        "same_file",
         "output_changed",
         "output_integrity",
         "output_limit",
@@ -275,7 +276,9 @@ def cleanup(path: Path, created: Created, result: Result) -> None:
             same_file(path, created.identity)
             path.unlink()
             result.created_files_removed = 1
-    except (OSError, ValueError, KeyboardInterrupt):
+    except KeyboardInterrupt:
+        result.status, result.error = "interrupted", "interrupted"
+    except (OSError, ValueError):
         pass
     for name in (path, *(Path(str(path) + s) for s in ("-journal", "-wal", "-shm"))):
         try:
@@ -305,7 +308,7 @@ def run(
             raise ArgumentsError from None
         result.snapshot_as_of = job.stamp(now_us * 1000)
         if source == output:
-            raise store.BackupError("output_changed")
+            raise store.BackupError("same_file")
         archive.validate_file_path(output, exists=False)
         result.phase = "source"
         identity = store.validate(source)
@@ -333,6 +336,8 @@ def run(
             reason = "source_" + reason.removeprefix("backup_")
         elif result.phase == "source" and reason == "output_changed":
             reason = "source_changed"
+        elif result.phase == "source" and reason in {"path", "ownership", "missing"}:
+            reason = "source_" + reason
         elif result.phase in {"write", "verify"} and reason.startswith("backup_"):
             reason = "output_" + reason.removeprefix("backup_")
         result.status, result.error = "failed", reason
@@ -353,14 +358,25 @@ def run(
         result.status, result.error = "failed", reason
     except KeyboardInterrupt:
         result.status, result.error = "interrupted", "interrupted"
+        if result.phase == "create" and not result.created:
+            # open may have succeeded before Python recorded the returned fd/identity.
+            result.effects_may_be_partial = True
+            result.orphan_files += 1
     except OSError:
         result.status, result.error = "failed", "filesystem"
     except Exception:
         result.status, result.error = "failed", "operation_failed"
     finally:
         if result.status != "ok" and result.created:
-            cleanup(output, created, result)
             result.effects_may_be_partial = True
+            try:
+                cleanup(output, created, result)
+            except KeyboardInterrupt:
+                result.status, result.error = "interrupted", "interrupted"
+                result.orphan_files += 1
+            except Exception:
+                # Preserve known effects even if cleanup accounting itself fails.
+                result.orphan_files += 1
     return result
 
 
@@ -374,6 +390,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         parser.add_argument("--execute", action="store_true")
         args = parser.parse_args(argv)
+        result.mode = "execute" if args.execute else "dry_run"
         result = run(
             args.backup,
             args.output,
@@ -386,8 +403,10 @@ def main(argv: list[str] | None = None) -> int:
         result.status, result.error = "failed", "arguments"
     except KeyboardInterrupt:
         result.status, result.error = "interrupted", "interrupted"
+        result.effects_may_be_partial = result.mode == "execute"
     except Exception:
         result.status, result.error = "failed", "operation_failed"
+        result.effects_may_be_partial = result.mode == "execute"
     print(json.dumps(asdict(result), sort_keys=True, separators=(",", ":")))
     return (
         0
