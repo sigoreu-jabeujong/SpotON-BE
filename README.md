@@ -426,9 +426,9 @@ python -m etl.operation_logs.backup_export --backup 'C:\SpotON-logs\backup.sqlit
 
 출력은 부모가 존재하는 Git 밖의 로컬 절대 경로이며 기존 파일/link/sidecar를 덮지 않습니다. 생성 후 닫힌 파일의 schema·canonical/digest·전체 내용과 SHA256을 검증합니다. `output_verified=true`, `output_sha256`, `output_bytes`를 함께 확인합니다. preview의 출력 해시/크기는 null입니다. 행 수는 두 세대 합계로 중복 이벤트가 포함될 수 있습니다. 기존 `backup restore`에 새 SPBK를 전달해 새 archive/state로 복원할 수 있습니다. 출력 SPBK의 origin은 원본 binding을 유지하므로 복원한 새 archive의 이후 정기 capture에는 별도의 새 SPBK를 init합니다.
 
-출력 파일은 평문입니다. SHA256은 인증이나 암호화가 아니며 HTTP·키·B2 업로드·기존 Task에는 연결하지 않습니다. 파일 생성 자체의 원자적 게시를 보장하지 않으므로 파일명 등장만으로 준비 완료를 판단하지 않습니다. 실패 시 `commit_outcome_unknown`, `created_files_removed`, `orphan_files`, `effects_may_be_partial`을 확인합니다. 교체 파일·link·형식 미확인 파일·sidecar는 자동 삭제하지 않으며 강제 종료 잔존물은 수동 점검 대상입니다.
+출력 파일에는 대상/원본 binding hash와 평문 이벤트가 포함됩니다. SHA256은 인증이나 암호화가 아니며 외부 전송 시 접근 통제/암호화는 별도입니다. HTTP·키·B2 업로드·기존 Task에는 연결하지 않습니다. 파일 생성 자체의 원자적 게시를 보장하지 않으므로 파일명 등장만으로 준비 완료를 판단하지 않습니다. 실패 시 `commit_outcome_unknown`, `created_files_removed`, `orphan_files`, `effects_may_be_partial`을 확인합니다. `orphan_files`는 교체 파일과 검사 실패를 포함한 출력 경로/sidecar의 점유·미확인 수로 소유 증명이 아닙니다. 계수가 중단되면 미확인 경로1개를 보수적으로 가산하며 전체 수가 확정된 것은 아닙니다. CLI 최외곽 오류의 기본 카운터0도 `effects_may_be_partial=true`일 때 생성/잔존 없음의 증거가 아닙니다. 교체 파일·link·형식 미확인 파일·sidecar는 자동 삭제하지 않으며 강제 종료 잔존물은 수동 점검 대상입니다.
 
-`next_expiry_at`은 모든 세대에서 남은 이벤트의 첫 만료 시각입니다. 파일을 나중에 전송하려면 현재 시각으로 다시 검증/재생성해야 하고 출력/복원 검증 사본도 정리해야 합니다. 이 CLI는 외부 저장소의 만료 스케줄이나30일 상시 보관 보장을 제공하지 않습니다. 사용자의 #168 선진행 지시에 따라 Codex 검토로 구현하며 Claude 검토는 후속입니다. [설계·검증과 한계](docs/designs/feat168-operation-log-export.md)를 따릅니다.
+`next_expiry_at`은 모든 세대에서 남은 이벤트의 첫 만료 시각이며 **복원 가능 기한이 아닙니다**. 0행이라 null이어도 cursor가30일을 넘으면 복원이 거부됩니다. 파일을 나중에 전송하려면 현재 시각으로 모든 세대 cursor까지 다시 검증/재생성해야 하고 출력/복원 검증 사본도 정리해야 합니다. 이 CLI는 외부 저장소의 만료 스케줄이나30일 상시 보관 보장을 제공하지 않습니다. #168은 Codex 선진행으로 구현했으며 실제 Claude 사후 검토와 보완은 [설계12절 이후](docs/designs/feat168-operation-log-export.md)를 따릅니다.
 
 ## 공통 오류 응답
 

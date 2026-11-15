@@ -1,6 +1,8 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
-2026-11-15 #168의 [원격 전송용 백업 내보내기](designs/feat168-operation-log-export.md)는 단일 readonly snapshot에서 SPBK를 논리적으로 재생성하는 별도 CLI다. 모든 세대 만료 제외·메타 보존·닫힌 파일 hash·기존 복원 호환·새 파일 보호를 구현했고 로컬2223·CI Linux2223/Windows85/PostGIS298과 실제0행 두 세대 내보내기/복원·새 binding·원본 SHA 보존·검증 사본 정리를 확인했다. 한도 대기 후 Codex 구현·테스트 선진행/Claude 후속 검토를 제안했고 사용자의 이어진 진행 지시를 이번 이슈의 해당 순서 승인으로 반영했다. Claude 검토는 후속 대기이며 완료/PASS로 대신하지 않는다. FE/API/0012/.env/기존 Task/runtime·운영 DB/Render를 유지하고, 암호화·B2 전송·외부 만료·오프호스트 복구는 후속으로 구분한다. 최신CI/통합은PR169를 따른다.
+2026-11-16 #170은 [내보내기 Claude 후속 검토](designs/feat168-operation-log-export.md)의 실제 실행과 보완이다. 계정 초기화 후 실제 MD Read/Edit 정적 검토와 보완본 재검토·생성 경계 제한 재검토 세 번의 PASS/차단0을 확보했다. 추가 중단 시 생성/부분 효과 보존·생성 직후 불확실성·정확한 O_EXCL 경합·실패 preview·고정 오류 구분과 복원 기한/orphan 문서를 보완했고 전체2241통과·권한2skip 및 실제0행 내보내기/복원·원본SHA 보존·검증 사본 정리를 확인했다. FE/API/0012/.env/기존 Task/runtime·운영 DB/Render는 유지하며 실제 근거·최종CI/통합은 설계12~17절과 #170 연결 PR을 따른다. 원격 업로드/키 연결은 미실행이다.
+
+2026-11-15 #168의 [원격 전송용 백업 내보내기](designs/feat168-operation-log-export.md)는 단일 readonly snapshot에서 SPBK를 논리적으로 재생성하는 별도 CLI다. 모든 세대 만료 제외·메타 보존·닫힌 파일 hash·기존 복원 호환·새 파일 보호를 구현했고 로컬2223·CI Linux2223/Windows85/PostGIS298과 실제0행 두 세대 내보내기/복원·새 binding·원본 SHA 보존·검증 사본 정리를 확인했다. 한도 대기 후 Codex 선진행/Claude 후속 검토의 사용자 지시를 반영했고 당시 검토 대기로 기록했다. 실제 사후 검토와 보완은 #170을 따르며 병합 전 검토가 있었던 것으로 해석하지 않는다. FE/API/0012/.env/기존 Task/runtime·운영 DB/Render를 유지하고, 암호화·B2 전송·외부 만료·오프호스트 복구는 후속으로 구분한다. 최초CI/통합은PR169를 따른다.
 
 2026-11-15 #166의 [운영 로그 백업·만료·복원](designs/feat166-operation-log-backup.md)은 #164 시범 운영의 복구 경로다. SPBK 두 세대의 원자적 교체·모든 사본의 event 기준30일 만료·canonical/digest/binding 검증·새 파일 복원과 재결합·부분 실패/잔존 파일 보고를 구현한다. source 없음/잠금/손상에도 backup 만료를 먼저 수행하고 source/clock 오류로 정상 backup을 폐기하지 않는다. 키/DPAPI/config는 복사하지 않는다. 기존 collection Task·FE/API/0012/.env/원본·운영 DB/Render를 유지하며 별도 키 없는 정기 Task와 실제 복원 검증을 기록한다. 오프호스트/상시/실제30일 운영은 후속이다.
 
