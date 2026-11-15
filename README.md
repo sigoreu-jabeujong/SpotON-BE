@@ -342,6 +342,30 @@ python -m etl.operation_logs.render --db 'C:\SpotON-logs\events.sqlite3' --owner
 
 관측한 Render 커서는 마지막 행 시각+1ns에서 다음 페이지를 시작합니다. 동일한1ns 시각에100행 이상이 몰려 페이지 경계에서 잘리면 API가 같은 시각의 나머지를 건너뛰어도 이 어댑터는 확인할 수 없습니다. API 페이지 종료를 누락 없음으로 해석하지 않으며 같은 구간 재조회만으로 이 누락의 복구도 보장하지 않습니다. 저장 수는 고유 canonical 이벤트 수이며 동일 시각·동일 내용의 정상 이벤트도 합쳐질 수 있습니다.
 
+### 재개 가능한 단발 로그 작업
+
+`python -m etl.operation_logs.job`은 보관기와 Render 어댑터를 함께 실행합니다. 이미 초기화한 archive와 별도 제어 SQLite가 필요합니다. 두 파일은 저장소 밖의 다른 로컬 일반 파일이어야 하며 제어 파일에는 대상 binding 해시와 시작/확정 시각만 저장합니다. 기존 파일을 덮어쓰거나 자동 초기화하지 않습니다.
+
+```powershell
+# 초기화 미리보기. start는 현재보다5분 이상 전, 정확히30일보다 최근의 UTC 시각입니다.
+python -m etl.operation_logs.job init --db 'C:\SpotON-logs\events.sqlite3' --state 'C:\SpotON-logs\job.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>' --start '<UTC-start>'
+# 위 명령에 --execute를 추가하면 제어 파일을 생성합니다.
+
+# 로컬 계획만 확인: 키/Render GET/파일 변경 없음
+python -m etl.operation_logs.job run --db 'C:\SpotON-logs\events.sqlite3' --state 'C:\SpotON-logs\job.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>'
+# 비밀 프로세스 환경 RENDER_API_KEY 주입 후 위 run에 --execute를 추가하면 실행합니다.
+```
+
+job의 dry-run은 로컬 계획만 확인하므로 GET을 수행하는 render CLI의 dry-run과 다릅니다. 실행은 먼저 만료 삭제를 완료한 뒤 최대6개 구간을 수집합니다. 현재보다5분 지연하고5분 경계로 내린 끝점까지,5분씩 전진하며2분을 겹칩니다. 새 구간이 없으면 마지막2분만 재조회합니다. `lag_seconds_after`와 `remaining_windows`로 남은 지연을 확인합니다. 이 중첩은 더 늦게 도착한 이벤트의 복구를 보장하지 않습니다.
+
+dry-run의 `prune_completed=true`는 만료 예정 수의 계산 완료이며 삭제가 아닙니다(`prune_deleted=0`). 동시 dry-run의 짧은 읽기 잠금도 실제 checkpoint commit을 지연시켜 `state_busy`로 실패시킬 수 있으며 다음 실행에서 재조회합니다. 수집 중 시계 변화로 구간 검사가 실패하면 `collector_window`로 보고하고 부분 효과를 보존한 채 제어를 rollback합니다.
+
+한 archive를 여러 작업이 공유하지 않도록 구성합니다. 구간 전후의 파일 재검증에서 경합하면 성공 prefix도 확정하지 않고 재조회할 수 있습니다. 만료 삭제는 시스템 시각을 신뢰하므로 실행 환경의 시계 동기화가 필요합니다. 주기는 최대 전진30분보다 충분히 짧게 정하고 지연 증가를 감시해야 합니다. commit 직후 프로세스 중단으로 결과 보고가 끊겼다면 다음 dry-run의 `cursor_before`로 실제 확정 위치를 확인합니다.
+
+저장은 archive commit 후 제어 checkpoint 순서입니다. 원격/네트워크/확인 가능한 archive 잠금 오류에는 연속 성공 구간까지 확정하고 실패 종료할 수 있습니다. `last_confirmed_until`, `proposed_until`, `checkpoint_committed`를 함께 확인합니다. 중단·binding 불일치·제어 commit 실패에는 제어를 rollback하며 다음 호출에서 중복 방지로 재개합니다. 실패해도 앞서 완료한 만료 삭제나 일부 저장이 남을 수 있습니다. 동일 state의 동시 실행은1초 잠금 대기 후 실패합니다.
+
+`checkpoint_expired`는30일 만료 cursor를 자동으로 건너뛰지 않습니다. `state_journal_present`도 자동 복구/삭제하지 않습니다. 정상 commit의 일시적 journal일 수 있으므로 먼저 다른 실행이 끝난 뒤 재시도하고, 계속 남을 때 작업 중지 확인과 두 파일 백업 후 수동 점검합니다. 이전 확정 cursor가 보존 범위 안이라면 그 이하의 명시 start로 새 state를 준비합니다. 이미 만료됐다면 보존 범위 안의 새 start와 복구할 수 없는 과거 공백을 명시적으로 정해야 합니다. archive 복원/교체·디렉터리 이동도 기존 binding을 재사용할 수 없습니다. 영구 저장소·24시간 실행 환경·OS 스케줄 등록·비밀 주입·백업 만료·실제30일 연속 운영 검증은 아직 필요합니다. [설계·검수·실제 검증](docs/designs/feat162-operation-log-job.md)을 따릅니다.
+
 ## 공통 오류 응답
 
 요청 검증 실패는 422, 없는 경로는 404, 허용되지 않은 메서드는 405 상태를 유지하면서 공통 외피로 반환합니다. 404/405에는 새 코드를 추가하지 않고 기존 `INVALID_PARAM`을 사용합니다. 주소 조회 실패용 `ADDRESS_NOT_FOUND`와는 구분합니다. 405의 `Allow` 및 HTTP 예외의 인증·재시도 프로토콜 헤더는 유지하고 임의 디버그 헤더는 제거합니다.

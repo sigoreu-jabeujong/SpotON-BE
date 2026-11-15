@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-15 #162의 [재개 가능한 단발 로그 작업](docs/designs/feat162-operation-log-job.md)은 별도 제어 SQLite·5분 지연/전진·2분 중첩·최대6구간·수집 전 만료 삭제·저장 후 checkpoint를 구현한다. 기본 dry-run은 키/GET/파일 변경 없이 로컬 계획만 확인한다. 알려진 원격/잠금 오류에는 성공 prefix를 확정할 수 있고 중단/무결성/제어 commit 실패에는 제어를 rollback한다. 영구 저장소·OS 스케줄·30일 실제 운영은 후속이다. FE/API/0012/.env/원본 DB/Render 설정은 유지한다.
+
 2026-11-15 #160의 [Render 로그 전달 어댑터](docs/designs/feat160-render-log-adapter.md)는 고정 API의 GET으로 명시한 유한 구간을 읽고 #158 보관기에 전달한다. 기존 인증은 프로세스 비밀 환경으로 받고 default dry-run·대상/라벨 검증·나노초 커서·전체 페이지 완료 후 저장·상한·원문 없는 결과를 따른다. 실제6페이지580행 중576 허용/4거절·재수집 추가0을 새 검증 보관기에서 확인했다. FE/API/0012/.env/원본 DB/Render 설정은 유지한다. 영구 저장소·주기 실행·누락/백업 검증과 실제30일 운영 완료는 후속이다.
 
 2026-11-15 #158은 [운영 로그 수집·만료 삭제](docs/designs/feat158-operation-log-retention.md)의 별도 CLI 기반이다. `etl.operation_logs`는 허용 JSON6종만 전용 SQLite에 보관하며 기본 dry-run·명시적 실행·정확한30일 만료·중복 방지·읽기 전용 조회·원문 없는 결과를 따른다. 기존 emitter/API/FE/0012/.env/인허가·통계 DB/Render 설정은 유지한다. 영구 저장소·Render 전달·스케줄러·실제30일 보관/전체 복사본 삭제 검증은 미완료이며, 수집기 개발 완료와 운영 적용을 구분한다. 사용법은 README를 따른다.
