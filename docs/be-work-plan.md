@@ -1,5 +1,7 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
+2026-11-15 #151 사용자 승인으로 **로컬 테스트 spoton_dev를0012로 갱신하고8001에 최신 BE를 반영**했다. 백업 실제 복원·기존20표/689440행·좌표/기존 정의/.env 보존,공개1세대(추정8778/미확인347057),24필터 조합과 실제 Gemini2건 검증을 완료했다. 기존8000·FE·Render는 유지했다. 이전 절의 “로컬 원본 DB0011 유지”는 당시 기록이며 현재 로컬은0012다. production 조회 역할/운영 배포와 구분한다. [설계·실제 검증](designs/feat151-local-test-chain-rollout.md), [FE 로컬 연결 안내](fe-local-chain-test-connection.md)를 따른다.
+
 2026-11-15 #149는 [명시적 publication 정리/pending 복귀](designs/feat149-chain-publication-maintenance.md)의 BE 구현·검증을 완료했다. 기본 읽기 전용·전체 내용/활성 포인터 가드·첫 snapshot 전 state 잠금·활성 보호·자식부터 원자적 삭제를 검증한다. FE/API/head0012/.env/원본·운영 DB는 유지하며, 삭제 검증은 새 폐기용 DB에서만 한다. 실제 Claude 재개 검수는 설계 PASS·정적 코드 차단 결함0이며, Codex가 권고2건(실제 고정 경로 환경 검사·예외 계층)을 확인했다. 일반1957/PostGIS295·CI/CodeQL 통과를 확인했고 develop PR 절차를 따른다. 운영 적용은 별도다. [관리 절차](chain-publication-operations.md)를 따른다.
 
 2026-11-15 #147은 [브랜드 조건의 v2 AI 해석](designs/feat147-chain-ai-context.md)을 구현·검증한다. 같은 RR 세션의 브랜드 Selection과 Risk/활동/전체 이력 재계산, 독립 outbound 문맥·프롬프트/선택 캐시, v1/v2 공유 한도와 숫자 검증을 따른다. v1 프롬프트v9·schema0012·FE·.env·원본/운영 DB·기존 서버·Render는 유지한다. [FE 계약](fe-chain-ai-api-request.md)을 BE 문서에만 작성한다. 아래 #145의 v2 AI 후속 설명은 이 작업으로 대체한다.

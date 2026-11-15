@@ -1,5 +1,9 @@
 # SpotON-BE
 
+## 로컬 테스트 서버 반영 (#151)
+
+로컬 테스트 BE는 `http://localhost:8001`에서 schema0012·브랜드 publication·v2 AI로 실행합니다. [FE 로컬 연결 안내](docs/fe-local-chain-test-connection.md)와 [실제 적용·검증](docs/designs/feat151-local-test-chain-rollout.md)을 확인합니다. 기존 점포/업무 데이터·.env·8000·FE·Render는 보존했습니다. 이 PC에서의 테스트 적용이며 운영/외부 공개 배포는 별도입니다.
+
 ## 브랜드 공개 세대 관리 (#149)
 
 `python -m etl.chains.maintenance`는 기본 읽기 전용 보관 목록과 disable/prune 계획을 제공합니다. 쓰기는 정확한 내용 지문·활성 포인터·명시 비활성 UUID를 확인하고 활성 세대를 보호합니다. 원본/legacy·운영 DB와 FE는 변경하지 않습니다. 실제 Claude 설계 PASS·정적 코드 차단 결함0과 일반1957/PostGIS295개 검증을 완료했습니다. [관리 절차](docs/chain-publication-operations.md)와 [설계·격리 검증](docs/designs/feat149-chain-publication-maintenance.md)을 따릅니다. 운영 실행·배포는 별도입니다.
@@ -12,7 +16,7 @@ v1 프롬프트/요청은 유지합니다. v1/v2의 요청 한도·동시 실행
 
 ## 브랜드 판정 공개와 v2 조회 (#145)
 
-새 코드의 migration/head 가드는 **0012**입니다. 실행 중인 개발 서버와 Render의 기존0011 DB는 이번 작업에서 변경하지 않습니다. 새 코드 실행 전 격리 검증·백업을 거쳐 관리 역할로 migration을 적용하고 조회 역할에 신규5테이블 SELECT 권한을 준비합니다. trigger는 원천 변경 번호만 갱신하며 점포 업무 필드는 보존합니다.
+새 코드의 migration/head 가드는 **0012**입니다. #151에서 로컬 테스트 DB와8001에는 적용했고, 기존8000과 Render 운영 배포는 유지합니다. 다른 환경에서 새 코드 실행 전에는 격리 검증·백업을 거쳐 관리 역할로 migration을 적용하고 조회 역할에 신규5테이블 SELECT 권한을 준비합니다. trigger는 원천 변경 번호만 갱신하며 점포 업무 필드는 보존합니다.
 
 ```powershell
 uv run --locked --extra dev python -m etl.chains.publication --snapshot "<기존 외부 semas.json>"
@@ -24,7 +28,7 @@ uv run --locked --extra dev python -m etl.chains.publication --snapshot "<원래
 
 stores를 쓰는 원천 ETL·위치 보정·publication은 순서대로 실행합니다. 공유 원천 변경 번호 때문에 동시 writer는 대기하거나 실패할 수 있으며 실패 시 전체 트랜잭션을 rollback합니다. 원천 수집/보정 뒤 소진공 근거는 재공개로 검증합니다. 복원 DB는 ANALYZE로 조회 통계를 준비하고, trigger를 비활성화하는 복원 절차 뒤에는 관리 역할로 `ALTER TABLE public.stores ENABLE ALWAYS TRIGGER spoton_chain_source_changed`를 복구한 다음 원천 전체를 재검증해 공개합니다.
 
-`/api/v2/brands/status`, `/api/v2/stores/nearby`, `/snapshot`, `/history`, `/api/v2/market/activity`, `/api/v2/risk`를 추가합니다. 체인 추정만 조회할 때 `brand_scope=chain&brand_unknown=exclude`를 함께 전달합니다. 가맹·직영·소규모 체인을 함께 포함하되 실제 운영 형태/과거 소속/비체인 확정은 미확인입니다. 기존 v1·AI 계약을 유지하며 v2 AI는 아직 제공하지 않습니다. [설계·검수·실제 검증](docs/designs/feat145-chain-publication-api.md), [FE 계약 요청](docs/fe-chain-v2-api-request.md)을 확인합니다.
+`/api/v2/brands/status`, `/api/v2/stores/nearby`, `/snapshot`, `/history`, `/api/v2/market/activity`, `/api/v2/risk`를 추가합니다. 체인 추정만 조회할 때 `brand_scope=chain&brand_unknown=exclude`를 함께 전달합니다. 가맹·직영·소규모 체인을 함께 포함하되 실제 운영 형태/과거 소속/비체인 확정은 미확인입니다. 기존 v1 계약을 유지하며 v2 AI는 위 #147의 POST /api/v2/risk/interpret를 사용합니다. [설계·검수·실제 검증](docs/designs/feat145-chain-publication-api.md), [FE 계약 요청](docs/fe-chain-v2-api-request.md)을 확인합니다.
 
 ## 브랜드·체인 점포 대조 기반 (#143)
 

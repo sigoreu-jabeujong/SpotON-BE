@@ -40,6 +40,6 @@ meta.brand_counts의 estimated/conflict/stale_or_drift/unknown 합은 **브랜�
 
 ## AI와 전환
 
-v2 Risk/활동에 브랜드 필터를 적용한 결과를 기존 `/api/risk/interpret`로 보내지 않는다. 현재 v1 AI는 새 조건을 지원하지 않으며 `/api/v2/risk/interpret`는 제공하지 않는다. 브랜드 필터를 포함하는 AI 문맥·재계산 검증·프롬프트·캐시 연결이 별도 후속이다. v2 Risk는 v1 캐시와 섞이지 않도록 현재 캐시를 사용하지 않는다.
+#147에서 `/api/v2/risk/interpret`를 구현했다. v2 Risk/활동과 동일한 브랜드 query를 [AI 계약](fe-chain-ai-api-request.md)에 맞춰 전송한다. 기존 `/api/risk/interpret`는 새 브랜드 조건을 지원하지 않는다. [#151 로컬 연결 안내](fe-local-chain-test-connection.md)가 실제 테스트8001의 현재 기준이며 Render 운영 반영과 구분한다. v2 Risk는 v1 캐시와 섞이지 않도록 현재 캐시를 사용하지 않는다.
 
 먼저 status와 수동 조회로 계약을 대조하고 v2 목록·동일 조건의 분석을 함께 전환한다. 기존 FE 화면을 수정하거나 배포한 상태로 표시하지 않는다.
