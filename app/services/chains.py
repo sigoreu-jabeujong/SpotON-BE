@@ -4,8 +4,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import and_, case, exists, false, literal, select, text, true, tuple_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm.util import AliasedClass
 from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.selectable import CTE
 
 from app.core.errors import AppError
 from app.db.dependencies import NO_STORE
@@ -64,18 +66,18 @@ class ChainSelection:
             raise AppError(ErrorCode.INTERNAL_ERROR, headers=NO_STORE)
         return cls(publication, state.validated_source_revision != revision, query)
 
-    def valid(self) -> ColumnElement[bool]:
+    def valid(self, store: type[Store] | AliasedClass[Store] = Store) -> ColumnElement[bool]:
         if self.publication is None:
             return false()
         identity = and_(
             Evidence.generation == self.publication.generation,
-            Evidence.source == Store.source,
-            Evidence.license_no == Store.license_no,
+            Evidence.source == store.source,
+            Evidence.license_no == store.license_no,
         )
         return and_(
             identity,
             *(
-                getattr(Evidence, k).is_not_distinct_from(getattr(Store, k))
+                getattr(Evidence, k).is_not_distinct_from(getattr(store, k))
                 for k in CHAIN_FIELDS
                 if k not in {"source", "license_no"}
             ),
@@ -85,6 +87,29 @@ class ChainSelection:
     def estimated(self) -> ColumnElement[bool]:
         return exists(
             select(literal(1)).where(self.valid(), Evidence.classification_status == "estimated")
+        )
+
+    def aggregate_estimates(self, category: str) -> CTE:
+        """Validate the small publication once before aggregating the full city."""
+        identity = (
+            select(Store)
+            .where(Store.source == Evidence.source, Store.license_no == Evidence.license_no)
+            .limit(1)
+            .correlate(Evidence)
+            .lateral("matched_chain_store")
+        )
+        matched = aliased(Store, identity)
+        return (
+            select(matched)
+            .select_from(Evidence)
+            .join(matched, true())
+            .where(
+                self.valid(matched),
+                Evidence.classification_status == "estimated",
+                Evidence.category == category,
+            )
+            .cte("valid_chain_stores")
+            .prefix_with("MATERIALIZED")
         )
 
     def status(self) -> Any:

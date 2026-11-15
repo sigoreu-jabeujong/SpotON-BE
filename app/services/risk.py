@@ -2,12 +2,15 @@
 
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 
 from pydantic import JsonValue
-from sqlalchemy import and_, cast, func, or_, select
+from sqlalchemy import Select, and_, cast, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.selectable import CTE
+from sqlalchemy.sql.util import ClauseAdapter
 
 from app.core.cache import CacheResources
 from app.core.config import Settings
@@ -152,9 +155,9 @@ def reference_indicators(
     return result
 
 
-def aggregate_counts(
-    session: Session, conditions: list[ColumnElement[bool]], target: date
-) -> ReferenceCounts:
+def reference_count_query(
+    conditions: list[ColumnElement[bool]], target: date, *, records: CTE | None = None
+) -> Select[*tuple[Any, ...]]:
     lower = year_cutoff(target, target.year - 1)
     columns = [
         func.count().label("cohort_size"),
@@ -181,8 +184,33 @@ def aggregate_counts(
                 func.count().filter(cohort).label(f"survival_{years}_den"),
             )
         )
-    row = session.execute(select(*columns).select_from(Store).where(*conditions)).mappings().one()
+    if records is not None:
+        adapter = ClauseAdapter(records)
+        columns = [adapter.traverse(column) for column in columns]
+        conditions = [adapter.traverse(condition) for condition in conditions]
+    return (
+        select(*columns).select_from(records if records is not None else Store).where(*conditions)
+    )
+
+
+def aggregate_counts(
+    session: Session, conditions: list[ColumnElement[bool]], target: date
+) -> ReferenceCounts:
+    row = session.execute(reference_count_query(conditions, target)).mappings().one()
     return ReferenceCounts.model_validate(dict(row))
+
+
+def unlocated_query(
+    conditions: list[ColumnElement[bool]], *, records: CTE | None = None
+) -> Select[*tuple[Any, ...]]:
+    conditions = [*conditions, Store.geom.is_(None)]
+    if records is not None:
+        conditions = [ClauseAdapter(records).traverse(condition) for condition in conditions]
+    return (
+        select(func.count())
+        .select_from(records if records is not None else Store)
+        .where(*conditions)
+    )
 
 
 def pending_indicator(identifier: RiskInclude, reason: str) -> RiskIndicator:
@@ -231,15 +259,60 @@ def _get_risk(
     cohort = temporal_cohort(query, reference)
     minimum = session.scalar(select(func.min(Store.open_date)).where(*cohort))
     target = effective_date(reference, minimum, query.as_of)
-    conditions = [*cohort, *attribute_filters(query, chain), Store.open_date <= target]
-    excluded = int(
-        session.scalar(
-            select(func.count()).select_from(Store).where(*conditions, Store.geom.is_(None))
-        )
-        or 0
+    attributes = attribute_filters(query, chain)
+    base = [*cohort, attributes[0], Store.open_date <= target]
+    conditions = [*base, attributes[1]]
+    complement = (
+        chain is not None
+        and chain.query is not None
+        and chain.query.brand_scope == "non_chain"
+        and chain.query.brand_unknown == "include"
+        and chain.query.brand_evidence == "include_estimates"
     )
+    estimates = (
+        chain is not None
+        and chain.query is not None
+        and chain.query.brand_evidence == "include_estimates"
+        and (
+            complement
+            or (chain.query.brand_unknown == "exclude" and chain.query.brand_scope != "non_chain")
+        )
+    )
+    if estimates:
+        # Each reference count is additive. Avoid a wide city-wide anti join:
+        # the identical non-chain/unknown cohort is all records minus valid estimates.
+        assert chain is not None
+        records = chain.aggregate_estimates(query.category)
+        known = (
+            session.execute(
+                reference_count_query(
+                    [*base, Store.geom.is_not(None)], target, records=records
+                ).add_columns(
+                    unlocated_query(base, records=records).scalar_subquery().label("unlocated")
+                )
+            )
+            .mappings()
+            .one()
+        )
+        excluded = int(known["unlocated"])
+        seoul = ReferenceCounts.model_validate(
+            {key: known[key] for key in ReferenceCounts.model_fields}
+        )
+        if complement:
+            excluded = int(session.scalar(unlocated_query(base)) or 0) - excluded
+            total = aggregate_counts(session, [*base, Store.geom.is_not(None)], target)
+            seoul = ReferenceCounts.model_validate(
+                {
+                    key: getattr(total, key) - getattr(seoul, key)
+                    for key in ReferenceCounts.model_fields
+                }
+            )
+            if excluded < 0:
+                raise ValueError("estimated cohort exceeds full cohort")
+    else:
+        excluded = int(session.scalar(unlocated_query(conditions)) or 0)
+        seoul = aggregate_counts(session, [*conditions, Store.geom.is_not(None)], target)
     located = [*conditions, Store.geom.is_not(None)]
-    seoul = aggregate_counts(session, located, target)
     point = cast(func.ST_SetSRID(func.ST_MakePoint(query.lng, query.lat), 4326), STORE_GEOGRAPHY)
     geography = cast(Store.geom, STORE_GEOGRAPHY)
     local = aggregate_counts(
