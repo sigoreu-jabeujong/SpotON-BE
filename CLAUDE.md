@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-15 #156의 [상권 경계·기간 검증](docs/designs/feat156-market-applicability.md)은 문서 전용 후속이다. 로컬0012에서 원본4개·DB content4개 해시와 경계1,650개를 읽기 전용 대조했다. 코드 연결은 통과했지만 분기별 공식 도형 대응과 매출 필드 기간 정의가 미확정이므로 공개 매출·상권변화 pending을 유지한다. 기존 불변 버전·FE·API·환경값·운영 DB를 변경하지 않으며, 제공기관 질문과 자료별 후속 구현 조건은 해당 문서를 따른다. 이 보고서는 기능 활성화/배포 완료가 아니다.
+
 2026-11-15 #153 사용자 승인으로 운영 BE0012·브랜드 publication·조회권한·성능 보완과 공개 FE v2 활성화를 완료했다. 최신 기준은 [운영 실행 기록](docs/designs/production-chain-v2-rollout.md)과 Render 안내2종이다. 운영 BE는 71eaef9c276ed5b2c70d761e47a9d2eeb7bdcd69이며 Free/자동배포off·SQL10초/풀1·기존 LLM/CORS를 보존한다. 이전 Render0011/공개v1/FE 승인 대기는 당시 기록이며 이번 범위에서 대체한다. 추가 원천 쓰기는 revision/drift를 바꾸므로 기존 ETL/공개 절차를 따른다. 로컬.env·원본/로컬 서버는 유지했다.
 
 2026-11-15 #151 사용자 승인으로 **로컬 테스트 spoton_dev를0012로 갱신하고8001에 최신 BE를 반영**했다. 백업 실제 복원·기존20표/689440행·좌표/기존 정의/.env 보존,공개1세대(추정8778/미확인347057),24필터 조합과 실제 Gemini2건 검증을 완료했다. 기존8000·FE·Render는 유지했다. 이전 절의 “로컬 원본 DB0011 유지”는 당시 기록이며 현재 로컬은0012다. production 조회 역할/운영 배포와 구분한다. [설계·실제 검증](docs/designs/feat151-local-test-chain-rollout.md), [FE 로컬 연결 안내](docs/fe-local-chain-test-connection.md)를 따른다.
