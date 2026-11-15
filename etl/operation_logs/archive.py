@@ -49,7 +49,10 @@ def _remote_drive(anchor: str) -> bool:
         return False
     import ctypes
 
-    get_type = ctypes.windll.kernel32.GetDriveTypeW
+    loader = getattr(ctypes, "windll", None)
+    if loader is None:
+        raise ArchiveError("configuration")
+    get_type = loader.kernel32.GetDriveTypeW
     get_type.argtypes = [ctypes.c_wchar_p]
     get_type.restype = ctypes.c_uint
     return int(get_type(anchor)) == 4

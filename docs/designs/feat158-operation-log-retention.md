@@ -90,6 +90,10 @@ SQLite는 DELETE journal·secure_delete=ON·temp_store=MEMORY를 사용하고 WA
 
 ## 5. 검토·실행 기록
 
+CI 보완 재검증 결과: Linux 지정·기본 Windows 플랫폼 mypy 모두187 files 통과, 수집기84 passed/권한 관련1 skipped, ruff check/format413·diff·비밀값 부재 검사 통과다. 검수 소스 해시와 후속 diff를 대조해 Windows API 접근4줄 외 로직 변경이 없음을 확인했다. 수정 후 CI/CodeQL 실제 결과는 연결 PR을 따른다.
+
+CI 플랫폼 보완: 최초 Linux CI에서 `ctypes.windll`이 POSIX 타입 stub에 없어 mypy가 실패했다. Windows 분기에서만 `getattr(ctypes,"windll",None)`로 선택 API를 가져오고 누락 시 고정 configuration 오류로 종료하도록 보완했다. 보관/검증/삭제 동작은 바꾸지 않았다. Codex가 diff를 직접 검토하고 `mypy --platform linux`와 기본 플랫폼·해당 테스트를 재검증한다. 앞의 Claude 최종 소스 검토 이후의 변경은 이 플랫폼 접근 보완뿐이며 CI 실패를 숨기지 않는다.
+
 최신 Codex 재검증: R1~R3 및 종료된 journal 검사 경쟁을 보완한 코드에서 일반2041 passed/Windows링크1 skipped/PostGIS298 deselected(29.01초), ruff check/format413·mypy187 통과다. 신규 수집기85사례(Windows84통과/1제외, Linux는 링크 사례도 실행)이며 아래2036 등은 이전 실행 기록이다. 원본 환경/사용자 파일 보존 검사도 통과했다. 실제 운영 저장소/로그/애플리케이션 DB는 변경하지 않았다.
 
 Codex 2차 지적 반영: R1은 journal 선행 거절을 유지하고 두 writer 테스트를 성공/duplicate 또는 busy·변경0의 두 합법적 경로로 수정했다. R2는 SQLite 연결 전에 `os.open` 읽기 전용100바이트 헤더·fstat identity·magic·rollback read/write 버전1·user_version1·application_id를 확인하며, own/foreign WAL 파일 모두 SQLite.connect가 호출되지 않고 파일/부속 파일이 그대로임을 테스트했다. 헤더 위치는 [SQLite 파일 형식](https://www.sqlite.org/fileformat.html#the_database_header)과 대조했다. 연결 후에도 전체 schema 객체를 다시 검사하고 trusted_schema를 최초 schema 조회 전에 끈다. R3는 유한 배치를 EOF까지 검증한 뒤 기준 now를 한 번 채택하며 README도 실시간 스트림이 아닌 완료 배치로 정정했다. 테스트 clock은 주입할 수 있으나 CLI에서 기준 시각 옵션을 받지는 않는다. Windows mapped remote drive는 GetDriveTypeW로 추가 차단한다. POSIX 네트워크 마운트 감별과 공격자에 의한 동시 파일 교체의 완전 방어는 보장하지 않으며 운영자 전용 로컬 디렉터리가 전제다.
