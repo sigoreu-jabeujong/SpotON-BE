@@ -58,7 +58,7 @@ def _remote_drive(anchor: str) -> bool:
     return int(get_type(anchor)) == 4
 
 
-def _header(path: Path, identity: tuple[int, int]) -> None:
+def _header(path: Path, identity: tuple[int, int], *, application_id: int = APPLICATION_ID) -> None:
     # Check ownership/rollback mode before SQLite can create WAL sidecars or recover.
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     fd = os.open(path, flags)
@@ -74,12 +74,13 @@ def _header(path: Path, identity: tuple[int, int]) -> None:
         or data[:16] != b"SQLite format 3\0"
         or data[18:20] != b"\1\1"
         or int.from_bytes(data[60:64], "big") != 1
-        or int.from_bytes(data[68:72], "big") != APPLICATION_ID
+        or int.from_bytes(data[68:72], "big") != application_id
     ):
         raise ArchiveError("ownership")
 
 
-def validate_target(path: Path, *, exists: bool = True) -> tuple[int, int] | None:
+def validate_file_path(path: Path, *, exists: bool = True) -> tuple[int, int] | None:
+    """Filesystem checks only; callers MUST separately authenticate their file format."""
     if (
         not path.is_absolute()
         or path.suffix != ".sqlite3"
@@ -121,8 +122,13 @@ def validate_target(path: Path, *, exists: bool = True) -> tuple[int, int] | Non
         raise ArchiveError("exists")
     if not stat.S_ISREG(path.stat().st_mode) or path.stat().st_size == 0:
         raise ArchiveError("ownership")
-    identity = _identity(path)
-    _header(path, identity)
+    return _identity(path)
+
+
+def validate_target(path: Path, *, exists: bool = True) -> tuple[int, int] | None:
+    identity = validate_file_path(path, exists=exists)
+    if identity is not None:
+        _header(path, identity)
     return identity
 
 
