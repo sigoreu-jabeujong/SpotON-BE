@@ -430,6 +430,27 @@ python -m etl.operation_logs.backup_export --backup 'C:\SpotON-logs\backup.sqlit
 
 `next_expiry_at`은 모든 세대에서 남은 이벤트의 첫 만료 시각이며 **복원 가능 기한이 아닙니다**. 0행이라 null이어도 cursor가30일을 넘으면 복원이 거부됩니다. 파일을 나중에 전송하려면 현재 시각으로 모든 세대 cursor까지 다시 검증/재생성해야 하고 출력/복원 검증 사본도 정리해야 합니다. 이 CLI는 외부 저장소의 만료 스케줄이나30일 상시 보관 보장을 제공하지 않습니다. #168은 Codex 선진행으로 구현했으며 실제 Claude 사후 검토와 보완은 [설계12절 이후](docs/designs/feat168-operation-log-export.md)를 따릅니다.
 
+### B2 연결 사전 점검
+
+`b2_preflight`는 B2 연결 대상 metadata와 단발 인증/비공개 버킷 범위를 점검합니다. 업로드·삭제·버킷/키 변경·자동 실행은 하지 않습니다. 실제 계정/버킷이 준비되기 전에도 기본 preview를 사용할 수 있습니다.
+
+Git 밖의 로컬 UTF-8 JSON 파일에 다음 세 필드만 둡니다(아래는 가상 예시). 키를 설정 파일에 넣지 않습니다.
+
+```json
+{"bucket_name":"spoton-example-logs","region":"us-west-001","prefix":"spoton-operation-logs/"}
+```
+
+```powershell
+# 기본: metadata만 검증, credential 환경 조회·HTTP0
+python -m etl.operation_logs.b2_preflight --config 'C:\SpotON-logs\b2-target.json'
+# process에 B2_APPLICATION_KEY_ID / B2_APPLICATION_KEY가 안전하게 주입된 경우만
+python -m etl.operation_logs.b2_preflight --config 'C:\SpotON-logs\b2-target.json' --execute
+```
+
+앱 `.env`를 로드하지 않습니다. execute만 고정 Native v4 authorize GET과 지정 버킷 list_buckets POST를 최대2번 호출합니다. API host/TLS·단일 버킷·정확한 prefix·리전·권한 상한·allPrivate를 확인하고 redirect/retry/환경 proxy를 차단합니다. 결과에 경로·키·토큰·계정/버킷명·URL·원문을 넣지 않습니다.
+
+정상0·인자/설정2·일반실패1·중단130입니다. preview의 connection_verified는 false이고 실제 키도 조회하지 않습니다. execute의 connection_verified=true도 보고된 범위와 단발 조회만 확인한 결과입니다. backup_capabilities_complete는 향후 파일 작업에 필요한 보고된 grant 집합의 포함 여부이며 실제 write/delete 시험이 아닙니다. billing_verified/retention_verified/remote_backup_verified와 객체·버킷 변경 값은 false입니다. 연결 성공을 비용0·원격 보관/복구·전송 준비 완료로 해석하지 않습니다. 실제 B2 연결은 사용자 계정/전용 버킷/키가 준비된 뒤 별도 검증합니다. [설계·검수와 검증](docs/designs/feat172-b2-preflight.md)을 따릅니다.
+
 ## 공통 오류 응답
 
 요청 검증 실패는 422, 없는 경로는 404, 허용되지 않은 메서드는 405 상태를 유지하면서 공통 외피로 반환합니다. 404/405에는 새 코드를 추가하지 않고 기존 `INVALID_PARAM`을 사용합니다. 주소 조회 실패용 `ADDRESS_NOT_FOUND`와는 구분합니다. 405의 `Allow` 및 HTTP 예외의 인증·재시도 프로토콜 헤더는 유지하고 임의 디버그 헤더는 제거합니다.
