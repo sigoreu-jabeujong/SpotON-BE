@@ -760,3 +760,12 @@ AI 정보는 실제 연계 시 공식 자료와 프로젝트 계정에서 다시
 - 사용자 결정으로 두 ID·공식 링크 상태·AI 안내를 제거했다. Risk는 네 참고 지표와 요청한 선택 항목만 반환하며 기본 missing은 빈 배열이다. 링크 필드는 null만 허용한다. 공식 원천 테이블·선택 상권변화/주야간·경계 후보는 유지한다.
 - 연도별 개폐업 추이/기간 메타/AI 연도만 2010년부터 제공한다. 2010년 이전에 개업한 기록의 이후 폐업·현재 점포 수·평균 개월·최근 개폐업·생존율 표본은 보존한다. 이전 기준일에는 추이만 빈 값이다. Risk/활동 규칙v2·프롬프트v9로 계약과 캐시를 구분한다.
 - [설계·실제 Claude 검토2회·검증](designs/feat140-remove-official-indicators.md), [FE 타입/화면/진단서 요청](fe-risk-reference-api-request.md)을 따른다. 일반1,821·격리 PostGIS272(skip0)·ruff/format·mypy161파일을 통과했다. FE 반영 대기이며 실제.env·DB·Render 설정/실행 배포는 변경하지 않았다. 과거 공식 지표 제공 기록은 이 결정으로 대체되며 #78/#115는 유지한다.
+
+
+## 51. 운영 브랜드·체인 v2 공개 전환 (#153)
+
+2026-11-15 #153 운영 전환 완료. BE `71eaef9c276ed5b2c70d761e47a9d2eeb7bdcd69` / `dep-dbslqv5ckfvc73dbu6a0` live, schema0012·ALWAYS trigger·공개 세대 `366fdaa8-c678-50fb-bf47-d67f0ca60d56`·source_drift=false다. 공개 FE의 v2 활성화 기준은 `93099f1bea68384b360ce16ac230aef5630eda22`(PR62)이며 이후 문서 전용 배포는 앱 코드가 같다. Vercel Production은v2, Preview/development와 일반 로컬 기본값은v1이다. [실행·검수·복구 기록](designs/production-chain-v2-rollout.md)을 따른다.
+
+카페/음식점24필터 조합에서 nearby=snapshot=activity=risk 개수 일치, 브랜드 무관 건물 이력·오류422·CORS/no-store를 확인했다. 실제 v2 AI 카페/음식점·음식점 non_chain 모두200/4문단/수치 검증 통과, 보고서 캐시 재사용·조건 변경·취소·모바일390/360·키보드를 공개 브라우저에서 확인했다. 503·혼합 세대·불일치 응답은 브라우저에서만 대체했고 DB를 쓰지 않았다. Free·자동 배포off·풀1/SQL10초/AI20초·기존17개 환경 중 기대 schema 외 모든 값·키/CORS를 보존했다.
+
+운영에서 발견한 음식점 non_chain Risk 시간 초과는 #154의 작은 유효 추정 집합/정수 여집합 집계로 보완했다. 일반1957·격리 PostGIS298·정적 검사/실제 Claude/CI를 통과했다. 원본689440행·전체 기존20표/구조/운영 인덱스 보존, 백업 실제 복원21표 전 hash 일치를 확인했다. 새로운 SQL·AI 한도 확대나 유료 자원은 사용하지 않았다.

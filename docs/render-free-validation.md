@@ -1,6 +1,10 @@
 # Render 무료 검증 환경 안내
 
-마지막 구성·데이터·API 검증일은 **2026-11-14 (Asia/Seoul)**이다. 현재 Render 기준은 이 문서와 [FE 연결 안내](fe-render-validation-api-request.md)에서 관리한다.
+2026-11-15 #153 운영 전환 완료. BE `71eaef9c276ed5b2c70d761e47a9d2eeb7bdcd69` / `dep-dbslqv5ckfvc73dbu6a0` live, schema0012·ALWAYS trigger·공개 세대 `366fdaa8-c678-50fb-bf47-d67f0ca60d56`·source_drift=false다. 공개 FE의 v2 활성화 기준은 `93099f1bea68384b360ce16ac230aef5630eda22`(PR62)이며 이후 문서 전용 배포는 앱 코드가 같다. Vercel Production은v2, Preview/development와 일반 로컬 기본값은v1이다. [실행·검수·복구 기록](designs/production-chain-v2-rollout.md)을 따른다.
+
+카페/음식점24필터 조합에서 nearby=snapshot=activity=risk 개수 일치, 브랜드 무관 건물 이력·오류422·CORS/no-store를 확인했다. 실제 v2 AI 카페/음식점·음식점 non_chain 모두200/4문단/수치 검증 통과, 보고서 캐시 재사용·조건 변경·취소·모바일390/360·키보드를 공개 브라우저에서 확인했다. 503·혼합 세대·불일치 응답은 브라우저에서만 대체했고 DB를 쓰지 않았다. Free·자동 배포off·풀1/SQL10초/AI20초·기존17개 환경 중 기대 schema 외 모든 값·키/CORS를 보존했다.
+
+마지막 구성·데이터·API 검증일은 **2026-11-15 (Asia/Seoul)**이다. 현재 Render 기준은 이 문서와 [FE 연결 안내](fe-render-validation-api-request.md)에서 관리한다.
 
 ## 1. 현재 구성
 
@@ -13,12 +17,12 @@
 | 리전 | 같은 workspace의 Singapore |
 | DB 버전 / 이름 | PostgreSQL17·PostGIS3.6.2 / spoton_free_check |
 | DB 생성 / 만료 | 2026-11-13 23:02:59 / **2026-12-13 23:02:59 KST** |
-| DB 크기 | #128 운영 인덱스 생성 후761,124,531 bytes, 약761MB |
-| Migration | 0011 |
-| 배포 commit | 05790fa7d71f6010b0174960863e4c9ceba77e25 (#118·#124·#128 및 #130 AI 문단) |
+| DB 크기 | 최종 확인 768,825,011 bytes |
+| Migration | 0012 |
+| 배포 commit | 71eaef9c276ed5b2c70d761e47a9d2eeb7bdcd69 (#154 Risk 집계 보완 포함) |
 | 자동 배포 | off, 검증한 commit을 수동 배포 |
 
-현재 BE 배포는 `dep-dbs5t55g1s2s73e8vorg`(2026-11-14 22:14:36 KST live)다. FE [PR55](https://github.com/sigoreu-jabeujong/SpotON-FE/pull/55)는 `4bf012fe231e0f3108aaf43521d6acc9b97a41d6`으로 develop에 병합돼 [공개 화면](https://spot-on-fe.vercel.app)에 반영됐다. Vercel 배포는 `GWN6ZJMbFMQVDdJ8Ns7mKxYhUF7F`다. 아래 #134는 실제 공개 브라우저 검증 결과이며, 과거 절의 배포 ID와 검증 수치는 당시 이력으로 구분한다.
+이전 #134 BE 배포는 `dep-dbs5t55g1s2s73e8vorg`(2026-11-14 22:14:36 KST live)다. FE [PR55](https://github.com/sigoreu-jabeujong/SpotON-FE/pull/55)는 `4bf012fe231e0f3108aaf43521d6acc9b97a41d6`으로 develop에 병합돼 [공개 화면](https://spot-on-fe.vercel.app)에 반영됐다. Vercel 배포는 `GWN6ZJMbFMQVDdJ8Ns7mKxYhUF7F`다. 아래 #134는 실제 공개 브라우저 검증 결과이며, 과거 절의 배포 ID와 검증 수치는 당시 이력으로 구분한다.
 
 검증 당시 남은 자원은 Free BE1개·Free DB1개이며, 유료 컴퓨팅·별도 지속 디스크·Key Value는0개다. 카드 삭제는 사용자가 확인했고, 이후 Free BE·DB 생성이 실제 성공했다. API로 카드나 청구 내역을 조회한 것은 아니다. DB를 새로 만들면 ID·내부 호스트·접속정보·만료일이 바뀐다.
 
@@ -37,7 +41,7 @@ DATABASE_POOL_SIZE=1
 DATABASE_MAX_OVERFLOW=0
 DATABASE_POOL_TIMEOUT=15
 DATABASE_CONNECTION_BUDGET=8
-DATABASE_EXPECTED_REVISION=0011
+DATABASE_EXPECTED_REVISION=0012
 CORS_ORIGINS=http://localhost:5173,http://localhost:5180,https://spot-on-fe.vercel.app
 LLM_PROVIDER=google
 LLM_MODEL=gemini-3.5-flash-lite
@@ -49,11 +53,13 @@ LLM_MODEL=gemini-3.5-flash-lite
 
 브라우저 CORS는 로컬5173·5180과 배포 FE `https://spot-on-fe.vercel.app`의 세 origin을 명시적으로 허용한다. Vercel preview·다른 포트·추가 도메인은 자동 허용되지 않으며 정확한 origin을 별도로 추가해야 한다. 이 목록은 Render 서비스 환경변수이며 로컬 `.env`나 코드 기본값을 바꾸지 않는다.
 
-`/api/health`는 프로세스 검사다. Render health check는 `/api/ready`로 지정한다. 준비 검사는 head0011·조회 역할 권한을 확인하며 API 풀과 별도 연결1개, HTTP2.5초·SQL750ms·성공10초/실패1초 캐시를 사용한다. #124부터 동시 요청은 단일 검사의 실제 결과를 제한시간 안에서 공유한다. 미완료나 만료된 성공을 정상으로 반환하지 않으며 실패는 기존 INTERNAL_ERROR500/no-store다. 로그는ready 고정 경로와readiness_probe 고정사유/시간을 구분한다. probe ok가 해당HTTP200을 보장하지는 않는다.
+`/api/health`는 프로세스 검사다. Render health check는 `/api/ready`로 지정한다. 준비 검사는 head0012·조회 역할 권한을 확인하며 API 풀과 별도 연결1개, HTTP2.5초·SQL750ms·성공10초/실패1초 캐시를 사용한다. #124부터 동시 요청은 단일 검사의 실제 결과를 제한시간 안에서 공유한다. 미완료나 만료된 성공을 정상으로 반환하지 않으며 실패는 기존 INTERNAL_ERROR500/no-store다. 로그는ready 고정 경로와readiness_probe 고정사유/시간을 구분한다. probe ok가 해당HTTP200을 보장하지는 않는다.
 
 인스턴스1·워커1에서 교체 상한은 `2 * workers * (pool + overflow + 1 readiness) = 4`로 예산/reader 제한8 안이다. 외부 reader 도구·추가 인스턴스는 따로 합산한다. Free는 맞춤 maxShutdownDelaySeconds 설정을 지원하지 않아 플랫폼 기본 종료 대기를 사용한다.
 
 ## 3. 운영 인덱스와 스키마
+
+현재는 public26표(확장 표 포함), 시퀀스5개와0012의 새5표를 사용한다. 기존 업무 표/운영 인덱스2개를 보존했다. 아래50/52인덱스·19/20표·0011 설명은 #128 시점의 이력이며 현재 개수/불변 검증은 #153 실행 기록을 따른다.
 
 앱19개 테이블과 alembic_version을 합쳐20테이블이다. 기준50인덱스·110제약·3시퀀스·head0011을 유지하며, Free DB에만 [ops_free_risk_cover](sql/render-free-risk-cover.sql)와 [ops_free_risk_name_v1](sql/render-free-risk-name-v1.sql) 운영 인덱스2개를 두어 총52개다. 원본 행·계산식·앱 모델/migration은 유지한다. #128 이름 정책은 분석 SQL predicate와 메타/캐시를 바꾼다.
 
@@ -64,6 +70,8 @@ LLM_MODEL=gemini-3.5-flash-lite
 새 이름 인덱스의 효과가 없거나 정의 불일치·생성 후800MB 초과·API 회귀가 확인되면 먼저 검증된 이전 코드를 배포하고 필요할 때 `DROP INDEX public.ops_free_risk_name_v1;`만 실행해 기존51개 상태를 확인한다. 기존 cover/provenance를 롤백용으로 유지하며 다른 행·인덱스를 줄여 맞추지 않는다. 키워드/패턴 수정은 정책 버전과 새 운영 인덱스를 함께 검토한다.
 
 ## 4. DB 복원·만료 대응
+
+최신 운영 전환 백업은 사용자 전용 비공개 보관소의 production-chain-rollout-20261115에 있다. 원본0011 consistent snapshot 덤프98,109,104 bytes와 SHA256 c85e5ef584a47fb314a24d5efb3ffdfc430a8315366752b2fd5bcc047a26be7e, 실제 복원 clone/0012·publication 재현 입력을 보관했다. 원본21표 hash/좌표/기존 정의 대조를 통과했다. 현재0012를 복구할 때는 아래 과거0011 복원만으로 끝내지 말고 #153의0012/publication/조회권한 및 기대 schema0012·실제 ready/API 검증까지 수행한다. 덤프·snapshot 원문·자격증명은 공개 저장소에 넣지 않는다.
 
 검증 PC의 백업은 `%USERPROFILE%\SpotON-private-backups\render-free-20261113\`에 보관한다. source.dump, baseline.json, 검토된 toc.reviewed.list와 검증 증빙이 있으며 자격증명은 Windows 사용자 DPAPI로 암호화돼 있다. 다른 PC에서는 운영자로부터 접근 가능한 백업 사본을 확보한다. 이 보관을 서로 다른 물리 디스크의 재해 백업으로 간주하지 않는다.
 
