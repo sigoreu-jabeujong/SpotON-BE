@@ -1,6 +1,6 @@
-# 브랜드 공개 세대 관리 CLI 초안 (#149)
+# 브랜드 공개 세대 관리 CLI (#149)
 
-**Claude 검수 전 Draft 구현이다.** 기존 [#145 설계](designs/feat145-chain-publication-api.md)의 후속이며, 신규 세부 설계/코드의 실제 Claude 검수가 사용 한도로 미완료다. [#149 설계·실제 검증](designs/feat149-chain-publication-maintenance.md)을 먼저 확인한다. FE·API·head0012·.env·기존 서버·원본/운영 DB·Render를 변경하지 않았다. 아래 쓰기는 실제 운영 DB에서 실행한 기록이 아니며 폐기용 DB로만 검증했다.
+기존 [#145 설계](designs/feat145-chain-publication-api.md)의 후속이다. 실제 Claude 재개 검수에서 설계 PASS·정적 코드 차단 결함0을 받았고 Codex가 권고2건을 확인했다. [#149 설계·실제 검증](designs/feat149-chain-publication-maintenance.md)을 먼저 확인한다. FE·API·head0012·.env·기존 서버·원본/운영 DB·Render를 변경하지 않았다. 아래 쓰기는 실제 운영 DB에서 실행한 기록이 아니며 폐기용 DB로만 검증했다.
 
 ## 읽기 전용 계획
 

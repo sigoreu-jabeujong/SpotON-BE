@@ -1,8 +1,8 @@
 # SpotON-BE
 
-## 브랜드 공개 세대 관리 초안 (#149)
+## 브랜드 공개 세대 관리 (#149)
 
-`python -m etl.chains.maintenance`는 기본 읽기 전용 보관 목록과 disable/prune 계획을 제공합니다. 쓰기는 정확한 내용 지문·활성 포인터·명시 비활성 UUID를 확인하고 활성 세대를 보호합니다. 원본/legacy·운영 DB와 FE는 변경하지 않습니다. **새 Claude 설계/코드 검수가 사용 한도로 미완료인 Draft 구현**이므로 [관리 절차](docs/chain-publication-operations.md)와 [설계·격리 검증](docs/designs/feat149-chain-publication-maintenance.md)을 확인하며, 검수/병합/운영 실행 완료로 표시하지 않습니다.
+`python -m etl.chains.maintenance`는 기본 읽기 전용 보관 목록과 disable/prune 계획을 제공합니다. 쓰기는 정확한 내용 지문·활성 포인터·명시 비활성 UUID를 확인하고 활성 세대를 보호합니다. 원본/legacy·운영 DB와 FE는 변경하지 않습니다. 실제 Claude 설계 PASS·정적 코드 차단 결함0과 일반1957/PostGIS295개 검증을 완료했습니다. [관리 절차](docs/chain-publication-operations.md)와 [설계·격리 검증](docs/designs/feat149-chain-publication-maintenance.md)을 따릅니다. 운영 실행·배포는 별도입니다.
 
 ## 브랜드 조건을 유지하는 AI 해석 (#147)
 
