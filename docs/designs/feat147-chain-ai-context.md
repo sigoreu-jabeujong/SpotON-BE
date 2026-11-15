@@ -119,3 +119,29 @@ v2 라우터는 새 InterpretationResources를 만들지 않고 `request.app.sta
 추가 Claude Code 재검수 시도는 UTC18:49:05~18:49:30, exit1·2turns·is_error=true·denial0으로 끝났다. 메시지는 `You've hit your 5-hour limit · resets 5:10am (Asia/Seoul)`이다. 입력/출력 MD SHA는 모두d09daa60d538fc1abe3c0fcf183f95363951075dd0d9704a509e0dd7769d90df로 수정되지 않았다. **추가 Claude 최종 PASS를 받았다고 표시하지 않는다.** 한도 우회·다른 계정/키·유료 한도 전환은 하지 않았다.
 
 이미 실제 Claude 설계 검수와 정적 코드 검수는 수행했다(§7.1·§7.2, 차단 결함0). §7.2의 최종 보류 사유인 전체1944 검사·고정/실제 모델·기준월·쓰기 없는 캐시 재사용 증거는 §7.3에 실제 결과로 모두 보완했다. Codex가 누락됐던 소스와 마지막 confirmed_only 문장을 직접 재대조하고 해당 통합8개/전체1944개를 재실행했다. 내부 ID 미전송, 같은 Selection/이력 분리, 현재 집계 우선 검증, 프롬프트 bundle 고정, v1/v2 자원 공유와 캐시 분리, no-store/오류 전파를 확인했다. 추가 Claude 확인 자체는 미완료로 남기며, 검증 완료된 BE 코드에 대한 PR·CI/CodeQL 절차를 진행한다. FE·배포·원본/운영 DB 변경은 포함하지 않는다.
+
+### 7.5 실제 Claude Code 최종 재검수 (2026-11-15, stage closure)
+
+범위: 이 MD의 Read/Edit만 수행했다. §7.2에서 빠졌던 `chain_notices.py`, `core/operations.py`, `prompts/chain_version.py`, `main.py`, `services/risk.py`·`market_activity.py`·`store_history.py`와 `chain_context.py`, `risk_interpret.py`, 스키마/라우터/프롬프트/테스트 본문 및 §7.3 Codex 실행 보고를 대조했다. 셸/DB/테스트/git/네트워크는 실행하지 않았다. 아래 수치는 Codex 보고값이며 직접 재현하지 않았다. §7.4의 한도 실패는 사실대로 유지하고, 이 절은 그 후 별도로 수행한 검수다.
+
+§7.2 미확인 항목 해소:
+
+1. `operations.API_PATHS`에 `/api/v2/risk/interpret`가 있다. `main.py`는 v2 라우터를 `/api/v2`에 등록하고 `InterpretationResources`를 하나만 만든다.
+2. `chain_notice`는 `chain`·`exclude`·`confirmed_only`일 때 "확인 자료가 아직 없어 이 조건의 결과는 0건"을 넣고, pending은 "빈 결과를 체인 부재로 해석할 수 없습니다"를 넣는다. 통합 진리표 테스트에 해당 단언이 추가됐다. 숫자 "0"은 문맥의 competitor 값으로 뒷받침되며 숫자 검증 통과가 보고됐다.
+3. `get_risk(chain=…)`는 Risk 캐시를 우회하고, chain 경로에서는 세 서비스 모두 `brand_context`/`enrich_meta`를 호출하지 않는다. 따라서 `franchise_classification`/`brand_mapping`이 나오지 않는다. Risk meta의 limitations에는 `ESTIMATE_LIMIT`이 붙지 않아 v2의 `ContextMethodology()` 기본값과 일치한다.
+4. `get_history(chain=…)`는 predicate를 쓰지 않는다. `replace(query=None)`은 이중 안전장치이며, 이력 불변은 통합 테스트(12조합 total12/same_spot8)와 실제 복제 DB(4조건 9건)로 뒷받침된다.
+5. semas_month 실제 경로(202609→2026-09, catalog_year2025)와 쓰기 없는 상태의 실제 cache hit1회(provider4/요청5)가 §7.3에 기록됐다. 일반1944·PostGIS286/skip0·실제 Gemini2건도 기록됐다.
+
+새로 확인한 비차단 사항(코드 수정 불요):
+
+- `source_revision`을 Selection 로드와 비공개 hash에서 두 번 읽는다. 같은 RR 스냅샷이라 값이 같으며 SQL만 1회 더 실행된다.
+- 공개 응답 meta의 `brand_classification`에는 generation·published_at·semas_observed_at이 들어간다. 3절이 허용한 공개 메타이며 evidence/prompt에는 없다(테스트 단언 존재). FE 계약 문서에 이 구분을 유지할 것.
+- `semas_month`가 6자리가 아닌 형식(예: 이미 YYYY-MM)으로 바뀌면 500이다. 안전한 실패 쪽이지만 manifest 형식을 바꾸면 이 변환을 함께 바꿔야 한다.
+- `_activity`/`_history`의 brand_classification 비교는 주입 뒤라 동어반복이다(2.1절 정정과 같음).
+
+차단 결함: **0**.
+
+판정: **구현 단계 PASS**(정적 대조 + Codex 보고 실행 증거 기준). §7.2의 보류 조건은 §7.3의 기록으로 모두 충족됐다. 이 판정은 PR·CI/CodeQL 통과, develop 병합, FE 반영, Render/운영 배포를 포함하지 않는다. CLAUDE.md와 be-work-plan.md의 "최종 재검수는 한도로 실패" 서술은 이 절을 반영하도록 Codex가 별도로 갱신해야 한다. 이번 검수 범위에서는 해당 파일을 수정하지 않았다.
+
+
+검수 증빙(Codex 기록): stage closure-20261115, UTC2026-11-15 04:46:51~04:47:48, exit0·is_error=false·3turns·denial0. MD 입력 SHA59e8b5bc791d00a651ae1b92e4588800b0582d976ca57e7558c7d48fddec224c → 출력1401517872ed00fce4e55c284f38ab0151e53774b3d829970bbf1f97c4ea2bf8. #149 PR에서 이 재개 기록과 공통 문서 상태만 갱신하며, #147의 실행 코드는 PR148 이후 변경하지 않았다.
