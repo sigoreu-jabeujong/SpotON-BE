@@ -1,5 +1,6 @@
 import json
 from dataclasses import replace
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -138,6 +139,16 @@ def test_fixed_event_keys_and_context_gate(capsys, monkeypatch):
 def test_quality_precedes_setup_failure_without_changing_cli_error(
     point, tmp_path, monkeypatch, capsys
 ):
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 1, 1, tzinfo=UTC)
+
+    # Keep whole-log privacy checks: nondeterministic metadata can otherwise contain
+    # a source canary by coincidence (CI observed duration_ms=12.345 matching 12.34).
+    monkeypatch.setattr(operations, "datetime", Clock)
+    monkeypatch.setattr(operations, "elapsed_ms", lambda start: 0.0)
+    monkeypatch.setattr(operations, "new_id", lambda: "00000000-0000-4000-8000-000000000000")
     path = make_manifest(tmp_path)
     monkeypatch.setattr(
         cli,
