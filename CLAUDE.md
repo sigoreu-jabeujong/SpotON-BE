@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-16 #172 [B2 연결 사전 점검](docs/designs/feat172-b2-preflight.md)은 metadata 세 필드의 기본 offline preview와 명시 execute의 Native v4 auth/list_buckets 두 읽기 작업이다. .env/키 저장/캐시·객체/버킷 변경·전송·원격 만료는 하지 않는다. scope/host/region/private·권한 상한과 body/time 예산, proxy/redirect/retry 차단을 검증한다. listBuckets가 최소 권한이며 부족한 향후 파일 grant는 backup_capabilities_complete=false로 구분한다. 공유 보고 객체로 최외곽 중단에도 기존 phase/모드/요청 수를 유지한다. 실제 계정/키는 없으며 MockTransport 결과를 공급자 연결 성공으로 표시하지 않는다. FE/API/0012/의존성/환경/Task/runtime·운영 DB/Render는 유지한다.
+
 2026-11-16 #170은 실제 Claude MD Read/Edit 검토 PASS 후 중단 보고/경합 검증과 문서를 보완한다. cleanup/계수 중 추가 인터럽트·예외에도 생성/부분 효과를 보존하고, CLI 최외곽 실패도 execute 여부에 맞춰 보수적으로 보고한다. same_file·source_path/source_ownership/source_missing을 구분하며 공개 API는 유지한다. next_expiry_at은 복원 기한이 아니며 모든 세대 cursor를 현재 시각으로 재검증한다. orphan_files는 소유 파일 수가 아닌 출력 경로 점유/미확인 수이고 계수 중단/기본0도 부재의 증명이 아니다. [실제 검토·권고 결정·검증](docs/designs/feat168-operation-log-export.md)을 따르며 FE/DB/환경/Task/원격 전송은 바꾸지 않는다.
 
 2026-11-15 #168의 [전송 준비용 SPBK 내보내기](docs/designs/feat168-operation-log-export.md)는 단일 readonly snapshot의 모든 세대에서 event 기준 만료를 제외해 새 SPBK를 논리적으로 재생성한다. 기본 preview·원본 비변경·새 파일만 생성·메타 보존·닫힌 파일 재검증/SHA256·기존 restore 호환을 따른다. 출력은 평문이고 인증/암호화/HTTP/원격 전송/자동 만료/Task 연결을 하지 않는다. 파일명만으로 준비 완료를 판정하지 않고 output_verified와 해시·부분 효과/잔존 보고를 확인한다. 당시 Codex 선진행/Claude 후속 대기로 구현했으며 실제 사후 검토는 #170을 따른다. FE/API/0012/.env/기존 수집과 운영 설정은 유지한다.

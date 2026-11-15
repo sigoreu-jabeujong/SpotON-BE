@@ -35,6 +35,7 @@ jobs:
           tests/ops/test_windows_operation_log_runner.py
           tests/etl/test_operation_log_backup.py
           tests/etl/test_operation_log_export.py
+          tests/etl/test_b2_preflight.py
 
   lint-and-test:
     runs-on: ubuntu-latest
