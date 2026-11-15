@@ -1,5 +1,7 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
+2026-11-15 #166의 [운영 로그 백업·만료·복원](designs/feat166-operation-log-backup.md)은 #164 시범 운영의 복구 경로다. SPBK 두 세대의 원자적 교체·모든 사본의 event 기준30일 만료·canonical/digest/binding 검증·새 파일 복원과 재결합·부분 실패/잔존 파일 보고를 구현한다. source 없음/잠금/손상에도 backup 만료를 먼저 수행하고 source/clock 오류로 정상 backup을 폐기하지 않는다. 키/DPAPI/config는 복사하지 않는다. 기존 collection Task·FE/API/0012/.env/원본·운영 DB/Render를 유지하며 별도 키 없는 정기 Task와 실제 복원 검증을 기록한다. 오프호스트/상시/실제30일 운영은 후속이다.
+
 2026-11-15 #164의 [Windows 로그 시범 운영](designs/feat164-windows-log-pilot.md)은 #162 단발 작업을 현재 PC 전용 저장소와5분 주기 Task Scheduler에 연결하는 후속이다. DPAPI CurrentUser·현재 사용자/SYSTEM ACL·고정 runtime·기본 읽기 전용 preview·명시적 execute·자식 환경 키 격리·bounded/원문 없는 결과를 따른다. Windows 실제 실행 테스트를 CI에 추가하고 등록/시간 트리거 결과를 별도로 기록한다. FE/앱 API/원본·운영 DB/.env/Render Free·자동배포off는 유지한다. 로컬 로그인/전원 의존 시범과24시간·실제30일 보관·오프호스트 백업 검증을 구분한다.
 
 2026-11-15 #162의 [단발 로그 작업·중단 재개](designs/feat162-operation-log-job.md)는 보관기와 Render GET 어댑터를 연결한다. 별도 owned 제어 파일의 binding/확정 cursor,5분 지연/전진·2분 중첩·최대6구간·수집 전 prune을 구현한다. 기본 dry-run은 로컬 계획만 확인한다. archive commit 후 메모리로 진행을 추적하고 마지막에1회 checkpoint를 확정하며 원격/잠금 실패의 성공 prefix와 중단/무결성 실패를 구분한다. 원문·키 없이 부분 효과/lag를 보고하고 실제 강제 종료·동시 잠금·commit 실패 후 재개를 검증한다. 영구 저장소·상시 실행 환경·OS 스케줄 등록·백업 만료·실제30일 운영 검증은 아직 필요하다. FE/API/0012/.env/원본·운영 DB/Render 설정을 바꾸지 않는다.

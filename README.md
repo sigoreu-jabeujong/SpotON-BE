@@ -386,6 +386,32 @@ execute 결과는 전용 폴더의 `latest-result.json` 한 개에 원문 없이
 
 작업은 현재 사용자 Interactive/Limited·5분 반복·로그온 시 실행·중복 실행 금지·숨김·최대15분으로 구성합니다. PC 종료/로그아웃/네트워크 단절/절전 중에는 수집하지 않으며 절전을 깨우지 않습니다. 로컬 디스크 지속 보관은 장비 장애를 견디는 원격 저장소나24시간 운영을 보장하지 않습니다. 키 암호화도 같은 사용자로 실행되는 프로그램의 복호화를 막지는 못합니다. 오프호스트 백업/복원·복사본 만료·실제30일 운영 검증은 후속입니다.
 
+### 두 세대 로컬 백업·만료·새 파일 복원
+
+`python -m etl.operation_logs.backup`은 전용 SPBK SQLite에 최근 두 세대를 보관합니다. 각 세대는 허용 이벤트와 재개 메타데이터만 포함하며 키·DPAPI·config·.env·provider 원문은 복사하지 않습니다. 모든 세대의 만료는 **원래 로그 발생 시각부터30일** 기준입니다. 생성일 기준으로 보관 기간을 연장하지 않습니다.
+
+```powershell
+# init/capture/prune/restore는 기본 preview. 실제 쓰기는 --execute 추가
+python -m etl.operation_logs.backup init --backup 'C:\SpotON-logs\backup.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>'
+python -m etl.operation_logs.backup capture --db 'C:\SpotON-logs\events.sqlite3' --state 'C:\SpotON-logs\job.sqlite3' --backup 'C:\SpotON-logs\backup.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>'
+python -m etl.operation_logs.backup status --backup 'C:\SpotON-logs\backup.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>'
+python -m etl.operation_logs.backup prune --backup 'C:\SpotON-logs\backup.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>'
+# 두 대상은 모두 새 파일이어야 합니다. previous는 첫 세대만 있을 때 실패합니다.
+python -m etl.operation_logs.backup restore --backup 'C:\SpotON-logs\backup.sqlite3' --db 'C:\SpotON-logs\restore.sqlite3' --state 'C:\SpotON-logs\restore-state.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>' --generation previous
+```
+
+수집의 control 잠금과 archive 읽기 snapshot으로 일관성을 확보한 후 반대 slot을 한 transaction으로 교체합니다. 세대별 canonical/hash/count/digest와 대상·원본 binding을 검증하며 잘못된 파일을 자동 수리/덮어쓰지 않습니다. capture는 백업 만료를 먼저 commit하므로 source 없음/잠금/손상 때문에 이전 세대 만료가 생략되지 않습니다. 원본에는 DML을 하지 않습니다. preview도 SHARED 읽기 잠금은 사용하므로 수집 commit과 겹치면 짧은 경합이 가능합니다.
+
+`source_integrity`는 원본 점검/복원 대상이고, `clock_before_backup`은 시계 문제이며, `target_mismatch`는 설정 확인 대상입니다. 이 사유로 정상 백업을 지우지 않습니다. `backup_integrity`/저널 잔존은 수동 점검이 필요하며 자동 복구·삭제하지 않습니다. `effects_may_be_partial`, `backup_prune_committed`, `prune_deleted`, `generation_committed`, `commit_outcome_unknown`을 함께 확인합니다.
+
+복원은 만료 행을 제외하고 새 archive 저장 후 새 state의 binding을 새 경로/inode로 다시 만듭니다. 기존 initial/cursor는 유지하고 만료 cursor를 자동 건너뛰지 않습니다. 실패하면 이번에 만든 파일만 identity를 확인해 제거하며 `created_files_removed`/`orphan_files`로 남은 상태를 보고합니다. 복원 사본도 로그 사본이므로 검증 후 정리하거나 prune 관리에 넣어야 합니다. 운영 수집 경로·인증·Task는 자동 전환하지 않습니다.
+
+정기 capture는 정확한5필드(`db`, `state`, `backup`, `owner_id`, `service_id`)의 비공개 JSON을 `capture --config <path>`로 받습니다. 개별 경로/ID와 함께 사용할 수 없습니다. 키는 필요 없습니다. 실제 PC 연결은 [#166 설계·실행 기록](docs/designs/feat166-operation-log-backup.md)을 따릅니다. 별도 작업 중지는 `Disable-ScheduledTask -TaskName 'SpotON-OperationLogs-Backup'`이며, 이 작업을 중지하면 백업 만료 처리도 멈춥니다.
+
+status의 `captured_at` 신선도·native COM 작업 결과를 함께 확인합니다. `latest_rows`/`latest_bytes`/`near_capture_limit`는 최신 남은 snapshot의 상한 대비 지표이며 현재 source 실제 크기가 아닙니다. 세대당100,000행/64MiB·파일256MiB·연산30초 예산을 넘으면 일부만 보관하지 않고 실패합니다. source 행 수는 수동 capture preview에서도 확인할 수 있습니다. 같은 PC/디스크의 두 최근 세대이며 장비 손실·오프호스트 백업·상시/실제30일 운영 검증은 후속입니다.
+
+현재 PC는 기존 수집과 별도로5분 주기 백업을 활성화했고 실제 새 파일 복원/정리와 시간 트리거의 seq/capture 갱신·종료0을 확인했습니다. Task는 콘솔 없는 `pythonw.exe`로 실행해 stdout 파일을 쌓지 않습니다. preview capture의 `sequence`는 다음 세대 계획이며 실제 최신 세대는 status로 확인합니다. 구현 검토 후 추가 Claude 재검수의 계정 한도 중단과 Codex 보완·실검증 근거는 위 설계6.5~6.6을 따릅니다.
+
 ## 공통 오류 응답
 
 요청 검증 실패는 422, 없는 경로는 404, 허용되지 않은 메서드는 405 상태를 유지하면서 공통 외피로 반환합니다. 404/405에는 새 코드를 추가하지 않고 기존 `INVALID_PARAM`을 사용합니다. 주소 조회 실패용 `ADDRESS_NOT_FOUND`와는 구분합니다. 405의 `Allow` 및 HTTP 예외의 인증·재시도 프로토콜 헤더는 유지하고 임의 디버그 헤더는 제거합니다.
