@@ -79,11 +79,13 @@ def _header(path: Path, identity: tuple[int, int], *, application_id: int = APPL
         raise ArchiveError("ownership")
 
 
-def validate_file_path(path: Path, *, exists: bool = True) -> tuple[int, int] | None:
+def validate_file_path(
+    path: Path, *, exists: bool = True, suffix: str = ".sqlite3", syntax_only: bool = False
+) -> tuple[int, int] | None:
     """Filesystem checks only; callers MUST separately authenticate their file format."""
     if (
         not path.is_absolute()
-        or path.suffix != ".sqlite3"
+        or path.suffix != suffix
         or str(path).startswith(("\\\\", "//"))
         or ".." in path.parts
         or any(p.endswith((" ", ".")) for p in path.parts)
@@ -95,7 +97,7 @@ def validate_file_path(path: Path, *, exists: bool = True) -> tuple[int, int] | 
     for part in (*reversed(path.parents), path):
         if part.exists() or part.is_symlink():
             _identity(part)
-        elif part != path:
+        elif part != path and not syntax_only:
             raise ArchiveError("path")
     resolved = path.resolve(strict=False)
     if os.path.normcase(str(path)) != os.path.normcase(str(resolved)) or resolved.is_relative_to(
@@ -104,6 +106,8 @@ def validate_file_path(path: Path, *, exists: bool = True) -> tuple[int, int] | 
         raise ArchiveError("path")
     if any((p / ".git").exists() for p in path.parents):
         raise ArchiveError("path")
+    if syntax_only:
+        return _identity(path) if path.exists() else None
     for suffix in ("-journal", "-wal", "-shm"):
         side = Path(str(path) + suffix)
         if side.exists() or side.is_symlink():
