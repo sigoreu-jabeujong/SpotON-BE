@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-15 #164는 [Windows 로그 시범 운영 연결](docs/designs/feat164-windows-log-pilot.md)이다. `ops/windows/run-operation-log-job.ps1`은 제한 ACL/config·source commit/hash·Git 상태/표식과 결과 스키마를 검사하며 기본 preview는 키/GET/최신 결과 쓰기가 없다. execute만 DPAPI CurrentUser를 복호화해 자식 환경에 넣고 원문 없는 최신 집계를 유지한다. 실제 작업 등록/실행 상태는 설계 실행 기록을 따른다. 현재 사용자 로그인/PC 전원에 의존하는 시범이며24시간/30일 운영·원격 백업 완료가 아니다. FE/API/0012/.env/운영 Render는 유지한다.
+
 2026-11-15 #162의 [재개 가능한 단발 로그 작업](docs/designs/feat162-operation-log-job.md)은 별도 제어 SQLite·5분 지연/전진·2분 중첩·최대6구간·수집 전 만료 삭제·저장 후 checkpoint를 구현한다. 기본 dry-run은 키/GET/파일 변경 없이 로컬 계획만 확인한다. 알려진 원격/잠금 오류에는 성공 prefix를 확정할 수 있고 중단/무결성/제어 commit 실패에는 제어를 rollback한다. 영구 저장소·OS 스케줄·30일 실제 운영은 후속이다. FE/API/0012/.env/원본 DB/Render 설정은 유지한다.
 
 2026-11-15 #160의 [Render 로그 전달 어댑터](docs/designs/feat160-render-log-adapter.md)는 고정 API의 GET으로 명시한 유한 구간을 읽고 #158 보관기에 전달한다. 기존 인증은 프로세스 비밀 환경으로 받고 default dry-run·대상/라벨 검증·나노초 커서·전체 페이지 완료 후 저장·상한·원문 없는 결과를 따른다. 실제6페이지580행 중576 허용/4거절·재수집 추가0을 새 검증 보관기에서 확인했다. FE/API/0012/.env/원본 DB/Render 설정은 유지한다. 영구 저장소·주기 실행·누락/백업 검증과 실제30일 운영 완료는 후속이다.
