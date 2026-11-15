@@ -173,4 +173,13 @@ source SPBK·config·기존 archive/state 네 파일의 SHA는 전후 동일했�
 
 Claude는13:56Z 실제 계정 한도 실패 이력이 마지막이며 이 구현을 검토하지 않았다. 사용자 승인한 이번 #168의 Codex 선진행 순서에 따라 구현·직접 대조·실제 검사 근거를 보존하고 **Claude 후속 검토 대기**로 표시한다. B2 버킷/비밀 연결·암호화/인증·전송/다운로드 복원·원격 버전 만료 및 실행 호스트는 별도 후속이다.
 
-CI/CodeQL·PR·병합은 로컬 검증 뒤 진행하며 실제 결과를 아래에 추가한다.
+### CI 및 통합 근거
+
+기능 commit `460baf2`의 [PR169](https://github.com/sigoreu-jabeujong/SpotON-BE/pull/169)에서 push/PR Backend CI 각3검사와 CodeQL2검사 총8개가 모두 성공했고 merge state CLEAN이었다.
+
+- Linux 일반2223통과·Windows 전용2skip·PostGIS298분리,20.56초.
+- Windows native85통과,35.16초. 기존 runner2+backup39+새 export44이며 Linux와 이 Windows runner에서는 실제 symlink 생성 검증도 통과했다.
+- 실제 격리 PostGIS298통과·2225분리,146.48초.
+- CodeQL actions 분석과 최종 CodeQL 검사 성공.
+
+후속 문서 정리에서는 README를 운영 로그 절로 옮기고, exported origin은 원본 binding을 보존하므로 복원한 새 archive의 이후 capture에는 별도 새 SPBK init이 필요함을 명시했다. Python/테스트/CI 소스는 기능 commit과 동일하며 후속 HEAD의 실제 체크·병합 상태는 PR169에서 확인한다. 이 문서의 CI 성공은 Claude 검토 성공을 뜻하지 않는다.
