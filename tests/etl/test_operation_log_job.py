@@ -327,7 +327,7 @@ def test_hardlinks_rejected(files, tmp_path, which):
     assert result.status == "failed" and not result.prune_completed
 
 
-def test_state_lock_is_released_after_process_exit(files):
+def test_state_lock_blocks_another_process(files):
     data, control = files
     script = """import sys
 from pathlib import Path
@@ -462,6 +462,20 @@ def test_missing_token_still_prunes_before_collector_configuration_failure(files
     result = job.run_once(data, control, OWNER, SERVICE, SecretStr(""), NOW, execute=True)
     assert result.error == "configuration" and result.prune_deleted == 1 and result.prune_completed
     assert not result.checkpoint_committed and archive.status(data, NOW)["rows"] == 0
+
+
+def test_collector_window_error_preserves_partial_effects_and_rolls_back_state(files, monkeypatch):
+    data, control = files
+    before = cursor(control)
+    older = NOW - timedelta(days=31)
+    archive.ingest(data, io.BytesIO(payload(older)), older, execute=True)
+    collector(monkeypatch, fail_at=2, failure=ArgumentsError())
+    result = job.run_once(data, control, OWNER, SERVICE, KEY, NOW, execute=True)
+    assert result.status == "failed" and result.error == "collector_window"
+    assert result.prune_deleted == 1 and result.inserted == result.successful_windows == 1
+    assert result.effects_may_be_partial and not result.checkpoint_committed
+    assert result.last_confirmed_until == job.stamp(before)
+    assert cursor(control) == before and archive.status(data, NOW)["rows"] == 1
 
 
 @pytest.mark.parametrize("offset", [timedelta(days=-30), timedelta(days=-31), timedelta(seconds=1)])

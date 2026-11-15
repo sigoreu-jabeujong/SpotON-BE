@@ -179,6 +179,9 @@ def _process(
             fetched = render.run_window(
                 path, owner, service, stamp(start), stamp(end), key, execute=True
             )
+        except ArgumentsError:
+            # Arguments were checked before prune. A later clock change is a runtime failure.
+            raise control.JobError("collector_window") from None
         except render.RenderLogError as exc:
             result.status = "failed"
             result.error = str(exc)
