@@ -366,6 +366,26 @@ dry-run의 `prune_completed=true`는 만료 예정 수의 계산 완료이며 �
 
 `checkpoint_expired`는30일 만료 cursor를 자동으로 건너뛰지 않습니다. `state_journal_present`도 자동 복구/삭제하지 않습니다. 정상 commit의 일시적 journal일 수 있으므로 먼저 다른 실행이 끝난 뒤 재시도하고, 계속 남을 때 작업 중지 확인과 두 파일 백업 후 수동 점검합니다. 이전 확정 cursor가 보존 범위 안이라면 그 이하의 명시 start로 새 state를 준비합니다. 이미 만료됐다면 보존 범위 안의 새 start와 복구할 수 없는 과거 공백을 명시적으로 정해야 합니다. archive 복원/교체·디렉터리 이동도 기존 binding을 재사용할 수 없습니다. 영구 저장소·24시간 실행 환경·OS 스케줄 등록·비밀 주입·백업 만료·실제30일 연속 운영 검증은 아직 필요합니다. [설계·검수·실제 검증](docs/designs/feat162-operation-log-job.md)을 따릅니다.
 
+### Windows 로그 수집 시범 운영
+
+`ops/windows/run-operation-log-job.ps1`은 전용 로컬 폴더와 DPAPI CurrentUser 인증을 사용하는 Windows wrapper입니다. 제한 폴더에 검증된 복사본을 `run.ps1`로 두고, 동일 폴더의 `config.json`에 root/runtime/Python/git 경로·source commit·lock/runner SHA256·owner/service를 지정합니다. archive와 제어 파일은 먼저 각각 초기화해야 합니다. 키는 `render-key.dpapi` 암호문에만 저장하며 명령행·Task XML·영구 환경변수에 넣지 않습니다. 이 PC의 실제 구성/등록/실행 기록은 [#164 문서](docs/designs/feat164-windows-log-pilot.md)를 따릅니다.
+
+```powershell
+# 기본 preview: 키 복호화/Render GET/결과 파일 변경 없음
+powershell.exe -NoProfile -NonInteractive -File 'C:\Users\horim\SpotON-operation-logs\run.ps1' -ConfigPath 'C:\Users\horim\SpotON-operation-logs\config.json'
+# 실제 수집은 위 명령에 -Execute 추가
+# 예약 작업 중지(파일과 키는 삭제하지 않음)
+Disable-ScheduledTask -TaskName 'SpotON-OperationLogs-Pilot'
+```
+
+실행 전 경로·파일별 ACL·고정 소스/해시·Git 변경 및 assume-unchanged/skip-worktree 표식을 검사합니다. 자식 환경은 allowlist로 구성해 부모의 키를 상속하지 않으며, stderr·임의 출력·잘못된 결과는 공개하지 않습니다. 자식 호출 이후 wrapper가 실패했다면 이미 삭제/저장했을 수 있으므로 `effects_may_be_partial`과 다음 preview의 확정 위치를 확인합니다. 키를 복호화할 수 없어도 검증된 대상은 빈 키로 실행해 만료 삭제를 먼저 수행하고 `credential_unavailable`로 실패합니다.
+
+execute 결과는 전용 폴더의 `latest-result.json` 한 개에 원문 없이 갱신됩니다. `LastTaskResult`, 마지막 실행/완료 시각, `job.last_confirmed_until`, `lag_seconds_after`, `retention_risk`를 함께 확인합니다. 설정/소스 검증에 실패하면 결과 파일도 갱신하지 않으므로 이전 성공 결과만 보고 정상으로 판단하지 않습니다. 공유 가상환경 변경도 실행 실패를 만들 수 있습니다.
+
+마지막 완료가15분 이상 오래됐거나 결과 코드가0이 아니면 점검합니다. 현재 PC에서는 CIM 실행 시각의 초값이 native Task Scheduler COM과 달라 COM 및 wrapper 완료시각을 대조합니다. latest 파일은 짧게 읽고 닫아 다음 atomic 교체를 막지 않습니다. 이 PC의 실제 작업은 활성화됐고 수정 후 시간 트리거의 체크포인트 전진·결과 갱신·종료0을 확인했습니다. 상세 시각과 미검증 범위는 위 실행 기록을 따릅니다.
+
+작업은 현재 사용자 Interactive/Limited·5분 반복·로그온 시 실행·중복 실행 금지·숨김·최대15분으로 구성합니다. PC 종료/로그아웃/네트워크 단절/절전 중에는 수집하지 않으며 절전을 깨우지 않습니다. 로컬 디스크 지속 보관은 장비 장애를 견디는 원격 저장소나24시간 운영을 보장하지 않습니다. 키 암호화도 같은 사용자로 실행되는 프로그램의 복호화를 막지는 못합니다. 오프호스트 백업/복원·복사본 만료·실제30일 운영 검증은 후속입니다.
+
 ## 공통 오류 응답
 
 요청 검증 실패는 422, 없는 경로는 404, 허용되지 않은 메서드는 405 상태를 유지하면서 공통 외피로 반환합니다. 404/405에는 새 코드를 추가하지 않고 기존 `INVALID_PARAM`을 사용합니다. 주소 조회 실패용 `ADDRESS_NOT_FOUND`와는 구분합니다. 405의 `Allow` 및 HTTP 예외의 인증·재시도 프로토콜 헤더는 유지하고 임의 디버그 헤더는 제거합니다.
