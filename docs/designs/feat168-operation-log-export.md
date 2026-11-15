@@ -8,7 +8,7 @@
 
 이번 이슈는 공급자와 독립적인 **새 SPBK 파일 내보내기**다. 단일 읽기 트랜잭션에서 검증한 논리 내용만 새 파일에 쓰고, 원본을 변경하지 않으며 기존 restore를 그대로 사용할 수 있게 한다. 전송 어댑터나 암호화를 구현했다고 표시하지 않는다.
 
-현재 단계는 **Codex 설계 작성·대조 완료, Claude 설계 검토 대기, 구현 미착수**다. `docs/be-work-plan.md` 10절의 순서에 따라 실제 Claude MD Read/Edit 검토와 Codex 대조 후 구현한다.
+현재 단계는 **Codex 설계 대조 후 구현 진행, Claude 검토 후속 대기**다. 한도 대기 중 사용자에게 이번 #168만 Codex 검토로 BE 구현·테스트를 먼저 진행하고 Claude 검토를 뒤로 미루는 방식을 제안했고, 사용자가 이어서 “다음 스텝 진행하자”라고 지시했다. 이 응답을 제안한 진행 방식에 대한 승인으로 반영한다. 이번 이슈만 해당 순서를 적용하며 Claude 검토 완료나 PASS로 간주하지 않는다.
 
 ## 2. 범위
 
@@ -112,7 +112,7 @@ python -m etl.operation_logs.backup_export \
 
 테스트는 임시 디렉터리/가상 target으로만 실행한다. 기존 운영 SPBK는 읽기 전용 상태 검사 외에 변경하지 않는다. 실제 output을 만들 경우 전용 새 파일을 사용하고 검증 후 identity 확인 정리한다. `.env`·키·운영 DB 접속을 테스트에 사용하지 않는다.
 
-로컬 pytest·ruff check/format·mypy, CI Linux/Windows/PostGIS·CodeQL을 통과하기 전 PR을 만들지 않는다. 구현이 없는 현 단계에서 테스트 통과/구현 완료를 기록하지 않는다.
+로컬 pytest·ruff check/format·mypy가 통과한 뒤 PR을 만들고, CI Linux/Windows/PostGIS·CodeQL 성공과 정상 병합 조건을 확인한 뒤 통합한다. 실제 실행 근거와 남은 상태는11절에 기록한다.
 
 ## 9. 변경 파일 및 커밋 계획
 
@@ -138,4 +138,39 @@ python -m etl.operation_logs.backup_export \
 
 같은 단계의13:57:02Z 읽기 전용 운영 확인에서는 기존 수집·백업 Task 모두Ready/LastTaskResult0, 백업 seq13·두 세대·무결성/배포SHA/ACL/source origin 정상, 실제0행·expired0이었다. source/config/Task/FE를 바꾸거나 새로운 제품 테스트를 실행한 결과가 아니다. 설계/실패 기록만 보존하며 구현·PR·병합은 아직 진행하지 않는다.
 
-검토 재개 시 이 MD만 Read/Edit하도록 제한하고 source 관련 발췌·검증 근거를 UTF-8 프롬프트로 제공한다. shell/git/network/DB/MCP/agent/환경 및 다른 파일 읽기/수정 권한은 주지 않는다. 실제 MD diff와 검토 이유를 Codex가 대조한 뒤 구현한다. 검토 전에는 제품 코드·의존성·CI·runtime을 바꾸지 않는다.
+검토 재개 시 이 MD만 Read/Edit하도록 제한하고 source 관련 발췌·검증 근거를 UTF-8 프롬프트로 제공한다. shell/git/network/DB/MCP/agent/환경 및 다른 파일 읽기/수정 권한은 주지 않는다. 사용자의 후속 진행 지시에 따라 Codex가 먼저 구현·격리 검증하고 실제 MD diff와 검토 이유를 후속 대조한다. FE·의존성·배포 runtime은 바꾸지 않는다. Claude 검토가 미완료이면 PR/완료 보고에도 이를 명시한다.
+
+## 11. Codex 구현 대조 및 실제 검증
+
+### 구현 결과
+
+- 별도 `backup_export` CLI를 추가했다. 기존 backup/archive/job 명령의 코드·형식은 바꾸지 않는다. 기본 preview·명시 execute, source 단일 readonly transaction·세대별 canonical/digest 검증·일괄 만료 제외·메타 보존·새 SPBK 재생성을 구현했다.
+- 새 출력의 O_EXCL·identity/nlink·header/schema·닫힌 논리 내용 재검증·유한 SHA256을 대조한다. 전체 SQL/Python Budget은 하나이고 파일 원자적 게시나 OS I/O 강제 종료를 보장하지 않는다. preview는 출력 해시/크기가 null이다.
+- source 무결성과 output 무결성/잠금/IO/용량 오류를 단계별로 구분한다. 등록되지 않은 예외 문구는 출력하지 않는다. commit 불확실/생성/정리/잔존/부분 효과를 보존하며 교체·미확인 형식·link·sidecar는 자동 삭제하지 않는다.
+- 실제 다른 process가 read 중 BEGIN IMMEDIATE 후 commit을 기다리는 사례와 read 종료 후 source가 새 capture로 진행하는 사례를 격리 검증했다. 출력은 최초 읽기 시점이며 최신 상태를 따라 섞이지 않는다.
+- SQLite 파일의 여유 공간/뒤에 붙은 테스트 canary를 논리 출력에 복사하지 않음을 확인했다. 테스트 중 변조용 SQLite 연결은 `closing`으로 명시 종료한다. SQLite connection context만으로는 파일 핸들이 닫히지 않는 Windows 특성을 테스트 정리 기대와 구분했다.
+- FE/API/schema0012/.env/의존성·원본 DB/Render/기존 Task/config/runtime은 변경하지 않았다. Windows CI에는 새 export 테스트 파일만 추가했다.
+
+### 로컬 검사
+
+| 검사 | 실제 결과 |
+| --- | --- |
+| export+기존 backup | 82 passed, symlink 권한1skip,16.92초 |
+| 전체 Windows 일반 | 2223 passed, symlink 권한2skip, PostGIS298분리,83.11초 |
+| ruff check / format | 통과 /429파일 형식 확인 |
+| mypy Windows / Linux target | 각193파일 통과 |
+| 기존 경고 | Starlette/httpx deprecation1건 |
+
+새 export는43통과·Windows 계정 symlink1skip이다. symlink guard의 실제 Linux 검증은 CI로 확인한다. PostGIS298은 이 로컬 실행에서 수행했다고 주장하지 않으며 CI 결과를 별도로 기록한다.
+
+### 실제 현재 PC 백업의 내보내기·복원
+
+2026-11-15T14:07:57Z 현재 SPBK의 두 세대를 preview한 후 전용 새 파일로 내보내고 기존 restore로 새 SPOL/SPJC를 생성했다. export/output_verified·전체 파일 SHA·복원 rows와 새 archive binding·cursor를 확인했다. 실제 원본/내보내기/복원은 모두0행, 만료 제외0행이었다. 양수6종/정확30일/동시 writer 근거는 위 격리 테스트이며 실제 양수 로그 유입 확인이 아니다.
+
+source SPBK·config·기존 archive/state 네 파일의 SHA는 전후 동일했고 preview는 파일을 만들지 않았다. root 밖으로 나가지 않는 새 파일3개의 identity/header/nlink를 확인한 뒤 검증 사본을 모두 제거했다. 키/DPAPI/HTTP를 사용하거나 Task/배포를 전환하지 않았다. 오프호스트 복구·원격 만료·상시 운영 완료가 아니다.
+
+### 후속 상태
+
+Claude는13:56Z 실제 계정 한도 실패 이력이 마지막이며 이 구현을 검토하지 않았다. 사용자 승인한 이번 #168의 Codex 선진행 순서에 따라 구현·직접 대조·실제 검사 근거를 보존하고 **Claude 후속 검토 대기**로 표시한다. B2 버킷/비밀 연결·암호화/인증·전송/다운로드 복원·원격 버전 만료 및 실행 호스트는 별도 후속이다.
+
+CI/CodeQL·PR·병합은 로컬 검증 뒤 진행하며 실제 결과를 아래에 추가한다.

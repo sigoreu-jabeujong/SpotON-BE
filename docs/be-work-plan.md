@@ -1,6 +1,6 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
-2026-11-15 #168의 [원격 전송용 백업 내보내기 설계](designs/feat168-operation-log-export.md)는 원격 계정 연결 전 진행 가능한 선행 작업이다. 단일 읽기 snapshot에서 SPBK를 논리적으로 재생성하고 모든 세대의 만료 제외·메타 보존·digest/닫힌 파일 hash·기존 복원 호환·새 파일 보호를 검증하는 별도 CLI를 제안한다. 현재 Codex 설계·대조 완료, Claude 설계 검토 대기, 구현 미착수다. #166 추가 검수의 계정 한도 초기화 안내는23:50 KST이며 실제 검토 완료로 대신하지 않는다. FE/API/0012/.env/기존 Task/runtime·운영 DB/Render를 유지하고, 암호화·B2 전송·외부 만료·오프호스트 복구는 후속으로 구분한다.
+2026-11-15 #168의 [원격 전송용 백업 내보내기 설계](designs/feat168-operation-log-export.md)는 원격 계정 연결 전 진행 가능한 선행 작업이다. 단일 읽기 snapshot에서 SPBK를 논리적으로 재생성하고 모든 세대의 만료 제외·메타 보존·digest/닫힌 파일 hash·기존 복원 호환·새 파일 보호를 검증하는 별도 CLI를 구현한다. 한도 대기 후 Codex 구현·테스트 선진행/Claude 후속 검토를 제안했고 사용자의 이어진 진행 지시를 이번 이슈의 해당 순서 승인으로 반영했다. Claude 검토는 후속 대기이며 완료/PASS로 대신하지 않는다. FE/API/0012/.env/기존 Task/runtime·운영 DB/Render를 유지하고, 암호화·B2 전송·외부 만료·오프호스트 복구는 후속으로 구분한다.
 
 2026-11-15 #166의 [운영 로그 백업·만료·복원](designs/feat166-operation-log-backup.md)은 #164 시범 운영의 복구 경로다. SPBK 두 세대의 원자적 교체·모든 사본의 event 기준30일 만료·canonical/digest/binding 검증·새 파일 복원과 재결합·부분 실패/잔존 파일 보고를 구현한다. source 없음/잠금/손상에도 backup 만료를 먼저 수행하고 source/clock 오류로 정상 backup을 폐기하지 않는다. 키/DPAPI/config는 복사하지 않는다. 기존 collection Task·FE/API/0012/.env/원본·운영 DB/Render를 유지하며 별도 키 없는 정기 Task와 실제 복원 검증을 기록한다. 오프호스트/상시/실제30일 운영은 후속이다.
 

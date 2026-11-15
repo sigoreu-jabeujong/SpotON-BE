@@ -34,6 +34,7 @@ jobs:
           uv run --locked --extra dev pytest -q
           tests/ops/test_windows_operation_log_runner.py
           tests/etl/test_operation_log_backup.py
+          tests/etl/test_operation_log_export.py
 
   lint-and-test:
     runs-on: ubuntu-latest

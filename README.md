@@ -388,6 +388,8 @@ execute 결과는 전용 폴더의 `latest-result.json` 한 개에 원문 없이
 
 ### 두 세대 로컬 백업·만료·새 파일 복원
 
+원격 전송 준비용 새 파일은 아래의 [논리 내보내기](#원격-전송-준비용-논리-내보내기)를 사용합니다. 실행 중인 SQLite 파일을 단순 복사하지 않습니다.
+
 `python -m etl.operation_logs.backup`은 전용 SPBK SQLite에 최근 두 세대를 보관합니다. 각 세대는 허용 이벤트와 재개 메타데이터만 포함하며 키·DPAPI·config·.env·provider 원문은 복사하지 않습니다. 모든 세대의 만료는 **원래 로그 발생 시각부터30일** 기준입니다. 생성일 기준으로 보관 기간을 연장하지 않습니다.
 
 ```powershell
@@ -753,6 +755,22 @@ loopback의 `spoton_dev`·비슈퍼유저 `spoton_app`·head0012과 정확한 `p
 결과는 stdout JSON 한 건입니다. 정상0·실패1·Ctrl+C130이며 `--help`는 도움말/0입니다. 오류는 `localdata_maintenance:` 뒤 고정 코드만 반환합니다. `vacuum_completed=true`는 명령이 정상 반환했다는 뜻이고 `provenance_checked=true`는 그 뒤 출처 검사가 통과했다는 뜻입니다. 기본 dry-run은 두 값이 false입니다. VACUUM 후 검증이 실패하면 첫 값은 true인 채 실패로 종료합니다. 실패/중단 시 일부 물리 정리가 반영됐을 수 있으며 앞선 ETL 커밋을 되돌리지 않습니다.
 
 오래된 snapshot이 있으면 VACUUM이 반환해도 회수가 제한될 수 있습니다. 성공 결과가 모든 API·부하/SLA 검증을 대신하지 않으므로 **실제 API 정상 응답까지 확인한 뒤 조회를 재개합니다.** DB 설정·사용법과 검증 범위는 [유지보수 설계·Claude 검토](docs/designs/feat86-localdata-maintenance.md)를 따릅니다.
+
+### 원격 전송 준비용 논리 내보내기
+
+`backup_export`는 SPBK를 단일 읽기 snapshot에서 검증하고 **새 SPBK 파일**로 재생성합니다. 모든 세대에서 `snapshot_as_of` 기준 정확히30일 지난 이벤트를 제외하고 digest를 다시 계산합니다. 원본 백업은 prune하거나 갱신하지 않습니다. 기존 slot/sequence/capture/initial/cursor를 보존하며 복원 불가능한 오래된 checkpoint는 거부합니다.
+
+```powershell
+# 기본 preview: source 읽기 검증·만료 계산만 수행, output/sidecar 생성 없음
+python -m etl.operation_logs.backup_export --backup 'C:\SpotON-logs\backup.sqlite3' --output 'C:\SpotON-logs\export-new.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>'
+# 실제 새 파일 생성: 같은 명령에 --execute 추가
+```
+
+출력은 부모가 존재하는 Git 밖의 로컬 절대 경로이며 기존 파일/link/sidecar를 덮지 않습니다. 생성 후 닫힌 파일의 schema·canonical/digest·전체 내용과 SHA256을 검증합니다. `output_verified=true`, `output_sha256`, `output_bytes`를 함께 확인합니다. preview의 출력 해시/크기는 null입니다. 행 수는 두 세대 합계로 중복 이벤트가 포함될 수 있습니다. 기존 `backup restore`에 새 SPBK를 전달해 새 archive/state로 복원할 수 있습니다.
+
+출력 파일은 평문입니다. SHA256은 인증이나 암호화가 아니며 HTTP·키·B2 업로드·기존 Task에는 연결하지 않습니다. 파일 생성 자체의 원자적 게시를 보장하지 않으므로 파일명 등장만으로 준비 완료를 판단하지 않습니다. 실패 시 `commit_outcome_unknown`, `created_files_removed`, `orphan_files`, `effects_may_be_partial`을 확인합니다. 교체 파일·link·형식 미확인 파일·sidecar는 자동 삭제하지 않으며 강제 종료 잔존물은 수동 점검 대상입니다.
+
+`next_expiry_at`은 모든 세대에서 남은 이벤트의 첫 만료 시각입니다. 파일을 나중에 전송하려면 현재 시각으로 다시 검증/재생성해야 하고 출력/복원 검증 사본도 정리해야 합니다. 이 CLI는 외부 저장소의 만료 스케줄이나30일 상시 보관 보장을 제공하지 않습니다. 사용자의 #168 선진행 지시에 따라 Codex 검토로 구현하며 Claude 검토는 후속입니다. [설계·검증과 한계](docs/designs/feat168-operation-log-export.md)를 따릅니다.
 
 ## 생활인구 원자료 상태 진단
 

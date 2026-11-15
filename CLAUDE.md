@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-15 #168의 [전송 준비용 SPBK 내보내기](docs/designs/feat168-operation-log-export.md)는 단일 readonly snapshot의 모든 세대에서 event 기준 만료를 제외해 새 SPBK를 논리적으로 재생성한다. 기본 preview·원본 비변경·새 파일만 생성·메타 보존·닫힌 파일 재검증/SHA256·기존 restore 호환을 따른다. 출력은 평문이고 인증/암호화/HTTP/원격 전송/자동 만료/Task 연결을 하지 않는다. 파일명만으로 준비 완료를 판정하지 않고 output_verified와 해시·부분 효과/잔존 보고를 확인한다. 사용자 후속 지시로 이번 이슈만 Codex 검토·구현/테스트를 먼저 진행하며 Claude 검토는 후속 대기로 명시한다. FE/API/0012/.env/기존 수집과 운영 설정은 유지한다.
+
 2026-11-15 #166의 [로그 두 세대 백업·복원](docs/designs/feat166-operation-log-backup.md)은 별도 SPBK SQLite에 canonical 이벤트와 재개 메타만 보관한다. 기본 preview·원본 비변경·전체 세대 event 시각30일 만료·대상/origin/digest 검증·새 파일 복원/새 inode binding을 따른다. source/clock/target 오류를 backup 손상과 구분하며 source 실패 전 backup prune을 독립 commit한다. 키/DPAPI/config를 백업하지 않고 기존 수집 작업은 유지한다. 실제 별도 Task 연결은 실행 기록을 따른다. 같은 디스크의 시범이며 오프호스트/상시/실제30일 운영 완료가 아니다.
 
 2026-11-15 #164는 [Windows 로그 시범 운영 연결](docs/designs/feat164-windows-log-pilot.md)이다. `ops/windows/run-operation-log-job.ps1`은 제한 ACL/config·source commit/hash·Git 상태/표식과 결과 스키마를 검사하며 기본 preview는 키/GET/최신 결과 쓰기가 없다. execute만 DPAPI CurrentUser를 복호화해 자식 환경에 넣고 원문 없는 최신 집계를 유지한다. 실제 작업 등록/실행 상태는 설계 실행 기록을 따른다. 현재 사용자 로그인/PC 전원에 의존하는 시범이며24시간/30일 운영·원격 백업 완료가 아니다. FE/API/0012/.env/운영 Render는 유지한다.
