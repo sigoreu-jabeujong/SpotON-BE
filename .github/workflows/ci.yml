@@ -17,6 +17,9 @@ jobs:
   windows-log-runner:
     runs-on: windows-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        shell: powershell
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
