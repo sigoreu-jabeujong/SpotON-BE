@@ -137,6 +137,28 @@ def test_windows_runner_private_process_contract(tmp_path):
         return result
 
     install()
+    # Elevated Windows runners can default new file ownership to Administrators.
+    # Build the same current-user-owned fixture required by the production guard.
+    owner_script = folder / "fixture-owner.ps1"
+    owner_script.write_text(
+        """param([string]$Root)
+$ErrorActionPreference='Stop'
+$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User
+$names=@('config.json','run.ps1','events.sqlite3','job.sqlite3',
+    'runtime','runtime/.git')
+foreach($name in $names) {
+    $path=Join-Path $Root $name
+    $acl=Get-Acl -LiteralPath $path
+    $acl.SetOwner($sid)
+    Set-Acl -LiteralPath $path -AclObject $acl
+    $actual=(Get-Acl -LiteralPath $path).GetOwner([Security.Principal.SecurityIdentifier])
+    if($actual.Value -ne $sid.Value){throw 'fixture_owner'}
+}
+""",
+        encoding="utf-8",
+    )
+    owned = psfile(owner_script, "-Root", str(root))
+    assert owned.returncode == 0, owned.stderr
     env = dict(os.environ, RENDER_API_KEY=canary)
     before = {p: p.read_bytes() for p in [data, state]}
     run("preview_parent_key_not_inherited", env=env)
