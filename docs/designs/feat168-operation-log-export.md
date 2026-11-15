@@ -132,6 +132,10 @@ python -m etl.operation_logs.backup_export \
 
 ### Claude 검토 대기
 
-#166 보완 재검수의 실제 CLI 결과는 2026-11-15T13:07:56Z 계정 5시간 한도/23:50 Asia/Seoul 초기화 안내였다. 13:34:53Z의 준비 스크립트 실행은 초기화 예정 전임을 확인하고 `attempted=false`로 종료했으며 Claude에 요청하지 않았다. 이 새 설계에 대해 실제 Claude 검토를 수행한 이력은 없다. 동일 한도에 불필요하게 재요청하거나 PASS를 만들지 않는다. 초기화 시각은 CLI 안내이며 이후 호출 성공을 보장하지 않는다.
+#166 보완 재검수의 실제 CLI 결과는 2026-11-15T13:07:56Z 계정 5시간 한도/23:50 Asia/Seoul 초기화 안내였다. 13:34:53Z의 준비 스크립트 실행은 초기화 예정 전임을 확인하고 `attempted=false`로 종료했으며 Claude에 요청하지 않았다. 초기화 시각은 CLI 안내이며 이후 호출 성공을 보장하지 않는다.
+
+사용자의 다음 단계 요청 후 계정 상태 변경 가능성을 확인하기 위해 **13:56:47Z 실제 설계 검토를1회 요청**했다. 13:56:51Z exit1/is_error=true/num_turns1, 계정5시간 한도와 동일한23:50 Asia/Seoul 초기화 안내로 실패했다. 입출력 MD SHA256은 모두 `182d7cf4fee2ac41d9a18caced86b3880c212e4d264d77be369901c5728a1201`, 실제 MD 변경은 없었다. 이 호출은 검토 완료나 PASS가 아니다. 추가 반복 호출 없이 한도 해제를 기다린다.
+
+같은 단계의13:57:02Z 읽기 전용 운영 확인에서는 기존 수집·백업 Task 모두Ready/LastTaskResult0, 백업 seq13·두 세대·무결성/배포SHA/ACL/source origin 정상, 실제0행·expired0이었다. source/config/Task/FE를 바꾸거나 새로운 제품 테스트를 실행한 결과가 아니다. 설계/실패 기록만 보존하며 구현·PR·병합은 아직 진행하지 않는다.
 
 검토 재개 시 이 MD만 Read/Edit하도록 제한하고 source 관련 발췌·검증 근거를 UTF-8 프롬프트로 제공한다. shell/git/network/DB/MCP/agent/환경 및 다른 파일 읽기/수정 권한은 주지 않는다. 실제 MD diff와 검토 이유를 Codex가 대조한 뒤 구현한다. 검토 전에는 제품 코드·의존성·CI·runtime을 바꾸지 않는다.
