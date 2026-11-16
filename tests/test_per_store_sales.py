@@ -181,9 +181,11 @@ def test_previous_weighted_payload_remains_readable():
     avg.pop("representative_method")
     avg.pop("graph_basis")
     avg.pop("contributions")
+    avg.pop("store_weighted_distribution")
     for group in avg["groups"]:
         group.pop("distribution")
         group.pop("contributions")
+        group.pop("store_weighted_distribution")
     assert SalesBlock.model_validate(payload).per_store_average["metric"]["value"] == "10"
 
 
@@ -251,7 +253,7 @@ def test_pooled_contributions_use_one_total_denominator_and_sum_to_mean():
         [row("3110001", 10), row("3110002", 30), row("3110003", 7, "20253")],
     )
     avg = result.per_store_average
-    assert avg["representative_method"] == "pooled_sales_over_total_stores_v1"
+    assert avg["representative_method"] == "store_weighted_median_v1"
     assert avg["metric"]["value"] == "25"
     assert [c["metric"]["value"] for c in avg["contributions"]] == ["2.5", "22.5"]
     assert all(c["metric"]["denominator"] == "40" for c in avg["contributions"])
@@ -288,3 +290,38 @@ def test_rejects_wrong_common_denominator_and_contribution_projection(tamper):
         avg["graph_basis"] = "different"
     with pytest.raises(ValidationError):
         SalesBlock.model_validate(payload)
+
+
+@pytest.mark.parametrize("tamper", ["median", "bin_mass", "total_count", "projection"])
+def test_rejects_tampered_store_weighted_distribution(tamper):
+    from copy import deepcopy
+
+    from pydantic import ValidationError
+
+    payload = calculate(
+        [item("3110001", 100), item("3110002", 900)], [row("3110001", 10), row("3110002", 30)]
+    ).model_dump()
+    avg = payload["per_store_average"]
+    avg["store_weighted_distribution"] = deepcopy(avg["store_weighted_distribution"])
+    d = avg["groups"][0]["store_weighted_distribution"]
+    if tamper == "median":
+        d["median"]["value"] = "999"
+    elif tamper == "bin_mass":
+        d["bins"][0]["store_count"] = "999"
+    elif tamper == "total_count":
+        d["total_store_count"] = "999"
+    else:
+        avg["store_weighted_distribution"] = None
+    with pytest.raises(ValidationError):
+        SalesBlock.model_validate(payload)
+
+
+def test_previous_pooled_payload_is_still_readable():
+    payload = calculate([item("3110001", 100)], [row("3110001", 10)]).model_dump()
+    avg = payload["per_store_average"]
+    avg["representative_method"] = "pooled_sales_over_total_stores_v1"
+    avg["graph_basis"] = "each_sales_over_group_total_stores_v1"
+    avg.pop("store_weighted_distribution")
+    for group in avg["groups"]:
+        group.pop("store_weighted_distribution")
+    assert SalesBlock.model_validate(payload).per_store_average["metric"]["value"] == "10"

@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-17 #212 [점포 수 가중 추정 분포·중앙값](docs/designs/feat212-store-weighted-sales.md)은 최신 사용자 요청이다. 개별 매출은 없으므로 상권 평균을 점포 수로 가중한 모델임을 명시한다. 가중 중앙값·같은 폭 히스토그램(가중치 합N)·상권 평균 간 가중 분산을 서버 계산/DTO 검증한다. 기존 pooled/median/기여 계약은 보존하고 새 method/graph_basis/store_weighted_distribution으로 대표를 선택한다. 큰 N을 확장하지 않으며 DB/환경/AI·인구 계약을 유지한다.
+
 2026-11-17 #208 [목록 합계 기준 평균·막대](docs/designs/feat208-sales-pooled-contributions.md)는 최신 사용자 선택이다. 대표S/N과 각 막대sᵢ/N에 동일한 전체 점포 수N을 쓴다. 새 대표 marker/graph_basis/contributions를 추가 검증하고 기존 중앙값 distribution은 호환 보존한다. DB/환경·원자료·AI/인구 계약 변경 없이 BE 선배포→FE 정상 공개 PR로 적용한다.
 
 
