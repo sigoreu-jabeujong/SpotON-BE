@@ -834,3 +834,12 @@ uv run --locked --extra dev python -m etl.living_pop.quality --population-versio
 `app.analysis.day_night.calculate_day_night`는 같은 날짜·공간·모집단의 검증된 시간별 총계24개를 향후 입력받는 내부 순수 계산 기반입니다. 주간06~17·야간나머지의 비중/평균/배수를 Decimal로 구분하고 결측이면 부분합을 반환하지 않습니다. 실제 원천 합산·DB 조회·activity/Risk/AI에는 미연결이며 **현재 공개 인구 pending을 유지**합니다. 산술 성공은 원천 검증이나 하루 고유 방문자 수가 아닙니다. [설계·Claude 검토](docs/designs/feat115-population-time-basis.md)를 따릅니다.
 
 후속 직접 검증에서는 원자료/DB531,922행과격자10,125개를 전수 대조했고, 공식 행정동 Sheet의 비교 가능894집계가 원자료 합과 정확히 일치했습니다. 당일 관측 쌍을 기준으로 행이 없는 시간 조합34,046개와 미매칭 비공개24행도 확인했습니다. 행정동별 소계와 현재 코드/도형 정합을 확인한 것이며, 한 격자 안 행정동 간 가산성·개인 비중복·전체 행 부재 의미·공식 관측일 적용은 확정하지 않습니다. 최신 판단과 제한은 [원천 검증 보고서7절](docs/population-source-verification.md), [실증 설계·검토](docs/designs/feat115-population-empirical-validation.md)를 따릅니다. DB/provenance·공개pending·Render 배포는 그대로 유지합니다.
+
+
+## 생활인구 공개자료 주야간 비교 API
+
+`GET /api/v2/population-reference?lat={위도}&lng={경도}&category=cafe`는 원천별로 24시간 모두 공개된 동일 구성을 비교합니다. radius(300/500/1000, 기본500), sub_category, as_of(YYYY-MM)는 선택입니다. 브랜드·면적·legacy 가맹·include 인자는 받지 않습니다. 분석월 범위 검증은 기존 인허가 기준을 쓰며 관측일은 그 달 안에서 선택합니다.
+
+내국인·장기외국인·단기외국인의 결과를 분리하고 비공개·누락·없는 행은0으로 바꾸지 않습니다. 결과는 전체 인구나 방문객 수가 아닌 부분 공개자료의 참고 산술이며 실제0·반올림0·미산정을 구분합니다. 숫자는 서버 decimal 문자열/display로 제공하고 합/평균에는 인원 단위를 붙이지 않습니다. 기존 activity/Risk/AI는 유지합니다.
+
+[구현·검토·검증/배포 기록](docs/designs/feat180-population-implementation.md), [FE 계약](docs/fe-population-reference-api-request.md)을 따릅니다. 공개 서버 반영 여부는 #180 및 연결 PR의 실제 실행 기록을 확인합니다.
