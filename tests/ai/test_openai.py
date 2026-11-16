@@ -26,6 +26,7 @@ def test_responses_contract_empty_candidates_and_usage():
         assert request.headers["Authorization"] == "Bearer unit-test-secret"
         body = json.loads(request.content)
         assert body["store"] is False
+        assert "reasoning" not in body
         assert body["text"]["format"]["strict"] is True
         assert body["text"]["format"]["schema"]["properties"]["ids"]["items"] == {"type": "string"}
         return httpx.Response(
@@ -49,6 +50,26 @@ def test_responses_contract_empty_candidates_and_usage():
     assert result.provider == "openai" and result.attempts == 1
     assert result.text == '{"ids":[]}' and result.usage.total_tokens == 9
     assert "items" not in schema["properties"]["ids"]
+
+
+def test_sol_uses_low_reasoning_and_counts_only_visible_output():
+    def handler(request):
+        assert json.loads(request.content)["reasoning"] == {"effort": "low"}
+        return httpx.Response(
+            200,
+            json={
+                "status": "completed",
+                "output": [
+                    {"type": "reasoning", "summary": []},
+                    {"type": "message", "content": [{"type": "output_text", "text": "result"}]},
+                ],
+            },
+        )
+
+    model = client(handler)
+    model._model = "gpt-6.1-sol"
+    result = asyncio.run(model.generate(LlmRequest("instructions", "data")))
+    assert result.text == "result" and result.model == "gpt-6.1-sol"
 
 
 @pytest.mark.parametrize(

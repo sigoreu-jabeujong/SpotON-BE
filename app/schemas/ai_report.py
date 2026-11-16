@@ -72,6 +72,8 @@ class ReportText(ReportModel):
 
 
 class ReportVerification(ReportModel):
+    """Numeric/unit/evidence structure checks; not a proof of causal interpretation."""
+
     passed: Literal[True] = True
 
 
