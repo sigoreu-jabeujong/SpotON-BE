@@ -1,5 +1,7 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
+2026-11-16 #182는 [공개 부분자료의 AI 연결 후속 설계](designs/feat182-population-ai-integration.md)다. #180/FE #73의 공개 배포를 기준으로, 기존 v2 요청 유지·같은 RR 재계산·서버 제한 문장·새 근거 ID·v2 프롬프트/캐시·FE 정보창 계약과 구현 완료 검사를 정한다. 이번 작업은 설계/실제 Claude 검수이며 AI 연결 구현·새 배포와 구분한다. 전체 인구 공식 근거 #115/#78, DB0012·환경/원천·Task/runtime은 유지한다.
+
 2026-11-16 #180은 [생활인구 공개자료 API·FE 구현/배포](designs/feat180-population-implementation.md)다. #178의 설계 뒤 새 GET `/api/v2/population-reference`, 원천별 동일 공개 구성24시간·상태/숫자/편향, FE #73의 분석/종합/보고서 연결을 구현한다. 최신 사용자 지시가 FE 직접 수정·운영 배포를 승인했다. 기존 API/AI·source unverified/DB0012/환경은 유지하고 부분 자료를 인구 총계로 표시하지 않는다. 실제 clone/운영 READ ONLY·브라우저·Claude 검토·전체 검사·CI·배포 commit은 문서와 각 PR의 실행 기록을 따른다. #115/#78의 공식 전체 인구 검증은 별도 유지한다.
 
 2026-11-16 #178은 [생활인구·주야간 연결/부분자료 설계](designs/feat178-population-api-partial.md)다. 다음 실제 구현은 전체 통계 승인8표보다 먼저 진행 가능한 원천별 고정 공개 구성 조립→새 typed GET `/api/v2/population-reference`→분리 clone의 산정 상태/제외 패턴/성능 검증이다. category 포함6개 입력과 전역 인허가D·허용월/T를 쓰고 다른 점포 필터는 인구에 적용하지 않는다. 기존 활동/Risk/AI는 유지하고 FE 담당자의 별도 카드·보고서 반영이 필요하다. [FE 연동 요청안](fe-population-reference-api-request.md)은 설계이며 앱/API/FE/배포는 아직 완료가 아니다. #115/#78의 공식 전체 인구 근거 검증은 별도 유지한다.
