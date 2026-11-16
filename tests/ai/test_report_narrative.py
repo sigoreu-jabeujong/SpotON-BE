@@ -61,6 +61,8 @@ def test_source_window_units_are_allowed_but_value_unit_changes_are_not():
         item("폐업률은 90%입니다."),
         item(ids=["invented"]),
         item("폐업률은 13.2원입니다."),
+        item("반경은 250m입니다."),
+        item("별도 수치는 17입니다."),
         item("폐업률은 -13.2%입니다."),
         item("차이는 13.2%포인트입니다."),
         item(ids=["closure", "closure"]),
