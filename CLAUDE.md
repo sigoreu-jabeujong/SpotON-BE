@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-17 #217은 폐업 위치 이력의 혼합 조회 pool15초500 보완이다. read_only_session 기본재시도0을 보존하고 새 location_session만 연결 획득 전 sqlalchemy pool Timeout에 최대1회 재대기한다. 연결 설정/SQL/본문·구API는 재시도하지 않으며 yield는 연결 루프 밖이다. 실패 세션 정리·RR/READ ONLY·SQL제한을 검사하고 환경17개/DB0013/풀·SQL값을 유지한다. 근거·실제 Claude 검토는 #209 문서의 공개 혼합 조회 보완절을 따른다.
+
 
 2026-11-17 사용자 후속 승인 #213/FE108은 #209 설계의 폐업·동일 층호 이력 구현·배포다. 새 /api/v2/stores/location-history를 분리하고 closed-only·상세 exact·결측 계수를 적용한다. 기존 API/구AI/DB0013/원본/환경은 보존한다. 1차 공개는 주소 범위이며 물리 건물 검증은 근거 부재 시 pending_identity다. FE는 구AI history를 생략하고 표/보고서/이미지를 같은 새 조회에 연결한다. 실제 검수·배포 기록은 #209 문서의 후속 실행 절을 따른다.
 
