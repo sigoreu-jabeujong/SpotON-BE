@@ -216,7 +216,8 @@ def test_client_errors_are_not_retried(status: int) -> None:
     clock = Clock()
     recorder = Recorder(httpx.Response(status))
     error = failure(make_client(recorder, clock))
-    assert error.kind is LlmErrorKind.UPSTREAM
+    expected = LlmErrorKind.AUTHENTICATION if status in {401, 403} else LlmErrorKind.UPSTREAM
+    assert error.kind is expected
     assert len(recorder.requests) == 1
     assert clock.sleeps == []
 

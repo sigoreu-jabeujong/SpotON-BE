@@ -110,8 +110,8 @@ class GeminiClient:
         raise LlmError(LlmErrorKind.TIMEOUT)
 
     async def _generate(self, request: LlmRequest, api_key: str) -> LlmResult:
-        url = f"{GEMINI_MODELS_URL}/{self._model}:generateContent"
-        headers = {"x-goog-api-key": api_key}
+        url = self._url()
+        headers = self._headers(api_key)
         body = self._body(request)
         deadline = self._monotonic() + self._policy.time_budget
         attempts = 0
@@ -132,13 +132,7 @@ class GeminiClient:
                 if response is not None:
                     if response.status_code == 200:
                         return self._parse(response.content, attempts)
-                    failure = (
-                        LlmErrorKind.AUTHENTICATION
-                        if response.status_code in {401, 403}
-                        else LlmErrorKind.RATE_LIMITED
-                        if response.status_code == 429
-                        else LlmErrorKind.UPSTREAM
-                    )
+                    failure = self._http_failure(response)
                     retryable = response.status_code in RETRYABLE_STATUS_CODES
                 assert failure is not None
 
@@ -149,6 +143,21 @@ class GeminiClient:
                 if self._monotonic() + delay >= deadline:
                     raise LlmError(failure)
                 await self._sleep(delay)
+
+    def _url(self) -> str:
+        return f"{GEMINI_MODELS_URL}/{self._model}:generateContent"
+
+    def _headers(self, api_key: str) -> dict[str, str]:
+        return {"x-goog-api-key": api_key}
+
+    def _http_failure(self, response: httpx.Response) -> LlmErrorKind:
+        return (
+            LlmErrorKind.AUTHENTICATION
+            if response.status_code in {401, 403}
+            else LlmErrorKind.RATE_LIMITED
+            if response.status_code == 429
+            else LlmErrorKind.UPSTREAM
+        )
 
     def _body(self, request: LlmRequest) -> dict[str, Any]:
         generation_config: dict[str, Any] = {
