@@ -150,6 +150,8 @@ def test_cautions_require_both_sides_of_an_actual_adverse_comparison():
     )
     assert validate([draft], source, "cautions")
     with pytest.raises(ValueError):
+        validate([], source, "cautions")
+    with pytest.raises(ValueError):
         validate([item("표본을 현장에서 확인하세요.", ["closure_rate_12m"])], source, "cautions")
 
 

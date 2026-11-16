@@ -72,6 +72,9 @@ class Draft(BaseModel):
 
 def schema(catalog: ReportCatalog, role: Role) -> dict[str, Any]:
     count = len(catalog.group_ids)
+    minimum = (
+        count if role == "summary" else int(role == "cautions" and bool(adverse_signals(catalog)))
+    )
     return {
         "type": "object",
         "additionalProperties": False,
@@ -79,7 +82,7 @@ def schema(catalog: ReportCatalog, role: Role) -> dict[str, Any]:
         "properties": {
             "items": {
                 "type": "array",
-                "minItems": count if role == "summary" else 0,
+                "minItems": minimum,
                 "maxItems": count if role == "summary" else 3,
                 "items": {
                     "type": "object",
@@ -163,6 +166,8 @@ def numbers(text: str) -> set[Decimal]:
 
 def validate(items: list[DraftItem], catalog: ReportCatalog, role: Role) -> list[ReportText]:
     metrics = {m.id: m for m in catalog.metrics}
+    if role == "cautions" and adverse_signals(catalog) and not items:
+        raise ValueError("missing adverse interpretation")
     if role == "summary":
         groups = [item.group_id for item in items]
         if len(groups) != len(catalog.group_ids) or set(groups) != set(catalog.group_ids):
