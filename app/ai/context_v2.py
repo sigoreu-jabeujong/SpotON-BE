@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-from dataclasses import replace
 from datetime import date
 from typing import Any
 
@@ -19,26 +18,24 @@ from app.ai.context import (
 )
 from app.ai.population_context import project_population
 from app.ai.prompts.builder import build_interpret_request, serialize_context
-from app.ai.prompts.loader import PromptError, load_chain_prompt_bundle
+from app.ai.prompts.loader import PromptError, load_v2_prompt_bundle
 from app.core.cache import CacheResources
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.dependencies import NO_STORE
 from app.schemas.ai_context import (
-    ChainRiskInterpretContext,
-    ContextChainClassification,
-    ContextChainFilters,
+    AnalysisRiskInterpretContext,
+    ContextAnalysisFilters,
     ContextFlags,
     ContextMethodology,
     ContextNearby,
 )
-from app.schemas.chains import BRAND_FIELDS, ChainRiskQuery
+from app.schemas.analysis_v2 import AnalysisRiskQuery
 from app.schemas.common import ApiMeta, ApiResponse, ErrorCode
 from app.schemas.market_activity import ActivityQuery
 from app.schemas.population_reference import PopulationReferenceQuery
 from app.schemas.risk import Risk, RiskQuery
 from app.schemas.stores import HistoryQuery
-from app.services.chains import ChainSelection, source_revision
 from app.services.market_activity import RULE_VERSION as ACTIVITY_RULE_VERSION
 from app.services.market_activity import get_activity
 from app.services.population_reference import get_population_reference
@@ -50,7 +47,7 @@ from app.services.store_history import HISTORY_RULE_VERSION, get_history
 from app.services.store_scope import name_exclusion_meta
 
 
-def chain_query_parts(query: ChainRiskQuery) -> dict[str, Any]:
+def v2_query_parts(query: AnalysisRiskQuery) -> dict[str, Any]:
     parts = query.model_dump(mode="json")
     parts["sub_category"] = sorted(
         query.sub_category
@@ -60,26 +57,11 @@ def chain_query_parts(query: ChainRiskQuery) -> dict[str, Any]:
     return parts
 
 
-def _brand_meta(response: ApiResponse[Any], chain: ChainSelection) -> None:
-    meta = response.meta
-    version = meta.get("data_version")
-    if (
-        "franchise_classification" in meta
-        or not isinstance(version, dict)
-        or "brand_mapping" in version
-    ):
-        raise ValueError("legacy classification in chain context")
-    expected = chain.meta()
-    if "brand_classification" in meta and meta["brand_classification"] != expected:
-        raise ValueError("chain generation mismatch")
-    meta["brand_classification"] = expected
-
-
 def _checked_risk(
-    response: ApiResponse[Risk], query: ChainRiskQuery
+    response: ApiResponse[Risk], query: AnalysisRiskQuery
 ) -> tuple[Risk, date, ContextMethodology, _DataVersion]:
     if response.error is not None or response.data is None:
-        raise ValueError("chain risk unavailable")
+        raise ValueError("analysis risk unavailable")
     data = Risk.model_validate(response.data.model_dump(warnings="error"))
     legacy = query.legacy(RiskQuery)
     if (
@@ -89,7 +71,7 @@ def _checked_risk(
         or data.query.lng != query.lng
         or data.query.filters != legacy.model_dump(include=FILTER_FIELDS, mode="json")
     ):
-        raise ValueError("chain risk query mismatch")
+        raise ValueError("analysis risk query mismatch")
     data.query.filters = query.echo_filters()
     meta = response.meta
     reference = date.fromisoformat(str(meta.get("data_updated_at")))
@@ -99,7 +81,7 @@ def _checked_risk(
         or meta.get("as_of") != target.isoformat()
         or target != effective_date(reference, MIN_OPEN_DATE, query.as_of)
     ):
-        raise ValueError("chain risk date mismatch")
+        raise ValueError("analysis risk date mismatch")
     method = ContextMethodology()
     expected_meta: ApiMeta = {
         "name_exclusion": name_exclusion_meta(),
@@ -114,43 +96,37 @@ def _checked_risk(
         ),
     }
     if any(key not in meta or meta[key] != value for key, value in expected_meta.items()):
-        raise ValueError("chain methodology mismatch")
+        raise ValueError("analysis methodology mismatch")
     version = _DataVersion.model_validate_json(
         json.dumps(meta.get("data_version"), allow_nan=False)
     )
-    if version.rule_version != RULE_VERSION or version.brand_mapping is not None:
-        raise ValueError("chain data version mismatch")
+    if version.rule_version != RULE_VERSION:
+        raise ValueError("analysis data version mismatch")
     return data, reference, method, version
 
 
-def prepare_chain_interpretation(
+def prepare_v2_interpretation(
     session: Session,
-    query: ChainRiskQuery,
+    query: AnalysisRiskQuery,
     settings: Settings,
     *,
     cache: CacheResources | None = None,
     history: HistoryQuery | None = None,
 ) -> PreparedRiskInterpretation:
     try:
-        checked = ChainRiskQuery.model_validate(query.model_dump(warnings="error"))
+        checked = AnalysisRiskQuery.model_validate(query.model_dump(warnings="error"))
         token = snapshot_token(session, cache) if cache is not None and cache.enabled else None
-        chain = ChainSelection.load(session, checked)
-        response = get_risk(session, checked.legacy(RiskQuery), settings, chain=chain)
+        response = get_risk(session, checked.legacy(RiskQuery), settings)
         activity_query = ActivityQuery.model_validate(
             checked.legacy(RiskQuery).model_dump(
                 exclude={"include", "include_unknown"}, warnings="error"
             )
         )
-        activity = get_activity(session, activity_query, chain=chain)
+        activity = get_activity(session, activity_query)
         building = None
         if history is not None:
             check_history_location(session, checked.legacy(RiskQuery), history)
-            building = get_history(session, history, chain=replace(chain, query=None))
-        results: list[ApiResponse[Any]] = [response, activity]
-        if building is not None:
-            results.append(building)
-        for result in results:
-            _brand_meta(result, chain)
+            building = get_history(session, history)
         data, reference, method, version = _checked_risk(response, checked)
         population_query = PopulationReferenceQuery.model_validate(
             checked.model_dump(
@@ -179,33 +155,13 @@ def prepare_chain_interpretation(
                 )
             )
         )
-        public = chain.meta()
-        source = public["source"]
-        if source is not None and not isinstance(source, dict):
-            raise ValueError("chain source metadata")
-        source = source or {}
-        month = source.get("semas_month")
-        if month is not None and (not isinstance(month, str) or len(month) != 6):
-            raise ValueError("chain source month")
-        brand = ContextChainClassification.model_validate(
-            {
-                "status": public["status"],
-                "source_drift": public["source_drift"],
-                "catalog_year": source.get("catalog_year"),
-                "semas_month": f"{month[:4]}-{month[4:]}" if isinstance(month, str) else None,
-                "limitations": tuple(public["limitations"])
-                if isinstance(public["limitations"], list)
-                else (),
-            }
-        )
-        context = ChainRiskInterpretContext(
+        context = AnalysisRiskInterpretContext(
             category=checked.category,
             sub_category=sub,
             radius_m=checked.radius,
-            filters=ContextChainFilters.model_validate(
-                checked.model_dump(include=BRAND_FIELDS | {"area", "include_unknown_area"})
+            filters=ContextAnalysisFilters.model_validate(
+                checked.model_dump(include={"area", "include_unknown_area"})
             ),
-            brand_classification=brand,
             population_reference=population,
             as_of=data.query.as_of,
             data_updated_at=reference,
@@ -223,7 +179,6 @@ def prepare_chain_interpretation(
                 response.meta,
                 sub,
                 checked.radius,
-                classification_key="brand_classification",
             ),
             nearby=None
             if activity.meta.get("record_profile") is None
@@ -236,22 +191,15 @@ def prepare_chain_interpretation(
                 history,
                 checked.category,
                 reference,
-                classification_key="brand_classification",
             ),
         )
-        version_json = version.model_dump(mode="json", exclude={"brand_mapping"})
+        version_json = version.model_dump(mode="json")
         version_json["stores_batch_ids"] = sorted(str(v) for v in version.stores_batch_ids)
         version_json["activity_rule_version"] = ACTIVITY_RULE_VERSION
         version_json["population_digest"] = population_digest
         if history is not None:
             version_json["history_rule_version"] = HISTORY_RULE_VERSION
         # Internal provenance is hashed here, never passed to serialize_context or LLM.
-        version_json["chain"] = {
-            "generation": str(chain.publication.generation) if chain.publication else None,
-            "fingerprint": chain.publication.fingerprint if chain.publication else None,
-            "source_revision": source_revision(session),
-            "source_drift": chain.drift,
-        }
         version_hash = hashlib.sha256(
             json.dumps(
                 version_json,
@@ -262,7 +210,7 @@ def prepare_chain_interpretation(
             ).encode()
         ).hexdigest()
         safe = context.model_dump(mode="json")
-        bundle = load_chain_prompt_bundle()
+        bundle = load_v2_prompt_bundle()
         return PreparedRiskInterpretation(
             context=context,
             request=build_interpret_request(safe, bundle=bundle),
@@ -273,8 +221,6 @@ def prepare_chain_interpretation(
             snapshot_token=token,
             bundle=bundle,
             response_meta={
-                "brand_classification": public,
-                "brand_filters": checked.echo_filters(),
                 "source": ["R5", "R6", "R4"]
                 if any(s.status == "partial" for s in population.sources)
                 else ["R5", "R6"],

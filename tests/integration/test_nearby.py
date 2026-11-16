@@ -228,7 +228,7 @@ def test_supported_subcategories_and_all_radius_choices(
     }
 
 
-def test_area_franchise_unknown_axes_and_zero_preservation(
+def test_area_unknown_flag_and_zero_preservation(
     nearby_database: TemporaryDatabase,
     nearby_client: TestClient,
 ) -> None:
@@ -245,28 +245,23 @@ def test_area_franchise_unknown_axes_and_zero_preservation(
         ("66to99", {4}),
         ("gte99", {5}),
     ]:
-        for unknown_area, unknown_franchise in product([False, True], repeat=2):
+        for unknown_area in [False, True]:
             result = payload(
                 nearby_client,
                 area=area_name,
-                franchise="franchise",
                 include_unknown_area=str(unknown_area).lower(),
-                include_unknown_franchise=str(unknown_franchise).lower(),
             )
             expected_areas = selected | ({0, 1} if unknown_area else set())
-            expected_franchises = {2} | ({0} if unknown_franchise else set())
+            expected_franchises = {0, 1, 2}
             assert identities(result) == {
                 f"{i}-{j}" for i, j in product(expected_areas, expected_franchises)
             }
             for marker in result["data"]["markers"]:
                 if marker["license_no"].startswith(("0-", "1-")):
                     assert marker["area_m2"] is None
-                if marker["license_no"].endswith("-0"):
-                    assert marker["franchise"] == "unknown"
+                assert "franchise" not in marker
     legacy = payload(nearby_client, include_unknown="false")
-    assert len(identities(legacy)) == 8
-    independent = payload(nearby_client, franchise="independent", include_unknown="false")
-    assert identities(independent) == {f"{i}-1" for i in [2, 3, 4, 5]}
+    assert len(identities(legacy)) == 12
     with Session(nearby_database.engine) as session:
         assert (
             session.scalar(select(func.count()).select_from(Store).where(Store.area_m2 == 0)) == 3

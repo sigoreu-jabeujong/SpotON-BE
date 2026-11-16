@@ -14,7 +14,7 @@ from importlib.resources import files
 from importlib.resources.abc import Traversable
 from string import Template
 
-from app.ai.prompts.chain_version import CHAIN_PROMPT_VERSION as CHAIN_PROMPT_VERSION
+from app.ai.prompts.v2_version import V2_PROMPT_VERSION as V2_PROMPT_VERSION
 from app.ai.prompts.version import PROMPT_VERSION
 
 SYSTEM_FILE = "system.md"
@@ -95,7 +95,7 @@ def load_prompt_bundle() -> PromptBundle:
 
 
 @lru_cache(maxsize=1)
-def load_chain_prompt_bundle() -> PromptBundle:
+def load_v2_prompt_bundle() -> PromptBundle:
     return read_prompt_bundle(
-        files("app.ai.prompts") / "chain_interpret", version=CHAIN_PROMPT_VERSION
+        files("app.ai.prompts") / "analysis_interpret", version=V2_PROMPT_VERSION
     )

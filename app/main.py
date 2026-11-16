@@ -12,11 +12,11 @@ from app.core.middleware import UnhandledErrorMiddleware
 from app.core.request_logging import OperationLogMiddleware
 from app.db.dependencies import DatabaseResources
 from app.routers.address_history import router as address_history_router
-from app.routers.chain_interpret import router as chain_interpret_router
-from app.routers.chains import router as chains_router
+from app.routers.analysis_v2 import router as analysis_v2_router
 from app.routers.geocode import router as geocode_router
 from app.routers.health import router as health_router
 from app.routers.interpret import router as interpret_router
+from app.routers.interpret_v2 import router as interpret_v2_router
 from app.routers.location_reference import router as location_reference_router
 from app.routers.market import router as market_router
 from app.routers.meta import router as meta_router
@@ -74,9 +74,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(risk_router, prefix="/api")
     application.include_router(interpret_router, prefix="/api")
     application.include_router(support_router, prefix="/api")
-    application.include_router(chains_router, prefix="/api/v2")
+    application.include_router(analysis_v2_router, prefix="/api/v2")
     application.include_router(address_history_router, prefix="/api/v3")
-    application.include_router(chain_interpret_router, prefix="/api/v2")
+    application.include_router(interpret_v2_router, prefix="/api/v2")
     application.include_router(population_reference_router, prefix="/api/v2")
     application.include_router(location_reference_router, prefix="/api/v2")
     return application

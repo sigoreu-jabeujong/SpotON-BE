@@ -134,15 +134,13 @@ def test_filter_radius_time_matrix_and_strict_boundary(
     for radius, month in product([300, 500, 1000], ["2020-01", "2026-11"]):
         matching(snapshot_client, radius=radius, as_of=month)
     for area in ["all", "lt33", "33to66", "66to99", "gte99"]:
-        for ua, uf in product([False, True], repeat=2):
+        for ua in [False, True]:
             matching(
                 snapshot_client,
                 area=area,
-                franchise="franchise",
                 include_unknown_area=str(ua).lower(),
-                include_unknown_franchise=str(uf).lower(),
             )
-    matching(snapshot_client, franchise="independent", include_unknown="false")
+    matching(snapshot_client, include_unknown="false")
     rows = matching(snapshot_client)["data"]["stores"]
     ids = {r["license_no"] for r in rows}
     assert {"inside", "boundary"} <= ids and not {"epsilon-outside", "outside"} & ids

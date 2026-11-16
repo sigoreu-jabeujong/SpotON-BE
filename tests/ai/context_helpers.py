@@ -59,9 +59,7 @@ def response(q=None, local=None, seoul=None):
         include={
             "sub_category",
             "area",
-            "franchise",
             "include_unknown_area",
-            "include_unknown_franchise",
         },
         mode="json",
     )
@@ -103,7 +101,6 @@ def response(q=None, local=None, seoul=None):
         "rounding": "decimal_half_up_1dp",
         "minimum_samples": {"closure": 10, "survival": 5},
         "seoul_comparison_basis": "same_filters_located_license_records",
-        "franchise_classification": {"status": "pending", "reason": "brand_mapping_blocked"},
         "limitations": [
             "license_records_not_business_outcomes",
             "ownership_transfer_not_separated",
@@ -167,7 +164,6 @@ def activity_response(risk, q=None, *, opened=3, months=41):
         "space": f"radius_{q.radius}m",
         "denominator": None,
         "cohort_size": risk.meta.get("cohort_size"),
-        "franchise_classification": copy.deepcopy(risk.meta["franchise_classification"]),
     }
     return ApiResponse(data=data, meta=meta)
 
@@ -211,7 +207,6 @@ def history_row(
         operating_period_status="fact" if months is not None else "no_data",
         operating_period_reason=None if months is not None else "missing_close_date",
         store_status=store_status,
-        franchise="unknown",
         floor_unit="PRIVATE-FLOOR",
         location_match=location_match,
     )
@@ -231,7 +226,6 @@ def history_response(risk, rows):
         "collection_reason": "source_completion_time_not_recorded",
         "is_demo": False,
         "data_version": version,
-        "franchise_classification": copy.deepcopy(risk.meta["franchise_classification"]),
     }
     return ApiResponse(
         data=StoreHistory(total=len(rows), stores=list(rows), message=None), meta=meta

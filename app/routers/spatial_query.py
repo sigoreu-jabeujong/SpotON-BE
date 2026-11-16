@@ -37,13 +37,7 @@ PARAMETERS = [
             "enum": ["all", "lt33", "33to66", "66to99", "gte99"],
             "default": "all",
         },
-        "franchise": {
-            "type": "string",
-            "enum": ["all", "franchise", "independent"],
-            "default": "all",
-        },
         "include_unknown_area": {"type": "boolean", "default": True},
-        "include_unknown_franchise": {"type": "boolean", "default": True},
         "include_unknown": {
             "type": "boolean",
             "description": "기존 FE 호환. 신규 개별 토글과 혼합 불가",

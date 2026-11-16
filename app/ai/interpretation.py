@@ -6,11 +6,10 @@ from datetime import UTC, datetime
 
 from pydantic import JsonValue
 
-from app.ai.chain_notices import chain_notice
 from app.ai.context import PreparedRiskInterpretation
 from app.ai.narrative import NarrativeCatalog, build_narrative
 from app.ai.verifier import NUMBER_PATTERN, VerifyPolicy, verify_output
-from app.schemas.ai_context import ChainRiskInterpretContext, InterpretContext
+from app.schemas.ai_context import AnalysisRiskInterpretContext, InterpretContext
 from app.schemas.interpret import (
     CandidateSelection,
     ChecklistItem,
@@ -261,28 +260,8 @@ def build_catalog(prepared: PreparedRiskInterpretation) -> InterpretationCatalog
     history_facts, history_missing = _history_items(c)
     facts.extend(history_facts)
     missing.extend(history_missing)
-    if isinstance(c, ChainRiskInterpretContext):
-        classification_notice = MissingItem(
-            text=chain_notice(c),
-            reason="chain_membership_estimate"
-            if c.brand_classification.status == "estimate"
-            else "chain_classification_pending",
-        )
-    else:
-        classification_notice = MissingItem(
-            text=(
-                "상권 적용 시점은 미확인이고 가맹 분류는 기준년도 목록과 상호의 "
-                "일치에 따른 추정입니다. 실제 가맹계약이나 과거 소속을 증명하지 않습니다."
-                if c.franchise_classification == "estimate"
-                else "상권 적용 시점과 가맹 분류는 미확인 상태입니다."
-            ),
-            reason="franchise_name_match_estimate"
-            if c.franchise_classification == "estimate"
-            else "classification_unverified",
-        )
     missing.extend(
         [
-            classification_notice,
             MissingItem(
                 text="전체 수집 완료일이 확인되지 않았으며 검증일을 수집일로 대체하지 않습니다.",
                 reason="source_completion_time_not_recorded",
@@ -310,7 +289,7 @@ def build_catalog(prepared: PreparedRiskInterpretation) -> InterpretationCatalog
                 text=(
                     "전체 생활인구는 합산·격자·시점 기준이 미확정이며 "
                     "공개 부분자료 비교는 별도입니다."
-                    if isinstance(c, ChainRiskInterpretContext)
+                    if isinstance(c, AnalysisRiskInterpretContext)
                     else "생활인구의 합산·격자·시점 기준을 확인하지 못해 분석에서 제외했습니다."
                 ),
                 reason="population_not_available",

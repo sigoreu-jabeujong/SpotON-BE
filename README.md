@@ -1,5 +1,9 @@
 # SpotON-BE
 
+## 브랜드·프랜차이즈 기능 제거 (2026-11-17)
+
+일반 v1/v2/v3 분석 경로는 유지하고 브랜드 상태 API·소속 판정·가맹/체인 필터 및 전용 ETL 명령은 제거했습니다. API는 업종·반경·기준월·면적으로 조회하며 제거된 필터는422, `/api/v2/brands/status`는404입니다. 점포 응답의 brand/operation/franchise와 판정 메타는 없습니다. DB의 과거 테이블/원본 필드와 migration은 보존하며 새 API 실행 시 판정 테이블을 조회하지 않습니다. [설계·검토·검증](docs/designs/feat226-remove-brand-feature.md)을 따릅니다.
+
 ## 위치 참고 매출 API·행정동 원천 검사 (#188)
 
 새 `GET /api/v2/location-reference`는 검색 위치를 포함하거나 반경과 교차하는 상권의 원자료 매출 금액·분기·공간 관계·출처를 반환합니다. 기본 `latest_reference`와 엄격한 `analysis_period`를 구분하며 금액은 정확한 문자열입니다. 기존 역사 분석/AI 계약을 유지하고 인구·주야간은 아직 별도 연결 전입니다. [구현·실제 검사](docs/designs/feat188-location-reference-implementation.md), [FE 계약](docs/fe-location-reference-api.md)을 확인하세요. 운영 적용 여부는 실행 기록과 구분합니다.
@@ -21,52 +25,6 @@ uv run --locked --extra dev python -m etl.admin_population --population-zip <loc
 ## 공개 부분자료의 AI 연결 후속 설계 (#182)
 
 공개 인구 API·FE 카드의 운영 반영은 #180/FE #73에서 완료했습니다. 다음 구현을 위한 [AI 연결 설계·Claude 검토](docs/designs/feat182-population-ai-integration.md)는 서버 동일 RR 재조회, 부분자료의 독립 설명, v2 프롬프트/캐시·FE 안내와 검증 기준을 정합니다. 이번에는 문서만 변경하며 AI에 인구를 연결하거나 재배포한 상태가 아닙니다. 기존 전체 생활인구는 공식 근거 확인 전까지 유지합니다.
-
-## 로컬 테스트 서버 반영 (#151)
-
-로컬 테스트 BE는 `http://localhost:8001`에서 schema0012·브랜드 publication·v2 AI로 실행합니다. [FE 로컬 연결 안내](docs/fe-local-chain-test-connection.md)와 [실제 적용·검증](docs/designs/feat151-local-test-chain-rollout.md)을 확인합니다. 기존 점포/업무 데이터·.env·8000·FE·Render는 보존했습니다. 이 PC에서의 테스트 적용이며 운영/외부 공개 배포는 별도입니다.
-
-## 브랜드 공개 세대 관리 (#149)
-
-`python -m etl.chains.maintenance`는 기본 읽기 전용 보관 목록과 disable/prune 계획을 제공합니다. 쓰기는 정확한 내용 지문·활성 포인터·명시 비활성 UUID를 확인하고 활성 세대를 보호합니다. 원본/legacy·운영 DB와 FE는 변경하지 않습니다. 실제 Claude 설계 PASS·정적 코드 차단 결함0과 일반1957/PostGIS295개 검증을 완료했습니다. [관리 절차](docs/chain-publication-operations.md)와 [설계·격리 검증](docs/designs/feat149-chain-publication-maintenance.md)을 따릅니다. 운영 실행·배포는 별도입니다.
-
-## 브랜드 조건을 유지하는 AI 해석 (#147)
-
-`POST /api/v2/risk/interpret`는 v2 Risk와 동일한 브랜드 조건으로 Risk·활동·선택 건물 이력을 같은 READ ONLY RR 세션에서 재계산합니다. 별도 typed 문맥과 chain-risk-interpret-v1 프롬프트를 사용하며 모델은 검증된 서버 문장 ID만 선택합니다. 내부 publication 식별자·주소·점포명·인허가/브랜드 ID·좌표는 모델에 보내지 않습니다. 추정·미확인·과거 소속의 한계와 실제 조건을 본문에 함께 표시합니다.
-
-v1 프롬프트/요청은 유지합니다. v1/v2의 요청 한도·동시 실행 자원·AI LRU 용량은 공유하고, 선택 캐시 키는 규칙/프롬프트/문맥/자료로 분리합니다. 캐시가 있어도 현재 DB를 먼저 검증합니다. [설계·실제 검수/검증](docs/designs/feat147-chain-ai-context.md), [FE 연결 계약](docs/fe-chain-ai-api-request.md)을 따릅니다. FE·기존 서버·.env·운영 DB/Render 배포는 이번에 변경하지 않습니다.
-
-## 브랜드 판정 공개와 v2 조회 (#145)
-
-새 코드의 migration/head 가드는 **0012**입니다. #151에서 로컬 테스트 DB와8001에는 적용했고, 기존8000과 Render 운영 배포는 유지합니다. 다른 환경에서 새 코드 실행 전에는 격리 검증·백업을 거쳐 관리 역할로 migration을 적용하고 조회 역할에 신규5테이블 SELECT 권한을 준비합니다. trigger는 원천 변경 번호만 갱신하며 점포 업무 필드는 보존합니다.
-
-```powershell
-uv run --locked --extra dev python -m etl.chains.publication --snapshot "<기존 외부 semas.json>"
-uv run --locked --extra dev python -m etl.chains.publication --snapshot "<같은 semas.json>" --write --expected-plan "<dry-run의 expected_plan_sha256>" --expected-active "<dry-run의 active>"
-uv run --locked --extra dev python -m etl.chains.publication --snapshot "<원래 semas.json>" --activate "<저장된 generation>" --write --expected-active "<현재 generation 또는 none>"
-```
-
-기본은 읽기 전용입니다. `--expected-plan`은 unknown을 포함한 원천 전체·판정·registry·출처를 묶은 fingerprint이며 희소 판정만의 plan_sha256과 다릅니다. 포인터 경합·입력 변경·무결성 실패는 전체 rollback합니다. 최대3세대·publication 테이블/인덱스128MiB를 넘으면 저장을 거절하며 자동 삭제는 하지 않습니다. 소진공 snapshot은 새로 수집하지 않고 검증된 기존 파일을 재사용할 수 있습니다. 별도 registry는 `--registry`로 전달합니다.
-
-stores를 쓰는 원천 ETL·위치 보정·publication은 순서대로 실행합니다. 공유 원천 변경 번호 때문에 동시 writer는 대기하거나 실패할 수 있으며 실패 시 전체 트랜잭션을 rollback합니다. 원천 수집/보정 뒤 소진공 근거는 재공개로 검증합니다. 복원 DB는 ANALYZE로 조회 통계를 준비하고, trigger를 비활성화하는 복원 절차 뒤에는 관리 역할로 `ALTER TABLE public.stores ENABLE ALWAYS TRIGGER spoton_chain_source_changed`를 복구한 다음 원천 전체를 재검증해 공개합니다.
-
-`/api/v2/brands/status`, `/api/v2/stores/nearby`, `/snapshot`, `/history`, `/api/v2/market/activity`, `/api/v2/risk`를 추가합니다. 체인 추정만 조회할 때 `brand_scope=chain&brand_unknown=exclude`를 함께 전달합니다. 가맹·직영·소규모 체인을 함께 포함하되 실제 운영 형태/과거 소속/비체인 확정은 미확인입니다. 기존 v1 계약을 유지하며 v2 AI는 위 #147의 POST /api/v2/risk/interpret를 사용합니다. [설계·검수·실제 검증](docs/designs/feat145-chain-publication-api.md), [FE 계약 요청](docs/fe-chain-v2-api-request.md)을 확인합니다.
-
-## 브랜드·체인 점포 대조 기반 (#143)
-
-이 CLI의 lifecycle stderr 로그는 기존 브랜드 작업과 `source=brands`를 공유합니다. 명령의 stdout `mode`와 실행 기록으로 구분하며, stderr source 필드만으로 두 명령을 구별할 수는 없습니다.
-
-가맹·직영·소규모 체인을 함께 다루는 별도 `etl.chains` 기반을 추가했습니다. 공식 브랜드 seed와 공정위 정확 이름·소진공의 별도 지점/주소 근거로 소속을 **추정**하며 실제 가맹계약·직영 여부·과거 소속을 확정하지 않습니다. 기존 공개 가맹 필터·원본 stores·DB schema는 유지합니다. [범위·설계·실제 검수/검증](docs/designs/feat143-brand-chain-foundation.md)을 확인합니다.
-
-```powershell
-uv run --locked --extra dev python -m etl.chains --collect-semas --output "<저장소 밖 새 semas.json>"
-uv run --locked --extra dev python -m etl.chains --compare-local --snapshot "<기존 semas.json>" --plan-output "<저장소 밖 새 plan.json>"
-uv run --locked --extra dev python -m etl.chains --compare-local
-```
-
-기존 `DATA_GO_KR_SERVICE_KEY`를 환경에서 읽고 키 인자는 받지 않습니다. 수집은 서울 I2 고정·최대251회·페이지5MiB/전체256MiB·redirect/retry0이며 기준월/전체 수/중복 ID·첫 페이지를 검증한 최소 필드 snapshot만 저장합니다. 원문 인증 URL/사업자·대표자·연락처를 저장하지 않습니다. snapshot과 선택적인 인허가 증거 계획은 다른 Git checkout을 포함해 저장소 내부 저장·기존 파일 덮어쓰기를 거절하며 완성 파일만 원자적으로 공개합니다.
-
-`--compare-local`은 `spoton_dev`/`spoton_app`·head0012 가드 뒤 READ ONLY REPEATABLE READ로 동작합니다. 기존 카탈로그가 없으면 검수 seed만 쓰며 미매칭은 unknown입니다. 별도 `--registry` 파일로 근거/검수일을 갖춘 소규모 체인을 추가할 수 있습니다. 공정위 전체 목록의 지점명 패턴을 열지는 않으며, 개별 소진공 점포의 별도 지점명·동일 주소·인허가1:1 연결을 만족할 때만 별도 추정합니다. 출력은 집계와 지문뿐이고 raw 상호/주소/인허가번호를 출력하지 않습니다. 현재 publication/v2 BE는 위 #145 계약을 따르며 FE 담당 반영·운영 배포는 후속입니다.
 
 ## Render 무료 검증 배포
 
@@ -127,7 +85,7 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 
 `GET /api/stores/nearby?lat={위도}&lng={경도}&category={cafe|restaurant}`는 선택 시점의 반경 내 지원 점포를 반환합니다. 좌표는 geocode 결과를 사용하고 radius는 300/500/1000m(기본 500), as_of는 선택 YYYY-MM입니다. 과거 월은 월말, 최신 월은 검증 배치의 전역 원천 갱신일을 적용합니다.
 
-- `sub_category`는 음식점 4종 또는 cafe를 쉼표로 전달합니다. 면적·가맹 조건과 독립적인 `include_unknown_area`·`include_unknown_franchise`는 기본 true입니다. 기존 `include_unknown` 단독 전송은 두 조건에 함께 적용하고 개별 토글과 혼합하면 거절합니다.
+- `sub_category`는 음식점 4종 또는 cafe를 쉼표로 전달합니다. `include_unknown_area`는 면적 미확인 기록 포함 여부이며 기본 true입니다. 기존 `include_unknown`은 면적 조건의 별칭입니다. 두 플래그를 혼합하면 거절합니다.
 - 0㎡와 null은 정보 없음입니다. 0㎡ 원본을 수정하지 않으며 응답 `area_m2=null`, 알려진 면적 필터에서는 제외합니다. 가맹 미확인을 개인 매장으로 바꾸지 않습니다.
 - 원본 날짜가 유효한 점포에 `open_date<=T AND (close_date IS NULL OR close_date>T)`를 적용합니다. 날짜 미확인·오류, 폐업일 없는 폐업, 한시 영업 true는 제외합니다. 현재 상태와 전체 운영기간은 최신 데이터 기준이며 과거 시점 상태나 T까지의 기간으로 바꾸지 않습니다.
 - geography 미터 거리로 반경 경계를 포함합니다. 반올림 전 거리 순서를 유지하며 표시값만 소수 첫째 자리로 반환합니다. 식별자는 `source+license_no`, 상호·기간·면적은 nullable입니다.
@@ -164,7 +122,6 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 
 - 최근 12개월은 `(T의 전년 같은 월일, T]`이며 존재하지 않는 2월 29일만 28일로 제한합니다. 폐업 기록도 보존해 구간 내 개업·폐업을 각각 셉니다. 연도별 추이는 **2010년부터** 각 연도 1월 1일~T와 같은 월일까지의 YTD 비교이고 실제 사건이 없는 연도를 임의로 만들지 않습니다. 2010년 이전 개업 기록도 현재 점포 수·평균 개월·최근 개폐업 집계에는 유지하며, 그 기록의 2010년 이후 폐업은 추이에 포함합니다. 기준일이 2010년 이전이면 연도별 추이와 기간 메타데이터만 비어 있습니다.
 - 세부 업종별 점포 수와 평균은 T에 영업 중인 인허가 기록 기준입니다. 평균은 T까지 경과한 달력 완료 개월의 평균을 버린 정수이며, 점포 수 0이면 null입니다. 최신 데이터 기준 전체 영업기간·폐업 점포의 수명·생존율과 구분합니다.
-- 명시 적용한 브랜드 목록은 `meta.franchise_classification.status=estimate`이며 기준년도 목록과 상호의 일치 추정입니다. 미적용 DB는pending입니다. 원본 가맹 필드는 보존하고 현재 이름/업종과 저장 근거가 같을 때만 별도 근거를 조회에 반영합니다. 미확인을 개인 매장으로 바꾸거나 필터0건을 실제 점포 부재로 단정하지 않습니다.
 - 매출·생활인구 수치는 이번 릴리스에서 항상 null입니다. 요청한 항목만 `flags.missing`과 `meta.optional_data`에 pending 및 사유를 반환합니다. 적재된 원천이 있어도 집계 기간·경계/격자 적용 시점 검증 전에는 수치를 활성화하지 않습니다.
 - `meta.as_of`는 실제 적용일 T, `data_updated_at`은 전역 인허가 갱신일 D, `collected_at`은 현재 null입니다. `denominator=null`, `cohort_size`는 폐업을 포함한 집계 대상 수이며 좌표 미확보 수는 서울 전체 동일 비공간 조건 기준입니다. no-store·읽기 전용 일관된 트랜잭션을 사용합니다.
 
@@ -262,48 +219,7 @@ AI 해석 프롬프트는 `app/ai/prompts/risk_interpret/`의 `system.md`(시스
 
 `app/ai/verified.py`의 `generate_verified()`는 검증에 실패하면 같은 요청으로 1회 다시 생성하고, 또 실패하면 `AiVerifyFailedError`(→ `AI_VERIFY_FAILED` 503)를 냅니다. 공급자 오류 `LlmError`는 그대로 전달되어 `AI_UNAVAILABLE`과 섞이지 않습니다. 호출자의 Pydantic 모델과 선택적 의미 검증/남은 예산 검사를 지원하며, AI API는 요청별 enum·전체 비교 후보 포함·중복 검사를 추가합니다. 상세 내용은 [작업 29 설계서](docs/designs/feat29-ai-verifier.md)와 #68 설계를 확인합니다.
 
-## 공정위 브랜드 원천 수집·읽기 전용 대조 (BE-21 1단계)
-
-[공정위 브랜드 목록 API](https://www.data.go.kr/data/15125467/openapi.do)의 기준년도별 전체 목록을 수집하고 기존 점포와 정확한 정규화 상호를 대조합니다. 이 단계는 **후보 조사**이며 가맹계약·브랜드 소속·과거 소속 판정이 아닙니다. 실제 `is_franchise/brand_id`와 공개 API·AI의 pending 상태를 유지합니다.
-
-```powershell
-uv run --locked --extra dev python -m etl.brands --year 2025 --output "<저장소 밖 새 snapshot.json>"
-uv run --locked --extra dev python -m etl.brands --snapshot "<기존 snapshot.json>" --compare-local
-```
-
-- 수집은 로컬 `DATA_GO_KR_SERVICE_KEY`가 필요합니다. 명시한 연도를 순차1000행씩 수집하며 자동 연도 대체·재시도는 없습니다. 결과코드·전체/페이지 건수·브랜드/본부 관리번호 복합키 중복·연도를 검사하고 마지막에 첫 페이지를 다시 대조합니다. 중간 페이지의 동시 변경까지 검출하거나 공급자의 단일 시점 일관성을 증명하는 것은 아닙니다.
-- 원문 body/base64·페이지SHA256·정규화content hash·규칙·실제 전체 수집 완료 UTC시각을 BE/FE 저장소 밖 파일에 보존합니다. 관리번호는 영문 접두사·구분자·앞0를 보존하는 문자열입니다. snapshot의 완료시각은 기존 인허가 collected_at이나 원천 갱신일과 별개입니다. 기존 파일을 덮지 않으며 실패/Ctrl+C 때 이번 생성 파일만 정리합니다. 강제 종료나 정리 실패 시 불완전 파일이 남을 수 있고 replay에서 거절합니다.
-- snapshot에는 공식 공개 대표자·사업자정보가 포함될 수 있습니다. 로컬에만 보관하고 커밋·로그·Claude/LLM 입력으로 보내지 않습니다. 정규화/후보 대조는 브랜드명·관리번호·기준년도·업종만 사용하며 법인명·대표자·사업자번호는 사용하지 않습니다. stdout/stderr는 고정 건수·상태·해시만 출력합니다.
-- replay는 원문·페이지·hash·규칙·완료시각을 다시 검증하며 키/HTTP가 필요 없습니다. 최대100,000행·페이지5MiB·raw 합계140MiB·base64 포함 snapshot200MiB입니다. hash 일치는 공급기관 서명이나 원천 의미 검증이 아닙니다.
-- `--compare-local`만 기존 로컬대상/head0012 검사를 통과한 DB에 READ ONLY REPEATABLE READ·SQL60초/잠금5초로 연결합니다. 지원5업종·삭제없음·검토대기아님 점포를 스트리밍 대조하며 좌표/날짜/영업 상태로 한정하지 않습니다. 현재 지도/과거 조회의 실제 점포 수와 다른 모집단입니다. 점포 상호는 외부로 전송하지 않습니다.
-- NFKC/casefold/공백만 정규화하고 지점명·구두점 제거/부분일치/유사도 판정은 하지 않습니다. 전체 업종 목록 기준 유일한 외식 이름이 정확히 일치해도 `exact_name_candidate`일 뿐입니다. 기존판정보존→상호결측→약한이름→반복브랜드번호→동명모호→비외식→정확후보→미일치 순의 배타건수이며 합계는 total과 같습니다. 3자 미만/숫자만인 이름은 약한 이름입니다. 미일치를 비프랜차이즈 수로 사용하지 않습니다.
-- 원천은 `(기준년,브랜드관리번호,가맹본부관리번호)` 행으로 보존합니다. 같은 브랜드번호·다른 본부의 모든 행을 유지하며 그 번호와 관련된 이름은 유일해도 `repeated_brand_id`로 격리합니다. 원천 반복의 이유나 브랜드 소속은 추론하지 않습니다. v2 content hash/첫페이지 재확인은 복합키 순서이며 이전 규칙 snapshot은 거절합니다. `rows`는 원천 행 수, `unique_brand_ids/repeated_brand_ids/repeated_rows`는 번호·행 건수입니다. `ambiguous_names`는 정규화명이 복수 원천 행에 있는 그룹 수로 반복번호 행도 포함할 수 있습니다. 이 요약들을 합산해 실제 브랜드/점포 수로 쓰지 않습니다.
-- 성공0·고정 JSON오류1·인자오류2·Ctrl+C130입니다. `request_count`는 성공한 실행의 HTTP시도 수이며 replay는0입니다. 원천 파일 저장 뒤 DB 대조가 실패하면 exit1·`snapshot_saved=true`·stage=prepare를 출력하고 파일을 보존하므로 `--snapshot`으로 재실행합니다. `snapshot_saved`는 이번 실행이 완료 파일을 저장했는지 뜻합니다.
-
-위 단계는 후보 조사 기능입니다. 실제 추정 조회는 아래 명시 적용 실행기로 수행하며 같은 보수적 규칙을 사용합니다. [원천 기반 설계](docs/designs/feat57-brand-catalog-foundation.md)를 따릅니다.
-
-## 브랜드명 기반 프랜차이즈 추정 적용 (BE-21)
-
-```powershell
-# 기본은 READ ONLY 계획입니다. snapshot은 저장소 밖 검증된 파일입니다.
-uv run --locked --extra dev python -m etl.brands.apply --snapshot "<snapshot.json>"
-uv run --locked --extra dev python -m etl.brands.apply --snapshot "<snapshot.json>" --write
-```
-
-- migration0011의5개 테이블에 catalog/브랜드 원천/매핑run/정확 일치 근거/활성 포인터를 보존합니다. **stores 원본·is_franchise/brand_id·updated_at·배치·스키마는 바꾸지 않습니다.** 외부 분류가 우선이며 현재 source/license_no/name/category/sub_category가 활성run의 근거와 같을 때만 자동true로 조회합니다. 상호 변경은 조회에서 미확인이고 같은 원문이 복귀하면 근거가 다시 적용될 수 있습니다.
-- 동일snapshot/점포입력/규칙은UUID·loaded_at·근거를재사용하고포인터가같으면무변경입니다. 다른명시catalog의run으로전환할수있고이전run은보존합니다. writer는READ COMMITTED·apply간advisory lock/unique·SQL60초/잠금5초로새테이블만원자적으로씁니다. 원천변경과경합해도읽기시점대조로오래된양성은노출하지않습니다. 데이터가있으면downgrade를거절합니다.
-- history/nearby/snapshot행에franchise_basis와franchise_reference_year, snapshot에는franchise도추가합니다. 자동값은catalog_exact_name/현재2025, 기존외부값은external_classification/년도null, 미확인은둘다null입니다. 실제가맹계약·직영구분·과거소속은확인하지않았으며false/independent를자동생성하지않습니다.
-- **프랜차이즈만 조회하려면 franchise=franchise와include_unknown_franchise=false를함께전달**합니다. unknown기본true는미확인도포함합니다. independent는외부false만선택하며현재0건을실제독립점포부재로해석하지않습니다.
-- 5조회API의meta는미적용pending 또는estimate/partial·기준년도·R7·계약/업종대응미검증을명시합니다. data_version.brand_mapping은마지막적용의catalog/run/입력hash/규칙이며화면이나AI입력에UUID/hash를표시하지않습니다. 기존인허가as_of/collected_at=null은유지합니다. 가맹필터의과거폐업률/생존율은목록이름으로선택한인허가참고비율이며역사적가맹코호트가아닙니다.
-- AI입력은상태/년도/고정한계만추가하고이름·번호·UUID/hash는전송하지않습니다. 내부버전hash·DB snapshot cache·prompt risk-interpret-v5로이전판정을분리하고실제계약/과거소속으로문장을바꾸지않습니다.
-
-현재2025원천11,167행·정확이름근거6,839건을명시적용했습니다. 실제DB의원래14테이블전체행/공간hash·원본snapshot은동일하고모델차이0입니다. localhost8000에서도추정응답을확인했습니다. 실제LLM추가송신/최신원천수집·자동일정·공개배포는하지않습니다. [판정 적용 설계](docs/designs/feat57-franchise-classification.md)와 [FE 변경 요청서](docs/fe-franchise-classification-api-request.md)를따르며FE/CLAUDE.md 반영은담당자대기입니다.
-
-## 브랜드 보강과 조건부 통계 연결 기반
-
-실제 공개까지의 다음 작업은 [#176 활성화 설계](docs/designs/feat176-reference-activation.md)를 따릅니다. 브랜드 새 세대 적용/복구와 공식 근거를 원천 버전·기간에 연결하는 별도 publication, 실제 조회·새 API/AI·권한/캐시/검증 순서를 정의합니다. 제안 schema0013·새 모델/역할/endpoint는 아직 구현하거나 적용하지 않았으며 기존0012·공개 응답·환경을 유지합니다.
-
-#174는 검토 브랜드를5개에서17개로 늘렸습니다. 이디야·메가MGC커피·빽다방·할리스·블루보틀과 검토된 음식점 브랜드, 프릳츠·앤트러사이트를 포함합니다. 프릳츠의 점 없는 매장명은 공식 전체 표기만 허용하며 공정위 전체 목록의 지점명/퍼지 매칭은 추가하지 않습니다. 다른 catalog 세부 브랜드를 parent 브랜드로 흡수하지 않고, 검토 alias와 중복 catalog 식별자가 충돌하면 재계산을 거절합니다. 규칙은 `chain-membership-estimate-v2`이며 기존 공개 세대를 자동 갱신하지 않습니다.
+## 조건부 통계 연결 기반
 
 내부 `app.analysis.market_reference`는 명시한 검증 기간 목록에서 현재/과거 분기를 고르고 매출 원천값·상권변화 유형을 별도 typed 결과로 투영합니다. 실제0/null/행 부재를 구분하며 통계에 인허가·브랜드 필터를 적용하지 않습니다. `app.analysis.population_totals`는 독립적으로 입증된 기대 구성과 같은 관측일/버전/격자 집합의 원천을 대조해 완전한 시간만 합산하고 기존 주야간 계산기로 전달합니다. 비공개/누락/부재는0으로 대체하지 않습니다.
 
@@ -322,7 +238,6 @@ API·ETL·LLM의 추가 운영 이벤트는 한 줄 JSON으로 **stderr**에 기
 
 - 모르는 경로는 `unmatched`이며 원문 URL/query를 복사하지 않습니다. 헤더 관측 전 실패/취소는 status_code=null, 전송 중 중단은 response_complete=false입니다. 완료는 ASGI 전송 기준이며 사용자의 다운로드 완료 보장이 아닙니다. request_id는 입력 헤더를 무시하고 새로 만들며 응답 헤더에 추가하지 않습니다.
 - ETL은 실제 commit context 종료 후 persist 완료를 기록하고 원래 오류·취소를 전파합니다. run_id와 DB batch_id/version_id를 구분하며 없는 건수를0으로 채우지 않습니다. quality_flags는 겹칠 수 있으므로 합산해 최종 제외 수로 표시하지 않습니다. 인허가 CLI의 잘못된 인자는 입력을 echo하지 않는 고정 메시지·exit2입니다.
-- brands의 파일 저장 완료는 별도 `save_snapshot` 단계입니다. DB commit을 뜻하는 persist와 구분하며 대조는 prepare의 읽기 전용 동작입니다. 원천 저장 후 대조 실패 시 save_snapshot completed 뒤 import failed가 올 수 있습니다.
 - 생활인구 `etl_quality`의 completed는 입력 요약 성공이며 적재 완료·원천 완전성·공간 검증 성공이 아닙니다. DB 준비 전에 기록하므로 이후 import failed가 올 수 있습니다. 6개 카운터 중 하나라도 유효하지 않거나 계산에 실패하면 counts 없이 failed/quality_summary_unavailable을 기록합니다. 로그 실패는 적재 성공 조건이 아니며 원래 실행 결과를 바꾸지 않습니다.
 - 쓰기/직렬화/ID 생성 실패는 주 작업을 바꾸지 않으며 로그 오류를 다시 출력하지 않습니다. 한 줄은 최대4096 UTF-8 bytes이고 프로세스 내 thread 쓰기를 묶습니다. 느린 stderr의 지연이나 여러 프로세스 간 원자성은 보장하지 않습니다. 기존 서버 시작/오류 메시지는 같은 stderr에 있을 수 있으므로 수집기는 event가 있는 JSON을 구분합니다.
 - 기본 앱에서 uvicorn.access를 비활성화하고 기존 `--no-access-log` 실행 안내도 유지합니다. 별도 로그 재설정·reload/gunicorn·프록시/제3자 DEBUG 전체의 개인정보 처리를 대신하지 않습니다.

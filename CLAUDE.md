@@ -1,3 +1,5 @@
+2026-11-17 최신 사용자 요청: 브랜드·프랜차이즈·체인 기능과 관련 API/수집·판정 명령을 제거한다. 일반 v1/v2/v3 분석과 주소 이력·매출·인구/AI를 유지하고 FE 소속 칸은 응답 기준 시점으로 교체한다. 과거 브랜드 활성화 지침은 이 요청으로 대체한다. docs/designs/feat226-remove-brand-feature.md 참고.
+
 2026-11-17 사용자 최신 지시: 앞으로 Claude Code가 수행하던 설계·구현 검토와 재검토는 Codex가 수행한다. Claude 사용 가능 여부를 작업 진행의 선행 조건으로 삼지 않으며, Codex의 독립 재검토·회귀 검증 결과를 기록한다. 실제 수행하지 않은 Claude 검토를 PASS라고 주장하지 않는다.
 
 2026-11-17 #223은 #221 검토 설계 기반 음식점 상권 합산 API·FE 구현이다. 카페는 유지하고 선택 업종을 상권별 합산 후 점포 수 상위 3곳의 pooled 값과 출처/합산 목록을 표시한다. source_order/canonical_order 분리·strict DTO 재계산·공유 RestaurantSales·신규 합성 목업을 따른다. 현재 사용자 요청은 구현 진행이며 #221 당시 설계 전용 범위를 대체한다. DB/환경/생활인구/AI는 변경하지 않는다. BE docs/designs/feat223-restaurant-market-sales-implementation.md 참고.

@@ -97,7 +97,7 @@ def test_real_history_query_contract_and_version(temporary_database: TemporaryDa
         assert len(rows) == payload["data"]["total"] == 8
         assert len([r for r in rows if r["license_no"] == "same"]) == 2
         assert rows[-1]["open_date"] is None
-        assert {r["franchise"] for r in rows} == {"franchise", "independent", "unknown"}
+        assert all("franchise" not in row for row in rows)
         by_license = {r["license_no"]: r for r in rows if r["source"] == "general_restaurant"}
         assert by_license["2"]["operating_months"] == 25
         assert by_license["3"]["store_status"] == "closed"

@@ -6,7 +6,7 @@ from pydantic import SecretStr
 from sqlalchemy import text, update
 from sqlalchemy.orm import Session
 
-from app.ai import chain_context
+from app.ai import context_v2
 from app.ai.client import LlmError, LlmErrorKind
 from app.core.config import Settings
 from app.main import create_app
@@ -40,7 +40,7 @@ def test_real_sql_listener_checks_worker_stop_during_population_lookup(populatio
     engine, *_ = population_db
     app, provider = application(engine)
     original_prepare = service._prepare
-    original_population = chain_context.get_population_reference
+    original_population = context_v2.get_population_reference
     reached = []
 
     def prepare(resources, query, deadline, stop, history=None):
@@ -49,7 +49,7 @@ def test_real_sql_listener_checks_worker_stop_during_population_lookup(populatio
             stop.set()
             return original_population(session, population_query)
 
-        monkeypatch.setattr(chain_context, "get_population_reference", stop_before_sql)
+        monkeypatch.setattr(context_v2, "get_population_reference", stop_before_sql)
         return original_prepare(resources, query, deadline, stop, history)
 
     monkeypatch.setattr(service, "_prepare", prepare)
@@ -62,7 +62,7 @@ def test_real_sql_listener_checks_worker_stop_during_population_lookup(populatio
 def test_same_rr_sources_independent_get_ai_and_filters_agree(population_db, monkeypatch):
     engine, public, *_ = population_db
     app, provider = application(engine)
-    original = chain_context.get_population_reference
+    original = context_v2.get_population_reference
     transactions = []
 
     def inspect(session, query):
@@ -74,10 +74,10 @@ def test_same_rr_sources_independent_get_ai_and_filters_agree(population_db, mon
         )
         return original(session, query)
 
-    monkeypatch.setattr(chain_context, "get_population_reference", inspect)
+    monkeypatch.setattr(context_v2, "get_population_reference", inspect)
     expected = public.get("/api/v2/population-reference", params=PARAMS).json()["data"]
     with TestClient(app) as client:
-        for filters in ({}, {"brand_scope": "chain", "brand_unknown": "exclude"}, {"area": "lt33"}):
+        for filters in ({}, {"include_unknown_area": False}, {"area": "lt33"}):
             response = client.post("/api/v2/risk/interpret", json={"query": PARAMS | filters})
             assert response.status_code == 200, response.text
             payload = response.json()
@@ -130,7 +130,7 @@ def test_population_corruption_and_deadline_are_not_silently_omitted(
 ):
     engine, *_ = population_db
     app, provider = application(engine)
-    original = chain_context.get_population_reference
+    original = context_v2.get_population_reference
 
     def damaged(session, query):
         if failure == "deadline":
@@ -142,7 +142,7 @@ def test_population_corruption_and_deadline_are_not_silently_omitted(
             response.meta["population_total_validated"] = True
         return response
 
-    monkeypatch.setattr(chain_context, "get_population_reference", damaged)
+    monkeypatch.setattr(context_v2, "get_population_reference", damaged)
     with TestClient(app) as client:
         response = client.post("/api/v2/risk/interpret", json={"query": PARAMS})
         assert response.status_code == (503 if failure == "deadline" else 500)

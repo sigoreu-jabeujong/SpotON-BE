@@ -16,8 +16,8 @@ from app.ai.verifier import VerifyFailure, verify_output
 from app.schemas.ai_population import ContextPopulationReference
 from app.schemas.population_reference import PopulationReferenceQuery
 from tests.ai.population_helpers import TARGET, population_response
-from tests.ai.test_chain_interpret import app_with, query
-from tests.ai.test_chain_interpret import prepared as prepared
+from tests.ai.test_analysis_v2_interpret import app_with, query
+from tests.ai.test_analysis_v2_interpret import prepared as prepared
 from tests.ai.test_interpretation import Client, choice
 
 
