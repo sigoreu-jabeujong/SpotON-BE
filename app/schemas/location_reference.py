@@ -158,6 +158,7 @@ class SalesBlock(ReferenceModel):
         if self.per_store_average is not None:
             from app.services.per_store_sales import metric
             from app.services.sales_distribution import distribution
+            from app.services.store_weighted_sales import store_weighted_distribution
 
             avg = self.per_store_average
             has_distribution = "representative_method" in avg or "distribution" in avg
@@ -166,10 +167,21 @@ class SalesBlock(ReferenceModel):
             if has_distribution and avg.get("representative_method") not in (
                 "median_of_reference_per_store_ratios_v1",
                 "pooled_sales_over_total_stores_v1",
+                "store_weighted_median_v1",
             ):
                 raise ValueError("invalid representative method")
-            pooled = avg.get("representative_method") == "pooled_sales_over_total_stores_v1"
-            if pooled and avg.get("graph_basis") != "each_sales_over_group_total_stores_v1":
+            weighted = avg.get("representative_method") == "store_weighted_median_v1"
+            if weighted and "store_weighted_distribution" not in avg:
+                raise ValueError("missing weighted distribution projection")
+            pooled = (
+                weighted or avg.get("representative_method") == "pooled_sales_over_total_stores_v1"
+            )
+            expected_basis = (
+                "store_weighted_histogram_v1"
+                if weighted
+                else "each_sales_over_group_total_stores_v1"
+            )
+            if pooled and avg.get("graph_basis") != expected_basis:
                 raise ValueError("invalid pooled graph basis")
             if avg["listed_item_count"] != len(self.items) or (
                 avg["included_item_count"] + sum(avg["excluded_counts"].values()) != len(self.items)
@@ -202,6 +214,8 @@ class SalesBlock(ReferenceModel):
                 if item.per_store_metric != expected_metric:
                     raise ValueError("invalid item per-store projection")
             for group in avg["groups"]:
+                if weighted and "store_weighted_distribution" not in group:
+                    raise ValueError("missing group weighted distribution")
                 if ("distribution" in group) != has_distribution:
                     raise ValueError("inconsistent distribution format")
                 keys = group["included_item_keys"]
@@ -257,6 +271,10 @@ class SalesBlock(ReferenceModel):
                             raise ValueError("invalid other-quarter contribution")
                         pairs.append(pair)
                     expected_distribution = distribution(pairs)
+                    if weighted and group.get(
+                        "store_weighted_distribution"
+                    ) != store_weighted_distribution(pairs):
+                        raise ValueError("invalid store weighted distribution")
                     if has_distribution and (
                         group.get("distribution") != expected_distribution
                         or expected_distribution is None
@@ -288,6 +306,8 @@ class SalesBlock(ReferenceModel):
                     raise ValueError("invalid empty average")
                 elif pooled and group.get("contributions") != []:
                     raise ValueError("invalid empty contributions")
+                if weighted and not used and group.get("store_weighted_distribution") is not None:
+                    raise ValueError("invalid empty weighted distribution")
             primary = next(
                 (g for g in avg["groups"] if g["source_quarter"] == avg["primary_quarter"]), None
             )
@@ -296,6 +316,8 @@ class SalesBlock(ReferenceModel):
                 raise ValueError("invalid primary count projection")
             if has_distribution:
                 projection_keys.append("distribution")
+            if weighted:
+                projection_keys.append("store_weighted_distribution")
             if pooled and avg.get("contributions") != (primary["contributions"] if primary else []):
                 raise ValueError("invalid contribution projection")
             for key in projection_keys:

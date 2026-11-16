@@ -1,5 +1,6 @@
 # SpotON-BE 작업 기준
 
+2026-11-17 #212 [점포 수 가중 추정 분포·중앙값](docs/designs/feat212-store-weighted-sales.md)은 최신 사용자 요청이다. 개별 매출은 없으므로 상권 평균을 점포 수로 가중한 모델임을 명시한다. 가중 중앙값·같은 폭 히스토그램(가중치 합N)·상권 평균 간 가중 분산을 서버 계산/DTO 검증한다. 기존 pooled/median/기여 계약은 보존하고 새 method/graph_basis/store_weighted_distribution으로 대표를 선택한다. 큰 N을 확장하지 않으며 DB/환경/AI·인구 계약을 유지한다.
 
 2026-11-17 #209는 [동일 건물·층·자리의 폐업 이력 구조 설계](docs/designs/feat209-closed-location-history.md)다. 사용자 최신 요구는 과거 표에서 영업 중 제외 및 선택 위치 일치다. 기존 층호는 전달되지만 get_history는 key만 필터하며 공개 표본75건 중open28/closed47, 같은층closed2를 확인했다. 별도 closed-location API·층/호수 exact·건물 식별 근거·출력/AI 정책을 설계하고 실제 Claude MD 검토를 따른다. 폐업 이력은 현재 공실의 증거가 아니다. 이번에는 문서 분석만 하며 FE/앱/DB0013/원본/환경/운영을 변경하지 않는다.
 

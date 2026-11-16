@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models import MarketStore, MarketStoreVersion
 from app.schemas.location_reference import SalesBlock
 from app.services.sales_distribution import distribution
+from app.services.store_weighted_sales import store_weighted_distribution
 
 
 def metric(sales: int, stores: int) -> dict[str, Any]:
@@ -200,6 +201,13 @@ def attach(
                 for i in used
                 if i.metric
             ],
+            store_weighted_distribution=store_weighted_distribution(
+                [
+                    (int(i.metric.value), int(i.store_reference["total_stores"]))
+                    for i in used
+                    if i.metric and i.store_reference
+                ]
+            ),
             distribution=distribution(
                 [
                     (int(i.metric.value), int(i.store_reference["total_stores"]))
@@ -261,8 +269,9 @@ def attach(
         total_store_count=selected["total_store_count"] if selected else None,
         metric=selected["metric"] if selected else None,
         distribution=selected["distribution"] if selected else None,
-        representative_method="pooled_sales_over_total_stores_v1",
-        graph_basis="each_sales_over_group_total_stores_v1",
+        representative_method="store_weighted_median_v1",
+        graph_basis="store_weighted_histogram_v1",
+        store_weighted_distribution=selected["store_weighted_distribution"] if selected else None,
         contributions=selected["contributions"] if selected else [],
         groups=groups,
     )
