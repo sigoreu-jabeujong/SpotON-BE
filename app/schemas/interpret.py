@@ -57,13 +57,14 @@ ActivityFactId = Literal[
     "recent_open_close", "avg_operating_months", "yearly_trend", "nearby_profile"
 ]
 HistoryFactId = Literal["building_history", "same_spot_history"]
+PopulationFactId = Literal["population_public_subset"]
 
 
 class InterpretItem(InterpretModel):
     """official_values 항목. 활동 ID는 여러 항목에 반복될 수 있다."""
 
     text: str
-    indicator_ids: list[IndicatorId | ActivityFactId | HistoryFactId]
+    indicator_ids: list[IndicatorId | ActivityFactId | HistoryFactId | PopulationFactId]
 
 
 class InterpretSourcedItem(InterpretModel):
@@ -104,8 +105,8 @@ class RiskInterpretation(InterpretModel):
     generated_at: datetime
     body: str = ""
     paragraphs: list[InterpretItem] = Field(default_factory=list)
-    used_indicator_ids: list[IndicatorId | ActivityFactId | HistoryFactId] = Field(
-        default_factory=list
+    used_indicator_ids: list[IndicatorId | ActivityFactId | HistoryFactId | PopulationFactId] = (
+        Field(default_factory=list)
     )
     # Full typed evidence stays with the response; it is not a repeated UI list.
     evidence: dict[str, JsonValue] = Field(default_factory=dict)

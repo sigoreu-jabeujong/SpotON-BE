@@ -1,5 +1,9 @@
 # SpotON-BE
 
+## 공개 부분자료 AI 연결 (#184)
+
+기존 POST `/api/v2/risk/interpret`에서 같은 읽기 전용 RR의 공개 인구 비교를 재계산하고, 내국인 비중·원천별 상태·관측일·부분자료 한계를 별도로 설명합니다. 전체 생활인구나 Risk fact로 대체하지 않습니다. [구현·검수·배포 기록](docs/designs/feat184-population-ai-implementation.md)을 따르며 호환 FE가 먼저 배포돼야 합니다. v1 AI·DB0012·환경/원천은 보존합니다.
+
 ## 공개 부분자료의 AI 연결 후속 설계 (#182)
 
 공개 인구 API·FE 카드의 운영 반영은 #180/FE #73에서 완료했습니다. 다음 구현을 위한 [AI 연결 설계·Claude 검토](docs/designs/feat182-population-ai-integration.md)는 서버 동일 RR 재조회, 부분자료의 독립 설명, v2 프롬프트/캐시·FE 안내와 검증 기준을 정합니다. 이번에는 문서만 변경하며 AI에 인구를 연결하거나 재배포한 상태가 아닙니다. 기존 전체 생활인구는 공식 근거 확인 전까지 유지합니다.

@@ -5,6 +5,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.ai_population import ContextPopulationReference
 from app.schemas.geocode import Category
 from app.schemas.market_activity import YEARLY_TREND_START_YEAR
 from app.schemas.risk import IndicatorId
@@ -315,6 +316,7 @@ class ChainRiskInterpretContext(ContextModel):
     radius_m: Literal[300, 500, 1000]
     filters: ContextChainFilters
     brand_classification: ContextChainClassification
+    population_reference: ContextPopulationReference
     as_of: date
     data_updated_at: date
     collected_at: None = None
@@ -335,6 +337,7 @@ class ChainRiskInterpretContext(ContextModel):
             tuple(g.sub_category for g in self.activity.groups) != self.sub_category
             or self.activity.space != f"radius_{self.radius_m}m"
             or self.as_of > self.data_updated_at
+            or self.population_reference.analysis_date != self.as_of
             or self.history is not None
             and self.history.data_updated_at != self.data_updated_at
             or self.nearby is not None

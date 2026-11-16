@@ -307,7 +307,12 @@ def build_catalog(prepared: PreparedRiskInterpretation) -> InterpretationCatalog
                 reason="sales_not_available",
             ),
             MissingItem(
-                text="생활인구의 합산·격자·시점 기준을 확인하지 못해 분석에서 제외했습니다.",
+                text=(
+                    "전체 생활인구는 합산·격자·시점 기준이 미확정이며 "
+                    "공개 부분자료 비교는 별도입니다."
+                    if isinstance(c, ChainRiskInterpretContext)
+                    else "생활인구의 합산·격자·시점 기준을 확인하지 못해 분석에서 제외했습니다."
+                ),
                 reason="population_not_available",
             ),
         ]

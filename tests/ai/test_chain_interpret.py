@@ -20,6 +20,7 @@ from app.schemas.risk import RiskQuery
 from app.services import risk_interpret as service
 from app.services.chains import ChainSelection
 from tests.ai.context_helpers import activity_response, response, use_risk
+from tests.ai.population_helpers import population_response
 from tests.ai.test_interpretation import Client, choice
 
 
@@ -40,6 +41,9 @@ def prepared(monkeypatch):
         chain_context.ChainSelection, "load", lambda s, q: ChainSelection(None, False, q)
     )
     monkeypatch.setattr(chain_context, "source_revision", lambda s: 17)
+    monkeypatch.setattr(
+        chain_context, "get_population_reference", lambda s, q: population_response(q)
+    )
     return chain_context.prepare_chain_interpretation(Mock(), q, Settings(_env_file=None))
 
 
