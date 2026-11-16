@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     cast,
+    func,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
@@ -96,6 +97,7 @@ class Store(Base):
 
 # No geography typmod: query and index must have the same cast expression.
 STORE_GEOGRAPHY = Geography(geometry_type=None, spatial_index=False)
+Index("ix_stores_history_road_key", func.spoton_history_road_key_v1(Store.address_road))
 Index(
     "ix_stores_geography_gist",
     cast(Store.geom, STORE_GEOGRAPHY),

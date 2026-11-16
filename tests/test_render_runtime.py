@@ -122,7 +122,7 @@ def test_probe_single_flight_does_not_open_extra_connection() -> None:
 
 def good_row() -> dict[str, object]:
     return dict(
-        revisions=["0013"],
+        revisions=["0014"],
         default_read_only=True,
         connection_limit=8,
         privileged=False,

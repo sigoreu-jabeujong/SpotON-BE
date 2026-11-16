@@ -16,6 +16,10 @@ ERROR_SPECS: Mapping[ErrorCode, tuple[int, str]] = MappingProxyType(
         ErrorCode.AI_UNAVAILABLE: (503, "AI 해석을 일시적으로 이용할 수 없습니다"),
         ErrorCode.AI_VERIFY_FAILED: (503, "AI 해석 결과를 검증하지 못했습니다"),
         ErrorCode.INTERNAL_ERROR: (500, "요청 처리 중 오류가 발생했습니다"),
+        ErrorCode.HISTORY_UNAVAILABLE: (
+            503,
+            "주소 이력 조회를 준비 중입니다. 잠시 후 다시 조회해 주세요",
+        ),
     }
 )
 

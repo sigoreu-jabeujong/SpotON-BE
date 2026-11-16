@@ -207,7 +207,7 @@ def test_downgrade_drops_only_four_new_tables_and_reupgrade_works(admin_db):
         assert c.scalar(text("select count(*) from stores")) == count
         assert c.scalar(text("select to_regclass('admin_population_hours')")) is None
         command.upgrade(cfg, "head")
-        assert c.scalar(text("select version_num from alembic_version")) == "0013"
+        assert c.scalar(text("select version_num from alembic_version")) == "0014"
         assert c.scalar(text("select count(*) from admin_population_hours")) == 0
 
 
