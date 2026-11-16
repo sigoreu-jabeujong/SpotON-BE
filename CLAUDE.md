@@ -1,3 +1,5 @@
+2026-11-17 최신 사용자 결정: 점포 수 상위 3개 상권의 매출 합계 / 점포 수 합계. sales.top_markets_estimate를 대표값으로 사용하고 실제 상권명을 금액 아래에 표시한다. 기존 전체 집계는 호환 보존. 새 UI는 중앙값/히스토그램을 사용하지 않는다. BE docs/designs/feat219-top3-sales.md 참고.
+
 # SpotON-BE 작업 기준
 
 

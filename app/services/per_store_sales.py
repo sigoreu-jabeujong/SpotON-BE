@@ -12,6 +12,7 @@ from app.models import MarketStore, MarketStoreVersion
 from app.schemas.location_reference import SalesBlock
 from app.services.sales_distribution import distribution
 from app.services.store_weighted_sales import store_weighted_distribution
+from app.services.top_markets_sales import top_markets_estimate
 
 
 def metric(sales: int, stores: int) -> dict[str, Any]:
@@ -276,5 +277,10 @@ def attach(
         groups=groups,
     )
     return SalesBlock.model_validate(
-        block.model_dump() | dict(items=tuple(enriched), per_store_average=summary)
+        block.model_dump()
+        | dict(
+            items=tuple(enriched),
+            per_store_average=summary,
+            top_markets_estimate=top_markets_estimate(tuple(enriched), primary),
+        )
     )
