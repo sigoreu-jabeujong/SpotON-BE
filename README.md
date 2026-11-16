@@ -1,5 +1,15 @@
 # SpotON-BE
 
+## 위치 참고 매출 API·행정동 원천 검사 (#188)
+
+새 `GET /api/v2/location-reference`는 검색 위치를 포함하거나 반경과 교차하는 상권의 원자료 매출 금액·분기·공간 관계·출처를 반환합니다. 기본 `latest_reference`와 엄격한 `analysis_period`를 구분하며 금액은 정확한 문자열입니다. 기존 역사 분석/AI 계약을 유지하고 인구·주야간은 아직 별도 연결 전입니다. [구현·실제 검사](docs/designs/feat188-location-reference-implementation.md), [FE 계약](docs/fe-location-reference-api.md)을 확인하세요. 운영 적용 여부는 실행 기록과 구분합니다.
+
+이미 내려받은 행정동 내국인 인구·경계 ZIP은 다음 명령으로 키/DB/네트워크 없이 검사할 수 있습니다. 파일 SHA256과 실제 코드 교집합·차집합, 날짜·24시간 공개 여부를 확인하며 DB 적재는 수행하지 않습니다. 원천 파일은 저장소 밖에 보관하세요.
+
+```powershell
+uv run --locked --extra dev python -m etl.admin_population --population-zip <local.zip> --population-sha256 <sha256> --boundary-zip <boundary.zip> --boundary-sha256 <sha256>
+```
+
 ## 검색 위치의 참고자료 표시 설계 (#186)
 
 검색 점을 포함하거나 반경과 실제로 교차하는 구역의 매출·생활인구·주야간 값을 표시하도록 [현재 시스템 비교와 후속 설계](docs/designs/feat186-location-reference-display.md)를 작성합니다. 매출은 상권별 원자료 금액, 인구와 주야간은 공식 행정동 내국인 집계를 우선 연결하고 실제 구역·관측일을 표시합니다. 이번 단계는 설계와 실제 Claude 검토이며 새 API 구현·자료 적재·화면 변경·배포 완료를 의미하지 않습니다. 기존 역사 분석과 AI 계약은 유지합니다.
