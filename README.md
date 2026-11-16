@@ -1,5 +1,9 @@
 # SpotON-BE
 
+## 공개 부분자료의 AI 연결 후속 설계 (#182)
+
+공개 인구 API·FE 카드의 운영 반영은 #180/FE #73에서 완료했습니다. 다음 구현을 위한 [AI 연결 설계·Claude 검토](docs/designs/feat182-population-ai-integration.md)는 서버 동일 RR 재조회, 부분자료의 독립 설명, v2 프롬프트/캐시·FE 안내와 검증 기준을 정합니다. 이번에는 문서만 변경하며 AI에 인구를 연결하거나 재배포한 상태가 아닙니다. 기존 전체 생활인구는 공식 근거 확인 전까지 유지합니다.
+
 ## 로컬 테스트 서버 반영 (#151)
 
 로컬 테스트 BE는 `http://localhost:8001`에서 schema0012·브랜드 publication·v2 AI로 실행합니다. [FE 로컬 연결 안내](docs/fe-local-chain-test-connection.md)와 [실제 적용·검증](docs/designs/feat151-local-test-chain-rollout.md)을 확인합니다. 기존 점포/업무 데이터·.env·8000·FE·Render는 보존했습니다. 이 PC에서의 테스트 적용이며 운영/외부 공개 배포는 별도입니다.
