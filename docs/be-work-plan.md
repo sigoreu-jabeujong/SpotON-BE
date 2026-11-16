@@ -1,5 +1,7 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
+2026-11-16 #176은 [실제 활성화 후속 설계](designs/feat176-reference-activation.md)다. PR175 내부 기반에서 다음으로 필요한 브랜드 새 세대/검수·복구, 공식 claim의 불변 승인과 epoch/vector 드리프트, 실제 조회·typed reference API/AI/캐시/FE 전달을 구체화한다. 제안0013/8표와역할/trigger는 설계만 작성하며 현재DB0012/원문/환경/FE/서버/Render/Task를 바꾸지 않는다. 실행 순서는A브랜드 clone→B승인저장/CLI→C조회/API이고, 실제 근거 승인D와 공개 활성화/배포는 별도 조건을 충족해야 한다. #115/#78을 유지한다.
+
 2026-11-16 #174는 사용자 요청한 세 항목 중 공식 근거가 확보된 브랜드 목록을17개로 보강하고, 매출/상권변화 분기·원천 투영과 생활인구 기대 구성/24시간 완전성→주야간 산술을 내부 모듈로 구현한다. [설계·실제 검토·검증](designs/feat174-analysis-foundations.md)을 따른다. 실제 검토/공식 근거 부족을 mock으로 대체하지 않으며 API/AI 활성화·새 publication·운영 배포는 완료로 표시하지 않는다. #115/#78의 공식 근거/공개 연결은 후속으로 유지하고 FE/DB/환경/runtime은 보존한다.
 
 2026-11-16 #172의 [B2 연결 사전 점검](designs/feat172-b2-preflight.md)은 계정 연결 전에 구현 가능한 BE CLI다. 실제 Claude 설계 MD 검토 PASS 후 metadata-only preview·명시 execute의 Native v4 auth/list 조회·엄격한 단일 대상/리전/권한/private 확인과 비노출/유한 요청을 구현한다. MockTransport와 실제 B2 검증을 구분하고, 키·계정/버킷 미제공 상태에서 실제 전송/연결을 활성화하지 않는다. FE/API/0012/의존성/.env/기존 Task/runtime·운영 DB/Render를 유지한다. 실제 검토·전체 검사·CI/통합 근거는 설계 후속 절에 기록한다.
