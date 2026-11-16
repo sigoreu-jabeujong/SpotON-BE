@@ -1,5 +1,13 @@
 # 점포 이력 API 연동을 위한 FE 수정 요청 보고서
 
+## 2026-11-16 주소 상세 계약 추가 (#202)
+
+`POST /api/address-detail`은 `{ "detail": "2층 201호" }`를 받는다. 문자열 최대 100자이며 알 수 없는 필드·잘못된 타입/길이는 기존 공통 422 오류다. DB·지오코딩 없이 기존 층호 파서만 실행하고 `Cache-Control: no-store`를 반환한다. 공통 외피의 `data`는 `{ "floor_unit": "2층 201호", "status": "parsed", "reason": null }`이다. `status`는 `parsed|empty|unverified`, `reason`은 `null|empty|no_detail|ambiguous|invalid`다. 성공한 경우에만 `floor_unit`이 정규화 문자열이고 나머지는 null이다. `meta.rule_version=address-detail-v1`이다.
+
+v1 `/api/stores/history`와 v2 `/api/v2/stores/history`의 각 점포에 독립 `location_relation`이 추가된다. `building=matched_address_scope`, `basis=canonical_jibun_key`는 동일 지번 주소 범위로 조회했음을 뜻한다. 물리적 건물·동의 고유 일치를 증명하지 않는다. `floor`와 `unit`은 각각 `match|different|unknown`, `relation_level`은 `same_spot|same_floor|same_building_scope|unverified`다. 같은 층만 확인되면 `same_floor`이며 같은 자리로 승격하지 않는다. 원천 상세가 없거나 신뢰 수준이 미확인이면 `unverified`여도 주소 범위 조회 근거는 유지된다. 기존 `location_match`와 AI 이력 집계는 변경하지 않는다.
+
+FE는 후보 선택 후 층·호수를 편집하고 정규화한 뒤 명시적으로 확정한다. 확인 실패 시 오류를 표시하며 사용자가 선택한 경우에만 미확인 상세로 계속한다. 원문 상세는 별도 `detail`·`detailMode=unverified`, 확정 층호는 `floor`에 저장한다. 선택한 후보의 주소·좌표·키는 상세 편집으로 교체하지 않는다. 직접 연 공유 링크는 상세·층호 및 후보 identity를 재확인하고 중복·모순 URL은 재확인 화면에서 멈춘다. 조회 반경·기간·면적·브랜드 필터만 바뀌면 확인된 주소를 재조회하지 않는다.
+
 - 작성일: 2026-11-12
 - 요청 대상: SpotON FE 담당자
 - 관련 작업: BE-12 / F-02 점포 이력

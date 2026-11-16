@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+사용자 후속 승인 #202는 [주소 상세 구현·배포](docs/designs/feat202-address-implementation.md)다. POST /api/address-detail은 DB/외부API 없이 기존 파서로 정규화한다. v1/v2 이력에 독립 location_relation을 추가하고 기존 location_match·AI 집계·0013/원본/환경은 보존한다. FE 후보 확인·복원·검증과 함께 BE 선배포 후 FE 공개 release를 검증한다.
+
 2026-11-16 #194는 [점포 1개당 평균 추정매출 설계](docs/designs/feat194-per-store-sales-average.md)다. 기존 목록의 같은 분기·상권·업종 매출 합계/해당 전체 점포 수 합계로 계산하는 가중 참고평균을 설계한다. 자료행 중첩은 고유 점포 중복 제거로 승격하지 않고, 혼합 분기는 분리하며 기존 raw 목록/AI·인구·DB0013·환경을 유지한다. 실제 읽기 전용 비교와 Claude MD 검토·보완/재검토를 문서화하며 이번에는 앱/FE/DB/배포를 변경하지 않는다. 구현은 기존 GET의 새 점포 수·평균 필드/FE 표시로 별도 진행한다.
 
 2026-11-16 #190은 [행정동 생활인구 참고자료 실제 연결](docs/designs/feat190-admin-population-live.md)이다. #186 B/D/E/F에 따라 새4표/migration0013, 공식 행정동 내국인 2026-10-31 관측 자료,24시간 평균/주야간 비교와 FE #81의 기존3카드·보고서를 구현한다. 원본26표/인허가/Risk/기존격자/AI는 유지하고 새 참고값의 실제 날짜·지역·필터미적용을 표시한다. 운영은 전체백업·복원·용량·API reader 권한을 검증한 뒤 기대revision만0013으로 변경한다. 실제검수/시험/배포증거는 해당 설계 실행기록을 따른다.
