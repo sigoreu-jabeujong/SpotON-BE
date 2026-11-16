@@ -137,6 +137,7 @@ def activity_response(risk, q=None, *, opened=3, months=41):
     ordered = ("cafe",) if q.category == "cafe" else RESTAURANT
     selected = [c for c in ordered if not q.sub_category or c in q.sub_category]
     data = MarketActivity(
+        avg_operating_months=months if active else None,
         recent_12m=RecentActivity(
             period=period(year_cutoff(DATE, DATE.year - 1), DATE), opened=opened, closed=closed
         ),

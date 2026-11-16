@@ -99,7 +99,9 @@ def aggregate_activity(
         if row.close_date is None or row.close_date > target:
             active[row.sub_category] += 1
             months[row.sub_category] += complete_months(row.open_date, target)
+    active_count = sum(active.values())
     return MarketActivity(
+        avg_operating_months=sum(months.values()) // active_count if active_count else None,
         recent_12m=RecentActivity(
             period=f"({lower.isoformat()}, {target.isoformat()}]",
             opened=recent_opened,
