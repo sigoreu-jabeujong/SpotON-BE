@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.address_detail import LocationRelation
 from app.schemas.common import ApiMeta
 from app.schemas.market_activity import ActivityInclude, ActivityQuery
 from app.schemas.nearby import Center, NearbyQuery
@@ -158,6 +159,9 @@ class ChainStore(ChainModel):
     area_m2: float | None = Field(default=None, gt=0)
     floor_unit: str | None = None
     location_match: Literal["same_spot", "same_building", "unverified"] | None = None
+    location_relation: LocationRelation | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     brand: ChainBrand
     operation: ChainOperation = Field(default_factory=ChainOperation)
 

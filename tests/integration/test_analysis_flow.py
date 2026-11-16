@@ -43,6 +43,13 @@ def test_geocode_etl_identity_and_history_scope(database, caplog, capfd):
         assert client.get("/api/health").json()["data"]["status"] == "ok"
         assert client.get("/docs").status_code == 200
         assert set(client.get("/openapi.json").json()["paths"]) == ENDPOINTS
+        normalized = client.post("/api/address-detail", json={"detail": "2층 201호"})
+        assert normalized.status_code == 200
+        assert normalized.json()["data"] == {
+            "floor_unit": "2층 201호",
+            "status": "parsed",
+            "reason": None,
+        }
         geo = start(client, "cafe")
         history = ok(
             client.get(

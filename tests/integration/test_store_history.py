@@ -105,6 +105,17 @@ def test_real_history_query_contract_and_version(temporary_database: TemporaryDa
         assert by_license["3"]["operating_period_reason"] == "missing_close_date"
         assert by_license["9"]["location_match"] == "unverified"
         assert by_license["same"]["location_match"] == "same_spot"
+        assert by_license["same"]["location_relation"]["relation_level"] == "same_spot"
+        floor_only = client.get(
+            "/api/stores/history", params={"building_key": KEY, "floor_unit": "2층"}
+        ).json()
+        same = next(
+            row
+            for row in floor_only["data"]["stores"]
+            if row["source"] == "general_restaurant" and row["license_no"] == "same"
+        )
+        assert same["location_match"] == "unverified"
+        assert same["location_relation"]["relation_level"] == "same_floor"
         assert (
             next(r for r in rows if r["source"] == "rest_cafe")["location_match"] == "same_building"
         )

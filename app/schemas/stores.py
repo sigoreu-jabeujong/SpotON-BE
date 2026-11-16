@@ -4,6 +4,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.address_detail import LocationRelation
 from app.schemas.franchise import FranchiseBasis
 from app.schemas.geocode import Category
 from etl.address.building_key import build_from_parts
@@ -72,6 +73,7 @@ class HistoryStore(BaseModel):
     franchise_reference_year: int | None = Field(default=None, ge=2000, le=9999)
     floor_unit: str | None
     location_match: Literal["same_spot", "same_building", "unverified"]
+    location_relation: LocationRelation | None = None
 
     @model_validator(mode="after")
     def consistent_period(self) -> Self:

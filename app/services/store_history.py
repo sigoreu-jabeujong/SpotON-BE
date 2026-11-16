@@ -48,6 +48,33 @@ def location_match(
     return "unverified"
 
 
+def location_relation(
+    requested: str | None, stored: str | None, level: str | None
+) -> dict[str, str]:
+    left, right = parse_floor_unit(requested).value, parse_floor_unit(stored).value
+    floor = "unknown"
+    unit = "unknown"
+    relation = "same_building_scope"
+    if level not in {"same_spot", "same_building"} or right is None:
+        relation = "unverified"
+    elif left is not None:
+        if left.floor and right.floor:
+            floor = "match" if left.floor == right.floor else "different"
+        if left.unit and right.unit:
+            unit = "match" if left.unit == right.unit else "different"
+        if floor == "match":
+            relation = "same_floor"
+            if unit == "match" and level == "same_spot":
+                relation = "same_spot"
+    return {
+        "building": "matched_address_scope",
+        "basis": "canonical_jibun_key",
+        "floor": floor,
+        "unit": unit,
+        "relation_level": relation,
+    }
+
+
 def operating_period(
     store: Store, reference: date | None, batch: StoreImportBatch | None
 ) -> tuple[int | None, PeriodReason | None, date | None, date | None]:
@@ -152,6 +179,9 @@ def get_history(
                         else {"franchise": "unknown"}
                     ),
                     "floor_unit": store.floor_unit,
+                    "location_relation": location_relation(
+                        query.floor_unit, store.floor_unit, store.location_level
+                    ),
                     "location_match": location_match(
                         query.floor_unit, store.floor_unit, store.location_level
                     ),
