@@ -1,4 +1,4 @@
-"""One logical report, three no-retry Gemini calls, independently verified roles."""
+"""One logical report, three no-retry model-authored, evidence-checked roles."""
 
 import asyncio
 import hashlib
@@ -20,11 +20,18 @@ from app.ai.interpretation import CHECKLIST
 from app.ai.limits import RetryPolicy
 from app.ai.report_basis import basis, canonical, signing_key
 from app.ai.report_catalog import (
-    COMMON,
-    INSTRUCTIONS,
-    PROMPT_VERSION,
     ReportCatalog,
     build_report_catalog,
+)
+from app.ai.report_narrative import (
+    COMMON,
+    INSTRUCTIONS,
+    VERSION,
+    DraftItem,
+    parse,
+    payload,
+    schema,
+    validate,
 )
 from app.ai.report_runtime import ReportFlights
 from app.core.errors import AppError
@@ -36,6 +43,7 @@ from app.schemas.ai_report import (
     ReportBaseline,
     ReportRequest,
     ReportSection,
+    ReportText,
     ReportVerification,
     Role,
 )
@@ -50,17 +58,17 @@ from app.services.location_reference import get_location_reference
 from app.services.population_reference import get_population_reference
 from app.services.risk_interpret import InterpretationResources
 
-BUDGET = 60.0
+BUDGET = 70.0
 PREPARATION_BUDGET = 35.0
 ROLES: tuple[Role, ...] = ("advantages", "cautions", "summary")
 PROMPT_SHA = hashlib.sha256(
-    canonical({"common": COMMON, "roles": INSTRUCTIONS, "version": PROMPT_VERSION})
+    canonical({"common": COMMON, "roles": INSTRUCTIONS, "version": VERSION})
 ).hexdigest()
 
 
 class CachedReport(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
-    selections: dict[Role, list[str]]
+    drafts: dict[Role, list[ReportText]]
     models: dict[Role, str]
 
 
@@ -172,7 +180,8 @@ def _prepare(
                 PROMPT_SHA,
                 config.llm_provider,
                 config.llm_model,
-                2048,
+                config.llm_reasoning_effort,
+                4096,
             )
             meta: ApiMeta = {
                 **risk.meta,
@@ -180,10 +189,13 @@ def _prepare(
                     JsonValue, sorted({source for m in catalog.metrics for source in m.source_ids})
                 ),
                 "schema_version": "ai-sections-v1",
-                "prompt_version": PROMPT_VERSION,
+                "prompt_version": VERSION,
                 "prompt_sha256": PROMPT_SHA,
                 "report_context_hash": catalog.digest,
-                "interpretation_method": "server_sentences_three_role_ordering",
+                "interpretation_method": "model_authored_evidence_checked_v2",
+                "llm_model": config.llm_model,
+                "llm_provider": config.llm_provider,
+                "reasoning_effort": config.llm_reasoning_effort,
             }
             return PreparedReport(catalog, baseline, meta, key)
         finally:
@@ -248,7 +260,7 @@ class ReportResources:
             config,
             limiter=resources.provider_limiter,
             policy=RetryPolicy(
-                request_timeout=10, time_budget=35, max_retries=0, base_delay=1, max_delay=1
+                request_timeout=15, time_budget=35, max_retries=0, base_delay=1, max_delay=1
             ),
         )
 
@@ -318,21 +330,25 @@ class ReportResources:
                     if encoded is not None:
                         try:
                             candidate = CachedReport.model_validate_json(encoded)
-                            if (
-                                set(candidate.selections) != set(ROLES)
-                                or set(candidate.models) != set(ROLES)
-                                or not all(
-                                    prepared.catalog.validate(role, candidate.selections[role])
-                                    for role in ROLES
-                                )
+                            if set(candidate.drafts) != set(ROLES) or set(candidate.models) != set(
+                                ROLES
                             ):
                                 raise ValueError("invalid cached report")
+                            for role in ROLES:
+                                validate(
+                                    [
+                                        DraftItem.model_validate(item.model_dump())
+                                        for item in candidate.drafts[role]
+                                    ],
+                                    prepared.catalog,
+                                    role,
+                                )
                             cached = candidate
                         except (ValueError, TypeError):
                             cache.discard(prepared.key)
                 if cached is not None:
                     ai_report_cache_hit()
-                    return self._render(prepared, cached.selections, {})
+                    return self._render(prepared, cached.drafts, {})
                 slots = min(2, self.shared.database.settings.interpret_max_concurrent)
                 if not self.shared.gate.try_reserve(slots):
                     raise AppError(ErrorCode.AI_UNAVAILABLE, headers=NO_STORE)
@@ -340,7 +356,7 @@ class ReportResources:
                     local_gate = asyncio.Semaphore(slots)
                     global_failure = asyncio.Event()
                     failures: dict[Role, str] = {}
-                    selections: dict[Role, list[str]] = {}
+                    selections: dict[Role, list[ReportText]] = {}
                     models: dict[Role, str] = {}
 
                     async def generate_role(role: Role) -> None:
@@ -351,32 +367,21 @@ class ReportResources:
                                 return
                             try:
                                 async with asyncio.timeout(
-                                    min(
-                                        10 if slots == 2 else 8, max(0, deadline - time.monotonic())
-                                    )
+                                    min(15, max(0, deadline - time.monotonic()))
                                 ):
-                                    payload = {
-                                        "role": role,
-                                        "candidates": {
-                                            k: v.model_dump(mode="json")
-                                            for k, v in prepared.catalog.candidates[role].items()
-                                        },
-                                    }
                                     request = LlmRequest(
                                         system_instruction=COMMON + " " + INSTRUCTIONS[role],
-                                        user_content=json.dumps(payload, ensure_ascii=False),
+                                        user_content=payload(prepared.catalog, role),
                                         response_json_schema=cast(
-                                            dict[str, JsonValue], prepared.catalog.schema(role)
+                                            dict[str, JsonValue], schema(prepared.catalog, role)
                                         ),
-                                        max_output_tokens=2048,
+                                        max_output_tokens=4096,
                                     )
                                     result = await self.client.generate(request)
                                     if result.attempts != 1:
                                         raise ValueError("unexpected provider retries")
-                                    ids = _selection(result.text)
-                                    if not prepared.catalog.validate(role, ids):
-                                        raise ValueError("invalid selected candidates")
-                                    selections[role], models[role] = ids, result.model
+                                    selections[role] = parse(result.text, prepared.catalog, role)
+                                    models[role] = result.model
                             except TimeoutError:
                                 failures[role] = "timeout"
                             except LlmError as exc:
@@ -417,7 +422,7 @@ class ReportResources:
                     try:
                         cache.put(
                             prepared.key,
-                            CachedReport(selections=selections, models=models)
+                            CachedReport(drafts=selections, models=models)
                             .model_dump_json()
                             .encode(),
                         )
@@ -453,7 +458,9 @@ class ReportResources:
 
     @staticmethod
     def _render(
-        prepared: PreparedReport, selections: dict[Role, list[str]], failures: dict[Role, str]
+        prepared: PreparedReport,
+        selections: dict[Role, list[ReportText]],
+        failures: dict[Role, str],
     ) -> ApiResponse[AiSectionsReport]:
         if not selections:
             code = (
@@ -469,7 +476,7 @@ class ReportResources:
                     status="unavailable", reason=cast(object, failures[role])
                 )
             else:
-                items = [prepared.catalog.candidates[role][i] for i in selections[role]]
+                items = selections[role]
                 groups = [cast(str, i.group_id) for i in items] if role == "summary" else []
                 sections[role] = ReportSection(
                     status="ready",
@@ -489,7 +496,13 @@ class ReportResources:
             generated_at=datetime.now(UTC),
             report_context_hash=hashlib.sha256(
                 canonical(
-                    {"catalog": prepared.catalog.digest, "baseline": prepared.baseline.model_dump()}
+                    {
+                        "catalog": prepared.catalog.digest,
+                        "baseline": prepared.baseline.model_dump(),
+                        "prompt": PROMPT_SHA,
+                        "model": prepared.meta.get("llm_model"),
+                        "reasoning_effort": prepared.meta.get("reasoning_effort"),
+                    }
                 )
             ).hexdigest(),
             baseline=prepared.baseline,

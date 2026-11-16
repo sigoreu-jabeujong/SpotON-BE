@@ -46,7 +46,7 @@ def create_llm_client(
         return UnavailableLlmClient(provider=settings.llm_provider, model=settings.llm_model)
     api_key = settings.llm_api_key.get_secret_value() if settings.llm_api_key else None
     client = OpenAIClient if settings.llm_provider == OPENAI_PROVIDER else GeminiClient
-    return client(
+    result = client(
         api_key=api_key,
         model=settings.llm_model,
         policy=policy if policy is not None else RetryPolicy.from_settings(settings),
@@ -54,3 +54,6 @@ def create_llm_client(
         max_output_tokens=settings.llm_max_output_tokens,
         transport=transport,
     )
+    if isinstance(result, OpenAIClient):
+        result.reasoning_effort = settings.llm_reasoning_effort
+    return result

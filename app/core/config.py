@@ -40,7 +40,8 @@ class Settings(BaseSettings):
     juso_search_key: SecretStr | None = None
     juso_coord_key: SecretStr | None = None
     llm_provider: str = "openai"
-    llm_model: str = "gpt-4.1-mini"
+    llm_model: str = "gpt-6.1-sol"
+    llm_reasoning_effort: str = Field(default="low", pattern=r"^(low|medium|high|xhigh|max)$")
     llm_api_key: SecretStr | None = None
     llm_request_timeout: float = Field(default=10, ge=1, le=60)
     llm_time_budget: float = Field(default=20, ge=1, le=120)

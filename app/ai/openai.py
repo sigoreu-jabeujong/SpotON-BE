@@ -45,6 +45,10 @@ class Response(_Model):
 
 
 class OpenAIClient(GeminiClient):
+    def __init__(self, *, reasoning_effort: str = "low", **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.reasoning_effort = reasoning_effort
+
     @property
     def provider(self) -> str:
         return OPENAI_PROVIDER
@@ -73,6 +77,8 @@ class OpenAIClient(GeminiClient):
             "store": False,
             "max_output_tokens": request.max_output_tokens or self._max_output_tokens,
         }
+        if self._model.startswith(("gpt-5", "gpt-6")):
+            body["reasoning"] = {"effort": self.reasoning_effort}
         if request.response_json_schema is not None:
             # Make an independent JSON tree; all strict-schema arrays need items.
             schema = json.loads(json.dumps(dict(request.response_json_schema)))
