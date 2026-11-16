@@ -145,6 +145,7 @@ class SalesItem(ReferenceModel):
 
 
 class SalesBlock(ReferenceModel):
+    top_markets_estimate: dict[str, Any] | None = None
     per_store_average: dict[str, Any] | None = None
     status: Status
     reason: Reason | None = None
@@ -323,6 +324,18 @@ class SalesBlock(ReferenceModel):
             for key in projection_keys:
                 if avg[key] != (primary[key] if primary else None):
                     raise ValueError("invalid average projection")
+        if self.top_markets_estimate is not None:
+            import json
+
+            from app.services.top_markets_sales import top_markets_estimate
+
+            if self.per_store_average is None or json.dumps(
+                self.top_markets_estimate, sort_keys=True
+            ) != json.dumps(
+                top_markets_estimate(self.items, self.per_store_average["primary_quarter"]),
+                sort_keys=True,
+            ):
+                raise ValueError("invalid top markets estimate")
         if (self.status == "ready") != (self.reason is None):
             raise ValueError("invalid sales block")
         if self.excluded_count != sum(self.excluded_counts.values()) or any(

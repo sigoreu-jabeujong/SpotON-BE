@@ -16,13 +16,19 @@ def test_actual_api_store_join_and_weighted_summary(reference_db):  # noqa: F811
     # The legacy fixture intentionally uses a different store label; reject it first.
     assert request(client)["data"]["sales"]["per_store_average"]["metric"] is None
     with engine.begin() as c:
-        name = c.scalar(select(MarketArea.market_name).where(MarketArea.market_code == "3110000"))
-        c.execute(update(MarketStore).values(market_name=name))
+        c.execute(
+            update(MarketStore).values(
+                market_name=select(MarketArea.market_name)
+                .where(MarketArea.market_code == MarketStore.market_code)
+                .scalar_subquery()
+            )
+        )
     body = request(client)
     sales = body["data"]["sales"]
     avg = sales["per_store_average"]
     included = [i for i in sales["items"] if i["average_contribution"]["status"] == "included"]
     assert included
+    markets = {}
     s = n = 0
     with engine.connect() as c:
         for item in included:
@@ -34,8 +40,24 @@ def test_actual_api_store_join_and_weighted_summary(reference_db):  # noqa: F811
                 )
             )
             assert int(item["store_reference"]["total_stores"]) == count
+            pair = markets.setdefault(item["market_code"], [0, 0])
+            pair[0] += int(item["metric"]["value"])
+            pair[1] += count
             s += int(item["metric"]["value"])
             n += count
+    codes = sorted(markets, key=lambda code: (-markets[code][1], code))[:3]
+    top = sales["top_markets_estimate"]
+    assert [m["market_code"] for m in top["markets"]] == codes
+    assert top["total_sales"] == str(sum(markets[c][0] for c in codes))
+    assert top["total_store_count"] == str(sum(markets[c][1] for c in codes))
+    assert Fraction(int(top["metric"]["numerator"]), int(top["metric"]["denominator"])) == Fraction(
+        int(top["total_sales"]), int(top["total_store_count"])
+    )
+    assert all(
+        m["market_name"]
+        == next(i["market_name"] for i in included if i["market_code"] == m["market_code"])
+        for m in top["markets"]
+    )
     assert avg["total_sales"] == str(s) and avg["total_store_count"] == str(n)
     with localcontext() as ctx:
         ctx.prec = 50
