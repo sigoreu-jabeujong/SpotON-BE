@@ -133,7 +133,9 @@ class GeminiClient:
                     if response.status_code == 200:
                         return self._parse(response.content, attempts)
                     failure = (
-                        LlmErrorKind.RATE_LIMITED
+                        LlmErrorKind.AUTHENTICATION
+                        if response.status_code in {401, 403}
+                        else LlmErrorKind.RATE_LIMITED
                         if response.status_code == 429
                         else LlmErrorKind.UPSTREAM
                     )

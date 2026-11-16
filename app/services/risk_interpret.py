@@ -11,6 +11,7 @@ from app.ai.context_v2 import prepare_v2_interpretation, v2_query_parts
 from app.ai.interpretation import build_catalog, render_interpretation
 from app.ai.limits import RequestLimiter
 from app.ai.prompts.builder import build_interpret_request
+from app.ai.report_runtime import CapacityPool
 from app.ai.verified import AiVerifyFailedError, generate_verified
 from app.core.cache import Flights
 from app.core.errors import AppError
@@ -35,15 +36,23 @@ class _CachedSelection(BaseModel):
 
 
 class InterpretationResources:
-    def __init__(self, database: DatabaseResources, client: LlmClient):
+    def __init__(
+        self,
+        database: DatabaseResources,
+        client: LlmClient,
+        provider_limiter: RequestLimiter | None = None,
+    ):
         self.database = database
         self.client = client
+        self.provider_limiter = provider_limiter or RequestLimiter.from_settings(database.settings)
         config = database.settings
         self.limiter = RequestLimiter(
             per_minute=config.interpret_requests_per_minute,
             per_day=config.interpret_requests_per_day,
         )
-        self.gate = asyncio.Semaphore(config.interpret_max_concurrent)
+        self.gate = CapacityPool(config.interpret_max_concurrent)
+        self.db_gate = asyncio.Semaphore(1)
+        self.preparations: set[asyncio.Task[PreparedRiskInterpretation]] = set()
         self.flights = Flights()
 
 
@@ -97,10 +106,23 @@ async def interpret_risk(
     try:
         async with asyncio.timeout(budget):
             resources.limiter.acquire()
-            async with resources.gate:
-                prepared = await asyncio.to_thread(
-                    _prepare, resources, query, deadline, stop, history
-                )
+
+            async def owned_prepare() -> PreparedRiskInterpretation:
+                async with resources.db_gate:
+                    return await asyncio.to_thread(
+                        _prepare, resources, query, deadline, stop, history
+                    )
+
+            task = asyncio.create_task(owned_prepare())
+            resources.preparations.add(task)
+
+            def completed(worker: asyncio.Task[PreparedRiskInterpretation]) -> None:
+                resources.preparations.discard(worker)
+                if not worker.cancelled():
+                    worker.exception()
+
+            task.add_done_callback(completed)
+            prepared = await asyncio.shield(task)
             catalog = build_catalog(prepared)
             payload: dict[str, JsonValue] = {
                 "analysis": prepared.json_context(),

@@ -15,6 +15,8 @@ ERROR_SPECS: Mapping[ErrorCode, tuple[int, str]] = MappingProxyType(
         ErrorCode.UPSTREAM_ERROR: (502, "외부 데이터 서비스에 연결할 수 없습니다"),
         ErrorCode.AI_UNAVAILABLE: (503, "AI 해석을 일시적으로 이용할 수 없습니다"),
         ErrorCode.AI_VERIFY_FAILED: (503, "AI 해석 결과를 검증하지 못했습니다"),
+        ErrorCode.AI_CONTEXT_CHANGED: (409, "기준 자료가 변경됐습니다. 자료를 다시 조회해 주세요"),
+        ErrorCode.AI_HISTORY_CONTEXT_OUTDATED: (409, "주소를 다시 확인해 주세요"),
         ErrorCode.INTERNAL_ERROR: (500, "요청 처리 중 오류가 발생했습니다"),
         ErrorCode.HISTORY_UNAVAILABLE: (
             503,

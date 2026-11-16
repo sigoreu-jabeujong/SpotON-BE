@@ -23,6 +23,7 @@ class LlmErrorKind(StrEnum):
     QUOTA_EXHAUSTED = "quota_exhausted"
     TIMEOUT = "timeout"
     UPSTREAM = "upstream"
+    AUTHENTICATION = "authentication"
     BLOCKED = "blocked"
     INCOMPLETE = "incomplete"
     MALFORMED_RESPONSE = "malformed_response"

@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.ai.report_basis import basis
 from app.core.errors import AppError
 from app.db.dependencies import NO_STORE, read_only_session
 from app.routers.geocode import get_geocode_service
@@ -68,10 +69,16 @@ def history_session(
 
 @router.get("/stores/location-history", response_model=ApiResponse[AddressHistory])
 def history(
+    request: Request,
     query: Annotated[AddressHistoryQuery, Depends(history_query)],
     pair: Annotated[AddressPair, Depends(verified_pair)],
     session: Annotated[Session, Depends(history_session)],
     response: Response,
 ) -> ApiResponse[AddressHistory]:
     response.headers.update(NO_STORE)
-    return get_address_history(session, query, pair)
+    return basis(
+        "address_history",
+        query,
+        get_address_history(session, query, pair),
+        request.app.state.settings,
+    )

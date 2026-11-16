@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.ai.report_basis import basis
 from app.core.errors import AppError
 from app.db.dependencies import NO_STORE, history_session
 from app.routers.spatial_query import PARAMETERS
@@ -50,9 +51,12 @@ def population_session(
     },
 )
 def population_reference(
+    request: Request,
     query: Annotated[PopulationReferenceQuery, Depends(population_query)],
     session: Annotated[Session, Depends(population_session)],
     response: Response,
 ) -> ApiResponse[PopulationReference]:
     response.headers.update(NO_STORE)
-    return get_population_reference(session, query)
+    return basis(
+        "grid", query, get_population_reference(session, query), request.app.state.settings
+    )

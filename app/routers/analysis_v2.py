@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.ai.report_basis import basis
 from app.core.errors import AppError
 from app.db.dependencies import NO_STORE, history_session, read_only_session
 from app.routers.spatial_query import PARAMETERS
@@ -190,12 +191,15 @@ def history(
     },
 )
 def activity(
+    request: Request,
     query: Annotated[AnalysisActivityQuery, Depends(activity_query)],
     session: Annotated[Session, Depends(activity_session)],
     response: Response,
 ) -> ApiResponse[MarketActivity]:
     response.headers.update(NO_STORE)
-    return analysis_v2.activity(session, query)
+    return basis(
+        "activity", query, analysis_v2.activity(session, query), request.app.state.settings
+    )
 
 
 @router.get(
@@ -220,4 +224,9 @@ def risk(
     response: Response,
 ) -> ApiResponse[Risk]:
     response.headers.update(NO_STORE)
-    return analysis_v2.risk(session, query, request.app.state.settings)
+    return basis(
+        "risk",
+        query,
+        analysis_v2.risk(session, query, request.app.state.settings),
+        request.app.state.settings,
+    )

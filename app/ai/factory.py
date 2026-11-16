@@ -39,6 +39,7 @@ def create_llm_client(
     *,
     limiter: RequestLimiter | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
+    policy: RetryPolicy | None = None,
 ) -> LlmClient:
     if settings.llm_provider != GEMINI_PROVIDER:
         return UnavailableLlmClient(provider=settings.llm_provider, model=settings.llm_model)
@@ -46,7 +47,7 @@ def create_llm_client(
     return GeminiClient(
         api_key=api_key,
         model=settings.llm_model,
-        policy=RetryPolicy.from_settings(settings),
+        policy=policy if policy is not None else RetryPolicy.from_settings(settings),
         limiter=limiter if limiter is not None else RequestLimiter.from_settings(settings),
         max_output_tokens=settings.llm_max_output_tokens,
         transport=transport,

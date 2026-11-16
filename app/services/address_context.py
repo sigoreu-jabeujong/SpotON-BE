@@ -5,8 +5,9 @@ import hmac
 import json
 import re
 import time
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from app.core.config import Settings
 from app.core.errors import AppError
@@ -28,6 +29,18 @@ class AddressPair(BaseModel):
     road_key: str | None
     rule: str = RULE
     issued_at: int = Field(ge=0)
+    context_version: int = Field(default=1, ge=1, le=2)
+    lat: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False, repr=False)
+    lng: float | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False, repr=False)
+    category: Literal["cafe", "restaurant"] | None = None
+
+    @model_validator(mode="after")
+    def v2_location(self) -> Self:
+        if self.context_version == 2 and (
+            self.lat is None or self.lng is None or self.category is None
+        ):
+            raise ValueError("missing signed location")
+        return self
 
 
 def signing_key(settings: Settings) -> bytes:
@@ -119,7 +132,13 @@ async def create_context(
             road_key = structured
         matches.append(
             AddressPair(
-                building_key=candidate.building_key, road_key=road_key, issued_at=int(time.time())
+                building_key=candidate.building_key,
+                road_key=road_key,
+                issued_at=int(time.time()),
+                context_version=2,
+                lat=candidate.lat,
+                lng=candidate.lng,
+                category=query.category,
             )
         )
     if len(matches) != 1:

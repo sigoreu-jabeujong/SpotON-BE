@@ -6,12 +6,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.ai.factory import create_llm_client
+from app.ai.limits import RequestLimiter
 from app.core.config import Settings, get_settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.middleware import UnhandledErrorMiddleware
 from app.core.request_logging import OperationLogMiddleware
 from app.db.dependencies import DatabaseResources
 from app.routers.address_history import router as address_history_router
+from app.routers.ai_report import router as ai_report_router
 from app.routers.analysis_v2 import router as analysis_v2_router
 from app.routers.geocode import router as geocode_router
 from app.routers.health import router as health_router
@@ -26,6 +28,7 @@ from app.routers.risk import router as risk_router
 from app.routers.snapshot import router as snapshot_router
 from app.routers.stores import router as stores_router
 from app.routers.support import router as support_router
+from app.services.ai_report import ReportResources
 from app.services.risk_interpret import InterpretationResources
 
 
@@ -52,7 +55,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application = FastAPI(title="Spot:ON BE", version="0.1.0", debug=False, lifespan=lifespan)
     application.state.settings = config
     application.state.database = resources
-    application.state.interpretation = InterpretationResources(resources, create_llm_client(config))
+    provider_limiter = RequestLimiter.from_settings(config)
+    application.state.interpretation = InterpretationResources(
+        resources, create_llm_client(config, limiter=provider_limiter), provider_limiter
+    )
+    application.state.ai_report = ReportResources(application.state.interpretation)
     register_exception_handlers(application)
     # 나중에 추가되는 CORS가 바깥에서 정상 응답과 미처리 오류 응답을 함께 감싼다.
     application.add_middleware(UnhandledErrorMiddleware)
@@ -77,6 +84,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(analysis_v2_router, prefix="/api/v2")
     application.include_router(address_history_router, prefix="/api/v3")
     application.include_router(interpret_v2_router, prefix="/api/v2")
+    application.include_router(ai_report_router, prefix="/api/v2")
     application.include_router(population_reference_router, prefix="/api/v2")
     application.include_router(location_reference_router, prefix="/api/v2")
     return application
