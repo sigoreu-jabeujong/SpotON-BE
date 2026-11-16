@@ -1,4 +1,4 @@
-"""Closed license history at an explicit location; legacy/AI cohorts stay unchanged."""
+"""All-status license history at an explicit location; legacy/AI cohorts stay unchanged."""
 
 from collections import Counter
 from datetime import date
@@ -11,10 +11,10 @@ from app.models import Store, StoreImportBatch
 from app.schemas.common import ApiResponse
 from app.schemas.location_history import (
     POLICY,
-    ClosedHistoryStore,
     HistorySelection,
     LocationHistory,
     LocationHistoryQuery,
+    LocationHistoryStore,
 )
 from app.schemas.stores import HistoryQuery
 from app.services.chain_api import stores as enrich_stores
@@ -60,10 +60,13 @@ def get_location_history(
                 result_status="pending_identity",
                 location_coverage="not_evaluated",
                 total=0,
+                open_count=0,
+                closed_count=0,
+                other_count=0,
                 dated_closure_count=0,
                 undated_closure_count=0,
-                unresolved_closed_count=0,
-                excluded_counts={"status": 0, "floor": 0, "unit": 0},
+                unresolved_count=0,
+                excluded_counts={"floor": 0, "unit": 0},
                 stores=[],
                 scope_limitations=["physical_building_evidence_not_verified"],
             ),
@@ -79,14 +82,9 @@ def get_location_history(
         chain=chain,
     )
     assert original.data is not None
-    excluded: dict[Literal["status", "floor", "unit"], int] = {"status": 0, "floor": 0, "unit": 0}
+    excluded: dict[Literal["floor", "unit"], int] = {"floor": 0, "unit": 0}
     unresolved = 0
-    selected = []
-    for row in original.data.stores:
-        if row.store_status != "closed":
-            excluded["status"] += 1
-            continue
-        selected.append(row)
+    selected = original.data.stores
     keys = [(row.source, row.license_no) for row in selected]
     raw = (
         {
@@ -110,7 +108,7 @@ def get_location_history(
         else {}
     )
     accepted = []
-    closure_status: dict[tuple[str, str], Literal["dated", "undated"]] = {}
+    closure_status: dict[tuple[str, str], Literal["dated", "undated", "not_applicable"]] = {}
     for row in selected:
         source = raw.get((row.source, row.license_no))
         if source is None:
@@ -129,16 +127,21 @@ def get_location_history(
             batch = None
         reference = batch.data_updated_at if batch else None
         months, reason, opened, closed = operating_period(source, reference, batch)
-        # Closure date has independent quality: an unknown opening does not erase it.
-        if closed is None or reference is None or closed > reference:
+        quality: Literal["dated", "undated", "not_applicable"] = "not_applicable"
+        if row.store_status == "closed":
+            # An unknown opening date does not erase a valid closure date.
+            if closed is None or reference is None or closed > reference:
+                closed = None
+            if opened is not None and closed is not None and closed < opened:
+                closed = None
+            if closed is None and months is not None:
+                months = None
+                reason = "missing_source_date" if reference is None else "invalid_close_date"
+            quality = "dated" if closed is not None else "undated"
+        else:
+            # Open durations use the source batch date, never an invented closure.
             closed = None
-        if opened is not None and closed is not None and closed < opened:
-            closed = None
-        if closed is None and months is not None:
-            months = None
-            reason = "missing_source_date" if reference is None else "invalid_close_date"
-        dated: Literal["dated", "undated"] = "dated" if closed is not None else "undated"
-        closure_status[(row.source, row.license_no)] = dated
+        closure_status[(row.source, row.license_no)] = quality
         accepted.append(
             row.model_copy(
                 update={
@@ -151,15 +154,15 @@ def get_location_history(
             )
         )
     rows = [
-        ClosedHistoryStore.model_validate(
+        LocationHistoryStore.model_validate(
             {**s.model_dump(), "closure_date_status": closure_status[(s.source, s.license_no)]}
         )
         for s in enrich_stores(session, chain, accepted)
     ]
     rows.sort(
         key=lambda s: (
-            s.close_date is None,
-            -(s.close_date or date.min).toordinal(),
+            s.open_date is None,
+            -(s.open_date or date.min).toordinal(),
             s.source,
             s.license_no,
         )
@@ -176,7 +179,7 @@ def get_location_history(
             "date_basis": "per_store_source_batch",
             "denominator": len(rows),
             "brand_classification": chain.meta(),
-            "brand_counts_scope": "returned_closed_location_history",
+            "brand_counts_scope": "returned_location_history",
         }
     )
     counts = Counter(
@@ -193,9 +196,12 @@ def get_location_history(
             result_status="matched" if rows else "no_data",
             location_coverage="partial" if unresolved else "complete",
             total=len(rows),
+            open_count=sum(s.current_status == "open" for s in rows),
+            closed_count=sum(s.current_status == "closed" for s in rows),
+            other_count=sum(s.current_status == "other" for s in rows),
             dated_closure_count=dated_count,
-            undated_closure_count=len(rows) - dated_count,
-            unresolved_closed_count=unresolved,
+            undated_closure_count=sum(s.closure_date_status == "undated" for s in rows),
+            unresolved_count=unresolved,
             excluded_counts=excluded,
             scope_limitations=LIMITATIONS,
             stores=rows,

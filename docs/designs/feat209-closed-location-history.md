@@ -4,6 +4,18 @@
 
 ## 12. 후속 구현·실행 기록 (BE213 / FE108)
 
+### 공개 혼합 조회 보완 설계 (후속 이슈, 2026-11-17)
+
+BE527483d/Render dep-dbtifnmtlv9c73ffofd0과 FE0bf766a/PR112를 공개한 뒤, 기본 층/호수·PDF·모바일6흐름은 통과했으나 상세 범위 복구 흐름에서 새 이력500을 확인했다. Render app 로그의 두 실패는 각각15002.999ms와15004.101ms이며 설정된 풀대기15초와 일치한다. 단독 API와 새경로 동시6요청은200이었다. SQL10초 제한 실패로 단정하지 않는다. 물리 건물 검증 대기는 DB 없이 계속200이다.
+
+보완안: read_only_session에 선택적 pool_retries 기본0을 추가한다. 새 location_session만1을 전달한다. Session.connection의 SQLAlchemy pool TimeoutError에만 최대1회 재대기하고 실패 세션을 닫은 뒤 새 세션에서 시작한다. 연결을 얻고 READ ONLY·statement_timeout 설정 또는 쿼리를 실행한 이후의 오류/Timeout은 재시도하지 않는다. 원천 조회·집계 본문과 yield는 한 번만 수행한다. 기존 호출은 기본0으로 이전 의미를 보존한다. 운영 풀1/대기15초·SQL10초/17개 환경을 변경하지 않는다. 풀 대기 누적 상한은30초이며 FE45초 내 정상 조회를 목표로 하되 외부 과부하 무한 성공을 보장하지 않는다.
+
+구현 경계(검토 보완): 재시도 대상은 `sqlalchemy.exc.TimeoutError`(QueuePool checkout 대기 초과)만이다. Python 내장 `TimeoutError`·`OperationalError`(DB 접속 실패/QueryCanceled 포함)·`DatabaseConfigurationError`·SET TRANSACTION/set_config 실패는 재시도하지 않는다. 재시도 루프는 `session.connection(...)` 한 줄만 감싸고 `yield`보다 완전히 앞에서 끝나야 하며, `yield`를 루프나 재시도용 try 안에 두지 않는다(본문 예외가 generator에 throw될 때 재진입·두 번째 yield를 막기 위함). 실패 시 첫 Session은 with 종료로 닫힌 뒤 새 Session을 연다. 최종 실패는 기존과 같은 500 INTERNAL_ERROR/no-store이며 오류 문자열·쿼리를 로그/응답에 남기지 않는다. 30초는 풀 대기 합계일 뿐이며 SQL은 문장별10초라 전체 요청 시간 상한이 아니다. 재대기 동안 동기 의존성이 threadpool worker를 점유하므로 과부하 시 대기열을 늘릴 수 있다.
+
+검증: 첫 연결 획득만 Timeout 후 실제PostGIS조회 성공/본문1회, 기본0 재시도없음, yield 이후 SQL Timeout은 재시도없음, pending_identity DB없음, 기존 전체API/AI 회귀를 확인한다. 추가로 두 번 연속 checkout Timeout→재시도1회 후 500, OperationalError/set_config 실패→재시도0, 재시도 후 세션의 READ ONLY·REPEATABLE READ·statement_timeout 재적용을 확인한다. 배포 후 같은 실제 혼합 브라우저9흐름과 동시 조회를 다시 실행하고 새 검증 구간의500을 확인한다. 이 보완은 연결 획득 경계에 한정하며 SQL 재실행·환경값 상향·빈 결과로 오류 숨김을 하지 않는다.
+
+Claude Code 사전 설계 검토(2026-11-17, Read/Edit만; 읽은 범위: 이 MD 1~45줄, `app/db/dependencies.py` 전체, `app/routers/chains.py` 1~179줄): **PASS, 차단 0**. 이유: 현재 `read_only_session`은 `session.connection()`에서 checkout→RR 설정, 이어 READ ONLY·statement_timeout을 같은 트랜잭션에 걸고 한 번 yield한다. checkout 대기 초과는 연결·쿼리·트랜잭션이 생기기 전이므로 새 Session으로 다시 시작해도 부작용이나 중복 조회가 없고, 재시도 후에도 세 설정이 같은 순서로 다시 적용된다. `location_session`만 1을 넘기고 `history_session`·나머지 v2/구 API가 기본0을 쓰면 기존 의미는 그대로 유지된다. `verified_building`은 세션 없이 yield None이므로 영향이 없다. 권고(비차단): ① 위 구현 경계대로 예외 클래스를 정확히 한정하고 yield를 루프 밖에 둘 것. ② 재시도 발생 여부를 원문 없는 고정 사유로 운영 로그에 남겨 배포 후 원인(혼합 흐름의 풀1 경합)을 확인할 것. ③ 근본 원인은 풀1에 한 화면의 동시 요청이 몰리는 것이므로 이 보완은 완화책이며 해결로 기록하지 말 것. Render 로그·기존 테스트·브라우저 수치는 Codex 보고값이며 검토자가 실행하지 않았다.
+
 Codex 구현 검토 후 결정: 아래 비차단 권고 R-a의 범위 선택 UI 복구, R-b의 0건 문구, R-d의 원본 배치 조회 한정, R-e의 원본 누락 시 식별자 없는 고정 오류, R-f의 ‘검증 대기’ 표현을 반영했다. R-c는 현재 라벨이 같은 층과 자리 미확인을 이미 분리하므로 범위 제목과 함께 유지한다. FE 실제 테스트229+프로필4, 타입 포함 build/lint 통과. API 단위14/격리 PostGIS2와 로컬 실제 브라우저7 통과를 확인했고 최종 CI/공개 검증은 후속이다.
 
 새 GET `/api/v2/stores/location-history`는 별도 모델·서비스를 사용한다. legacy get_history는 변경하지 않고 같은 RR의 지번 후보 로더로 재사용한다(브랜드 보강은 반환 폐업 행에만 적용). 각 폐업 원본의 location_level·층호를 다시 비교하고, 기간/폐업일은 자기 source batch 기준으로 재산정한다. 결과 수/정보 완전성/제외 계수와 dated/undated를 검증한다. 구 API의 전체/영업 중 집계 의미는 유지한다.

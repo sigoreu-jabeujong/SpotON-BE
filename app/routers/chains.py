@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.db.dependencies import NO_STORE, history_session
+from app.db.dependencies import NO_STORE, history_session, read_only_session
 from app.routers.spatial_query import PARAMETERS
 from app.routers.stores import history_query, validated_session
 from app.schemas.chains import (
@@ -124,7 +124,8 @@ def location_session(
     if query.identity_requirement == "verified_building":
         yield None
     else:
-        yield from history_session(request)
+        with read_only_session(request.app.state.database, pool_retries=1) as session:
+            yield session
 
 
 @router.get(
