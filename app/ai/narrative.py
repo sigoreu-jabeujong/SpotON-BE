@@ -5,9 +5,11 @@ Alternatives have the same facts and differ only in connective phrasing. This is
 closed vocabulary for all fifteen interpretation rules, including cohort/time scope.
 """
 
+import math
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import JsonValue
 
@@ -24,10 +26,17 @@ LABELS = {
     "japanese": "일식",
     "western": "양식",
 }
+Z = 1.96  # two-sided 95%
+Judgement = Literal["higher", "lower", "inside", "unknown"]
 TITLES = {
     "closure_rate_12m": "최근 12개월 참고 폐업률",
     "survival_rate_1y": "개업 1주년 생존율",
     "survival_rate_3y": "개업 3주년 생존율",
+}
+SHORT_TITLES = {
+    "closure_rate_12m": "참고 폐업률",
+    "survival_rate_1y": "1주년 생존율",
+    "survival_rate_3y": "3주년 생존율",
 }
 
 
@@ -85,6 +94,8 @@ def build_narrative(c: InterpretContext) -> NarrativeCatalog:
 
     comparisons = []
     comparison_ids = []
+    judgements: dict[str, Judgement] = {}
+    unclear_names: list[str] = []
     for key, title in TITLES.items():
         row = rows.get(key)
         if row is None or row.status != "fact" or row.value is None:
@@ -96,14 +107,16 @@ def build_narrative(c: InterpretContext) -> NarrativeCatalog:
                 "같은 조건의 서울 비교값은 표본이 부족해 제공하지 않습니다."
             )
             continue
-        delta = Decimal(str(row.value)) - Decimal(str(row.seoul_avg))
-        if delta:
-            detail = f"보다 {abs(delta):.1f}%p {'높았습니다' if delta > 0 else '낮았습니다'}"
-        else:
-            detail = "와 같았습니다"
+        judgements[key] = judgement = compare_with_rest_of_seoul(row)
+        sentence, unclear = comparison_sentence(title, row, judgement)
+        comparisons.append(sentence)
+        if unclear:
+            unclear_names.append(SHORT_TITLES[key])
+    if unclear_names:
+        # One qualifier for all unclear gaps; it names them, so it never repeats a sentence.
         comparisons.append(
-            f"{title}은 {row.value:.1f}%로, "
-            f"서울 전체 동일 업종·필터의 {row.seoul_avg:.1f}%{detail}."
+            f"{'·'.join(unclear_names)}의 차이는 기록 수를 고려하면 우연으로도 생길 수 있는 "
+            "정도여서 서울과 뚜렷하게 다르다고 보기는 어렵습니다."
         )
     comparison = (
         " ".join(comparisons)
@@ -119,17 +132,11 @@ def build_narrative(c: InterpretContext) -> NarrativeCatalog:
             " 각 생존율은 서로 다른 시기에 개업한 집단의 해당 개업 주년까지 "
             "영업 여부를 관측한 값으로, 같은 점포 집단의 시간 경과나 현재 잔존율을 뜻하지 않습니다."
         )
-    early, later = rows.get("survival_rate_1y"), rows.get("survival_rate_3y")
-    if (
-        early is not None
-        and later is not None
-        and early.status == later.status == "fact"
-        and early.value is not None
-        and early.seoul_avg is not None
-        and later.value is not None
-        and later.seoul_avg is not None
-        and (early.value - early.seoul_avg) * (later.value - later.seoul_avg) < 0
-    ):
+    # Opposite directions are only described when both differences are clear, not noise.
+    if {judgements.get("survival_rate_1y"), judgements.get("survival_rate_3y")} == {
+        "higher",
+        "lower",
+    }:
         comparison += (
             " 서울과의 차이가 두 관측 집단에서 서로 다른 방향으로 나타나므로, "
             "초기 영업 여부와 함께 장기 운영 비용 구조도 별도로 검토할 필요가 있습니다."
@@ -221,6 +228,65 @@ def build_narrative(c: InterpretContext) -> NarrativeCatalog:
             }
         )
     return NarrativeCatalog(tuple(groups))
+
+
+def wilson_interval(successes: int, total: int, z: float = Z) -> tuple[float, float]:
+    """95% Wilson score interval of successes/total (total > 0)."""
+    p = successes / total
+    scale = 1 + z * z / total
+    center = (p + z * z / (2 * total)) / scale
+    half = z * math.sqrt(p * (1 - p) / total + z * z / (4 * total * total)) / scale
+    return center - half, center + half
+
+
+def compare_with_rest_of_seoul(row: ContextIndicator) -> Judgement:
+    """Judge local vs the rest of Seoul with a Newcombe hybrid score interval.
+
+    The local records are a subset of the Seoul aggregate, so the comparison excludes them
+    (rest = Seoul - local). The difference is "clear" only when the 95% interval of
+    local rate - rest rate excludes zero; otherwise it is within chance variation.
+    """
+    k, n = row.numerator, row.denominator
+    seoul_k, seoul_n = row.seoul_numerator, row.seoul_denominator
+    if k is None or n is None or seoul_k is None or seoul_n is None or n <= 0:
+        return "unknown"
+    rest_k, rest_n = seoul_k - k, seoul_n - n
+    if rest_n <= 0 or not 0 <= rest_k <= rest_n or not 0 <= k <= n:
+        return "unknown"
+    p1, p2 = k / n, rest_k / rest_n
+    l1, u1 = wilson_interval(k, n)
+    l2, u2 = wilson_interval(rest_k, rest_n)
+    diff = p1 - p2
+    if diff - math.sqrt((p1 - l1) ** 2 + (u2 - p2) ** 2) > 0:
+        return "higher"
+    if diff + math.sqrt((u1 - p1) ** 2 + (p2 - l2) ** 2) < 0:
+        return "lower"
+    return "inside"
+
+
+def comparison_sentence(
+    title: str, row: ContextIndicator, judgement: Judgement
+) -> tuple[str, bool]:
+    """Return the sentence and whether it states a gap that is within chance variation."""
+    if row.value is None or row.seoul_avg is None:
+        raise ValueError("comparison requires local and Seoul values")
+    counts = (
+        f"({row.denominator:,}건 중 {row.numerator:,}건)"
+        if row.numerator is not None and row.denominator is not None
+        else ""
+    )
+    head = f"{title}은 {row.value:.1f}%{counts}"
+    seoul = f"서울 전체 동일 업종·필터의 {row.seoul_avg:.1f}%"
+    delta = Decimal(str(row.value)) - Decimal(str(row.seoul_avg))
+    if judgement == "unknown":
+        return f"{head}이며, 서울 전체 동일 업종·필터는 {row.seoul_avg:.1f}%입니다.", False
+    # The direction word must agree with both the judgement and the displayed values.
+    if (judgement == "higher" and delta > 0) or (judgement == "lower" and delta < 0):
+        word = "높았습니다" if delta > 0 else "낮았습니다"
+        return f"{head}로, {seoul}보다 {abs(delta):.1f}%p 뚜렷하게 {word}.", False
+    if not delta:
+        return f"{head}로, {seoul}와 같았습니다.", False
+    return f"{head}로, {seoul}와 {abs(delta):.1f}%p 차이가 있습니다.", True
 
 
 def inclusive_period(value: str) -> str:

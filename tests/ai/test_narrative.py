@@ -1,5 +1,7 @@
 import dataclasses
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -7,7 +9,14 @@ import pytest
 from app.ai import context as context_module
 from app.ai.context import prepare_risk_interpretation
 from app.ai.interpretation import build_catalog, render_interpretation
-from app.ai.narrative import NOTICE, build_narrative, inclusive_period
+from app.ai.narrative import (
+    NOTICE,
+    build_narrative,
+    compare_with_rest_of_seoul,
+    comparison_sentence,
+    inclusive_period,
+    wilson_interval,
+)
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.schemas.ai_context import ContextYear
@@ -62,9 +71,17 @@ def output(prepared, ids=None):
 
 def test_percentage_points_are_exact_and_evidence_preserves_denominators(sample):
     result = output(sample)
-    assert "0.6%p 높았습니다" in result.body
-    assert "9.8%p 높았습니다" in result.body
-    assert "2.1%p 낮았습니다" in result.body
+    # The local records are a large share of this small Seoul aggregate, so none of the
+    # displayed gaps is clear once the overlap is removed.
+    assert "13.0%와 0.6%p 차이가 있습니다" in result.body
+    assert "84.3%와 9.8%p 차이가 있습니다" in result.body
+    assert "58.4%와 2.1%p 차이가 있습니다" in result.body
+    assert "(81건 중 11건)" in result.body and "(17건 중 16건)" in result.body
+    # One qualifier names every unclear gap instead of repeating a sentence per indicator.
+    assert result.body.count("우연으로도") == 1
+    assert "참고 폐업률·1주년 생존율·3주년 생존율의 차이는" in result.body
+    assert "뚜렷하게 높았" not in result.body and "뚜렷하게 낮았" not in result.body
+    assert "서로 다른 방향" not in result.body
     assert len(result.paragraphs) == 4
     assert result.body == "\n\n".join(p.text for p in result.paragraphs)
     assert result.body.endswith(NOTICE)
@@ -222,6 +239,131 @@ def test_future_or_mismatched_yearly_period_is_rejected_before_llm(monkeypatch, 
     )
     with pytest.raises(AppError):
         prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
+
+
+def rate_row(k, n, seoul_k, seoul_n):
+    """Minimal stand-in for ContextIndicator with display values derived from the counts."""
+
+    def percent(a, b):
+        return float((Decimal(a) * 100 / Decimal(b)).quantize(Decimal("0.1"), ROUND_HALF_UP))
+
+    return SimpleNamespace(
+        numerator=k,
+        denominator=n,
+        seoul_numerator=seoul_k,
+        seoul_denominator=seoul_n,
+        value=percent(k, n),
+        seoul_avg=percent(seoul_k, seoul_n),
+    )
+
+
+@pytest.mark.parametrize(
+    "k,n,low,high",
+    [(24, 30, 0.627, 0.905), (21, 32, 0.483, 0.796)],
+)
+def test_wilson_interval_matches_hand_calculation(k, n, low, high):
+    lower, upper = wilson_interval(k, n)
+    assert lower == pytest.approx(low, abs=0.001)
+    assert upper == pytest.approx(high, abs=0.001)
+
+
+@pytest.mark.parametrize(
+    "row,expected",
+    [
+        # Hongdae cafe 500m (production 2026-11-16): visible gaps, but within chance.
+        (rate_row(24, 30, 1555, 1877), "inside"),
+        (rate_row(21, 32, 1525, 2477), "inside"),
+        (rate_row(20, 169, 1890, 16269), "inside"),
+        (rate_row(40, 100, 1000, 10000), "higher"),
+        (rate_row(2, 100, 3000, 10000), "lower"),
+        # Same local 16/20: clear against a large rest of Seoul, not against a tiny one.
+        (rate_row(16, 20, 5000, 10000), "higher"),
+        (rate_row(16, 20, 20, 26), "inside"),
+        # The local records are all of Seoul: nothing to compare against.
+        (rate_row(16, 20, 16, 20), "unknown"),
+    ],
+)
+def test_local_rate_is_judged_against_the_rest_of_seoul(row, expected):
+    assert compare_with_rest_of_seoul(row) == expected
+
+
+def test_comparison_sentences_by_judgement():
+    clear = comparison_sentence("개업 1주년 생존율", rate_row(40, 100, 1000, 10000), "higher")
+    assert clear == (
+        "개업 1주년 생존율은 40.0%(100건 중 40건)로, 서울 전체 동일 업종·필터의 10.0%보다 "
+        "30.0%p 뚜렷하게 높았습니다.",
+        False,
+    )
+    inside = comparison_sentence("개업 1주년 생존율", rate_row(24, 30, 1555, 1877), "inside")
+    assert inside == (
+        "개업 1주년 생존율은 80.0%(30건 중 24건)로, 서울 전체 동일 업종·필터의 82.8%와 "
+        "2.8%p 차이가 있습니다.",
+        True,
+    )
+    same = comparison_sentence("t", rate_row(5, 10, 50, 100), "inside")
+    assert same[0].endswith("50.0%와 같았습니다.") and same[1] is False
+    unknown = comparison_sentence("t", rate_row(16, 20, 16, 20), "unknown")
+    assert unknown == (
+        "t은 80.0%(20건 중 16건)이며, 서울 전체 동일 업종·필터는 80.0%입니다.",
+        False,
+    )
+    # A judgement that disagrees with the displayed sign never produces a direction word.
+    mismatch = comparison_sentence("t", rate_row(2, 100, 3000, 10000), "higher")
+    assert "뚜렷하게" not in mismatch[0] and mismatch[1] is True
+
+
+def counts(**changes):
+    base = dict(
+        cohort_size=30000,
+        active=12345,
+        closure_num=1234,
+        closure_den=13579,
+        survival_1_num=950,
+        survival_1_den=1000,
+        survival_3_num=100,
+        survival_3_den=1000,
+    )
+    return ReferenceCounts(**{**base, **changes})
+
+
+def seoul_counts(**changes):
+    base = dict(
+        cohort_size=900000,
+        active=364000,
+        closure_num=36000,
+        closure_den=400000,
+        survival_1_num=40000,
+        survival_1_den=50000,
+        survival_3_num=30000,
+        survival_3_den=50000,
+    )
+    return ReferenceCounts(**{**base, **changes})
+
+
+def body_for(monkeypatch, local, seoul):
+    use_risk(monkeypatch, context_module, response(local=local, seoul=seoul), opened=10, months=63)
+    prepared = prepare_risk_interpretation(Mock(), query(), Settings(_env_file=None))
+    return output(prepared).body
+
+
+def test_opposite_direction_note_needs_two_clear_differences(monkeypatch):
+    body = body_for(monkeypatch, counts(), seoul_counts())
+    assert "1주년 생존율은 95.0%(1,000건 중 950건)로" in body
+    assert "80.0%보다 15.0%p 뚜렷하게 높았습니다" in body
+    assert "60.0%보다 50.0%p 뚜렷하게 낮았습니다" in body
+    assert "(13,579건 중 1,234건)" in body
+    assert "서로 다른 방향" in body
+    # Only the near-equal closure rate (9.1% vs 9.0%) is named as within chance.
+    assert "다. 참고 폐업률의 차이는 기록 수를 고려하면 우연으로도" in body
+
+
+def test_opposite_direction_note_is_absent_when_one_gap_is_noise(monkeypatch):
+    local = counts(survival_3_num=5, survival_3_den=10)
+    body = body_for(monkeypatch, local, seoul_counts())
+    assert "뚜렷하게 높았습니다" in body
+    assert "50.0%(10건 중 5건)로, 서울 전체 동일 업종·필터의 60.0%와 10.0%p 차이가 있습니다" in body
+    assert "3주년 생존율의 차이는 기록 수를 고려하면 우연으로도" in body
+    assert "서로 다른 방향" not in body
 
 
 @pytest.mark.parametrize(
