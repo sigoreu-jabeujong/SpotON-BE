@@ -81,6 +81,7 @@ API_PATHS = frozenset(
         "/api/v2/market/activity",
         "/api/v2/risk",
         "/api/v2/risk/interpret",
+        "/api/v2/risk/interpret/sections",
         "/docs",
         "/redoc",
         "/openapi.json",
@@ -186,6 +187,28 @@ def api_event(
 def llm_attempt(*, success: bool) -> None:
     if type(success) is bool:
         _emit({"event": "llm_http_attempt", "count": 1, "success": success})
+
+
+def ai_report_role(*, role: str, status: str, duration: int) -> None:
+    if (
+        role in {"advantages", "cautions", "summary"}
+        and status
+        in {
+            "ready",
+            "timeout",
+            "rate_limited",
+            "provider_error",
+            "verification_failed",
+            "cancelled",
+        }
+        and type(duration) is int
+        and duration >= 0
+    ):
+        _emit({"event": "ai_report_role", "role": role, "status": status, "elapsed_ms": duration})
+
+
+def ai_report_cache_hit() -> None:
+    _emit({"event": "ai_report_cache_hit"})
 
 
 def readiness_probe(*, reason: ReadinessReason, duration: float) -> None:

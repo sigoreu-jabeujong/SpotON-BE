@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.ai.report_basis import basis
 from app.core.errors import AppError
 from app.db.dependencies import NO_STORE, history_session
 from app.routers.spatial_query import PARAMETERS
@@ -59,9 +60,12 @@ def reference_session(
     },
 )
 def location_reference(
+    request: Request,
     query: Annotated[LocationReferenceQuery, Depends(reference_query)],
     session: Annotated[Session, Depends(reference_session)],
     response: Response,
 ) -> ApiResponse[LocationReference]:
     response.headers.update(NO_STORE)
-    return get_location_reference(session, query)
+    return basis(
+        "location", query, get_location_reference(session, query), request.app.state.settings
+    )
