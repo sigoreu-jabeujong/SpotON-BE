@@ -19,6 +19,7 @@ from app.routers.interpret import router as interpret_router
 from app.routers.market import router as market_router
 from app.routers.meta import router as meta_router
 from app.routers.nearby import router as nearby_router
+from app.routers.population_reference import router as population_reference_router
 from app.routers.risk import router as risk_router
 from app.routers.snapshot import router as snapshot_router
 from app.routers.stores import router as stores_router
@@ -73,6 +74,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(support_router, prefix="/api")
     application.include_router(chains_router, prefix="/api/v2")
     application.include_router(chain_interpret_router, prefix="/api/v2")
+    application.include_router(population_reference_router, prefix="/api/v2")
     return application
 
 
