@@ -157,9 +157,9 @@ health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태�
 
 ## AI LLM client
 
-`app/ai/`는 `POST /api/risk/interpret`가 사용하는 공급자 분리 LLM client입니다. `create_llm_client(settings)`가 `LLM_PROVIDER=google`이면 Gemini `generateContent` 어댑터를 만들고, 그 밖의 값은 호출 시 실패하는 client를 돌려줘 설정 오류가 지표 API 시작을 막지 않습니다.
+`app/ai/`는 공급자 분리 LLM client입니다. 기본 `LLM_PROVIDER=openai`이면 OpenAI Responses 어댑터를 사용합니다. `google`은 Gemini 호환용이며 지원하지 않는 값은 호출 시 실패해 지표 API 시작을 막지 않습니다.
 
-- 키 `LLM_API_KEY`는 서버 전용이며 `x-goog-api-key` 헤더로만 보냅니다. 기본 모델은 `LLM_MODEL=gemini-3.5-flash-lite`입니다.
+- 키 `LLM_API_KEY`는 서버 전용이며 OpenAI에는 Authorization Bearer 헤더로 보냅니다. 기본 모델은 `LLM_MODEL=gpt-4.1-mini`이며 Responses API의 store=false와 구조화 출력을 사용합니다. [전환 기록](docs/openai-report.md)을 참고합니다.
 - `LLM_REQUEST_TIMEOUT`(요청 1회)과 `LLM_TIME_BUDGET`(재시도 대기 포함 전체) 안에서 429·500·503·504·네트워크 오류·timeout만 `LLM_MAX_RETRIES`회까지 지터를 준 지수 백오프로 재시도합니다.
 - `LLM_REQUESTS_PER_MINUTE`·`LLM_REQUESTS_PER_DAY`는 프로세스 내 한도이며 비우면 제한하지 않습니다. 일일 한도는 태평양 시간 자정에 초기화합니다. 프로젝트 계정의 실제 한도를 확인해 설정합니다.
 - 모든 실패는 기존 `AI_UNAVAILABLE`(503)로 매핑합니다. 프롬프트·생성 결과·키·공급자 오류 본문은 로그와 예외에 남기지 않습니다.

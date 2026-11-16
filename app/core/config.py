@@ -39,8 +39,8 @@ class Settings(BaseSettings):
     history_context_signing_key: SecretStr | None = Field(default=None, min_length=32)
     juso_search_key: SecretStr | None = None
     juso_coord_key: SecretStr | None = None
-    llm_provider: str = "google"
-    llm_model: str = "gemini-3.5-flash-lite"
+    llm_provider: str = "openai"
+    llm_model: str = "gpt-4.1-mini"
     llm_api_key: SecretStr | None = None
     llm_request_timeout: float = Field(default=10, ge=1, le=60)
     llm_time_budget: float = Field(default=20, ge=1, le=120)

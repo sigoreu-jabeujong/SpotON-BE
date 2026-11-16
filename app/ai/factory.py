@@ -11,6 +11,7 @@ import httpx
 from app.ai.client import LlmClient, LlmError, LlmErrorKind, LlmRequest, LlmResult
 from app.ai.gemini import GEMINI_PROVIDER, GeminiClient
 from app.ai.limits import RequestLimiter, RetryPolicy
+from app.ai.openai import OPENAI_PROVIDER, OpenAIClient
 from app.core.config import Settings
 
 
@@ -41,10 +42,11 @@ def create_llm_client(
     transport: httpx.AsyncBaseTransport | None = None,
     policy: RetryPolicy | None = None,
 ) -> LlmClient:
-    if settings.llm_provider != GEMINI_PROVIDER:
+    if settings.llm_provider not in {GEMINI_PROVIDER, OPENAI_PROVIDER}:
         return UnavailableLlmClient(provider=settings.llm_provider, model=settings.llm_model)
     api_key = settings.llm_api_key.get_secret_value() if settings.llm_api_key else None
-    return GeminiClient(
+    client = OpenAIClient if settings.llm_provider == OPENAI_PROVIDER else GeminiClient
+    return client(
         api_key=api_key,
         model=settings.llm_model,
         policy=policy if policy is not None else RetryPolicy.from_settings(settings),
