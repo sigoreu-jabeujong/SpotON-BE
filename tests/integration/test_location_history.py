@@ -18,7 +18,7 @@ from tests.integration.test_store_history import KEY, seed
 pytestmark = pytest.mark.integration
 
 
-def test_closed_cohort_exact_scope_dates_and_legacy_unchanged(temporary_database):
+def test_all_status_cohort_exact_scope_dates_and_legacy_unchanged(temporary_database):
     db = temporary_database
     seed(db)
     app = create_app(Settings(_env_file=None))
@@ -34,11 +34,18 @@ def test_closed_cohort_exact_scope_dates_and_legacy_unchanged(temporary_database
         r = client.get("/api/v2/stores/location-history", params=params)
         assert r.status_code == 200, r.text
         data = r.json()["data"]
-        assert data["total"] == 2
+        assert data["total"] == 6
+        assert data["selection"]["status_filter"] == "all"
+        assert data["open_count"] == 4
+        assert data["closed_count"] == 2
+        assert data["other_count"] == 0
         assert data["dated_closure_count"] == data["undated_closure_count"] == 1
-        assert all(s["current_status"] == "closed" for s in data["stores"])
-        assert data["excluded_counts"]["status"] == before["data"]["total"] - 2
-        assert data["stores"][-1]["close_date"] is None
+        assert data["excluded_counts"] == {"floor": 1, "unit": 0}
+        active = next(s for s in data["stores"] if s["license_no"] == "same")
+        assert active["current_status"] == "open"
+        assert active["operating_months"] is not None
+        assert active["closure_date_status"] == "not_applicable"
+        assert active["close_date"] is None
         assert client.get("/api/stores/history", params={"building_key": KEY}).json() == before
         with Session(db.engine) as session, session.begin():
             missing = session.scalar(select(Store).where(Store.license_no == "3"))
@@ -47,15 +54,15 @@ def test_closed_cohort_exact_scope_dates_and_legacy_unchanged(temporary_database
             different.floor_unit = "2층 202호"
             different.close_date = date(2022, 2, 1)
         unit = client.get("/api/v2/stores/location-history", params=params).json()["data"]
-        assert unit["total"] == 0
-        assert unit["result_status"] == "no_data"
+        assert unit["total"] == 4
+        assert unit["result_status"] == "matched"
         assert unit["location_coverage"] == "partial"
-        assert unit["unresolved_closed_count"] == 1
+        assert unit["unresolved_count"] == 2
         assert unit["excluded_counts"]["unit"] == 1
         floor = client.get(
             "/api/v2/stores/location-history", params={**params, "scope": "floor"}
         ).json()["data"]
-        assert floor["total"] == 1
+        assert floor["total"] == 6
         assert floor["selection"]["unit_ignored"] is True
 
 
@@ -83,7 +90,9 @@ def test_dates_use_own_source_and_unknown_open_does_not_erase_closure(temporary_
                 "identity_requirement": "address_scope",
             },
         ).json()["data"]
-    assert data["total"] == 3
+    assert data["total"] == 8
+    assert data["open_count"] == 5
+    assert data["closed_count"] == 3
     assert data["dated_closure_count"] == 1
     assert data["undated_closure_count"] == 2
     cafe_row = next(s for s in data["stores"] if s["source"] == "rest_cafe")
