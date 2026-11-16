@@ -55,12 +55,26 @@ def test_source_window_units_are_allowed_but_value_unit_changes_are_not():
         validate([item("폐업률은 13.2개월입니다.")], source, "cautions")
 
 
+def test_indicator_labels_are_vocabulary_but_uncited_values_are_not_evidence():
+    source = catalog()
+    source.metrics[1].group = "risk"
+    source.metrics[1].label = "개업 1주년 생존율"
+    source.metrics[1].value = "90"
+    source.metrics[1].display = "90%"
+    source.metrics[1].unit = "%"
+    assert validate([item("개업 1주년 지표와 다른 개업 집단입니다.")], source, "cautions")
+    with pytest.raises(ValueError):
+        validate([item("생존율은 90%입니다.")], source, "cautions")
+
+
 @pytest.mark.parametrize(
     "draft",
     [
         item("폐업률은 90%입니다."),
         item(ids=["invented"]),
         item("폐업률은 13.2원입니다."),
+        item("반경은 250m입니다."),
+        item("별도 수치는 17입니다."),
         item("폐업률은 -13.2%입니다."),
         item("차이는 13.2%포인트입니다."),
         item(ids=["closure", "closure"]),

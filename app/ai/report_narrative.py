@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.ai.report_catalog import ReportCatalog
 from app.schemas.ai_report import ReportText, Role
 
-VERSION = "ai-generated-interpretation-v2"
+VERSION = "ai-generated-interpretation-v2.1"
 COMMON = (
     "당신은 공공데이터를 해석하는 한국어 분석가입니다. 제공된 metrics를 직접 읽어 "
     "예비창업자가 이해할 수 있는 새로운 해석 문장을 작성하세요. 사전 문장 선택이나 "
@@ -135,7 +135,13 @@ def validate(items: list[DraftItem], catalog: ReportCatalog, role: Role) -> list
         if role == "summary" and any(m.group != item.group_id for m in evidence):
             raise ValueError("wrong narrative group")
         # Deliberately exclude IDs/source identifiers from numeric evidence.
-        allowed = {Decimal(v) for v in (1, 3, 6, 17, 24, 250)}
+        allowed: set[Decimal] = set()
+        cited_groups = {metric.group for metric in evidence}
+        # Indicator names (e.g. 1st/3rd anniversary) are group vocabulary;
+        # their uncited numeric values are still never admitted.
+        for metric in catalog.metrics:
+            if metric.group in cited_groups:
+                allowed.update(numbers(metric.label))
         for metric in evidence:
             for value in (
                 metric.value,
@@ -143,11 +149,17 @@ def validate(items: list[DraftItem], catalog: ReportCatalog, role: Role) -> list
                 metric.period,
                 metric.label,
                 metric.spatial_scope,
+                metric.population_scope,
+                metric.filter_scope,
                 metric.denominator,
             ):
                 allowed.update(numbers(value or ""))
             if re.fullmatch(r"20\d{2}[1-4]", metric.period):
                 allowed.update((Decimal(metric.period[:4]), Decimal(metric.period[4:])))
+        # Methodology numbers apply only to the cited evidence, never globally.
+        for limit in catalog.mandatory_cautions:
+            if set(limit.evidence_ids) & set(item.evidence_ids):
+                allowed.update(numbers(limit.text))
         if not numbers(text) <= allowed:
             raise ValueError("unsupported narrative number")
         for value, unit in UNIT_NUMBER.findall(text):
