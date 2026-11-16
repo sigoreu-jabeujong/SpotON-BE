@@ -67,6 +67,15 @@ def test_indicator_labels_are_vocabulary_but_uncited_values_are_not_evidence():
         validate([item("생존율은 90%입니다.")], source, "cautions")
 
 
+@pytest.mark.parametrize("unit", ["개", "건"])
+def test_denominator_counts_remain_valid_without_becoming_percentage_values(unit):
+    source = catalog()
+    source.metrics[0].denominator = "684"
+    assert validate([item(f"계산 대상은 684{unit}이며 폐업률은 13.2%입니다.")], source, "cautions")
+    with pytest.raises(ValueError):
+        validate([item("폐업률은 684%입니다.")], source, "cautions")
+
+
 @pytest.mark.parametrize(
     "draft",
     [
