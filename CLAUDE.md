@@ -2,7 +2,10 @@
 
 2026-11-17 #212 [점포 수 가중 추정 분포·중앙값](docs/designs/feat212-store-weighted-sales.md)은 최신 사용자 요청이다. 개별 매출은 없으므로 상권 평균을 점포 수로 가중한 모델임을 명시한다. 가중 중앙값·같은 폭 히스토그램(가중치 합N)·상권 평균 간 가중 분산을 서버 계산/DTO 검증한다. 기존 pooled/median/기여 계약은 보존하고 새 method/graph_basis/store_weighted_distribution으로 대표를 선택한다. 큰 N을 확장하지 않으며 DB/환경/AI·인구 계약을 유지한다.
 
+2026-11-17 #209는 [동일 건물·층·자리의 폐업 이력 구조 설계](docs/designs/feat209-closed-location-history.md)다. 사용자 최신 요구는 과거 표에서 영업 중 제외 및 선택 위치 일치다. 기존 층호는 전달되지만 get_history는 key만 필터하며 공개 표본75건 중open28/closed47, 같은층closed2를 확인했다. 별도 closed-location API·층/호수 exact·건물 식별 근거·출력/AI 정책을 설계하고 실제 Claude MD 검토를 따른다. 폐업 이력은 현재 공실의 증거가 아니다. 이번에는 문서 분석만 하며 FE/앱/DB0013/원본/환경/운영을 변경하지 않는다.
+
 2026-11-17 #208 [목록 합계 기준 평균·막대](docs/designs/feat208-sales-pooled-contributions.md)는 최신 사용자 선택이다. 대표S/N과 각 막대sᵢ/N에 동일한 전체 점포 수N을 쓴다. 새 대표 marker/graph_basis/contributions를 추가 검증하고 기존 중앙값 distribution은 호환 보존한다. DB/환경·원자료·AI/인구 계약 변경 없이 BE 선배포→FE 정상 공개 PR로 적용한다.
+
 
 
 사용자 후속 승인 #202는 [주소 상세 구현·배포](docs/designs/feat202-address-implementation.md)다. POST /api/address-detail은 DB/외부API 없이 기존 파서로 정규화한다. v1/v2 이력에 독립 location_relation을 추가하고 기존 location_match·AI 집계·0013/원본/환경은 보존한다. FE 후보 확인·복원·검증과 함께 BE 선배포 후 FE 공개 release를 검증한다.
