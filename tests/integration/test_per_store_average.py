@@ -50,8 +50,29 @@ def test_actual_api_store_join_and_weighted_summary(reference_db):  # noqa: F811
     actual = avg["distribution"]["median"]
     assert Fraction(int(actual["numerator"]), int(actual["denominator"])) == expected
     assert avg["distribution"]["sample_count"] == len(included)
-    assert avg["representative_method"] == "pooled_sales_over_total_stores_v1"
+    assert avg["representative_method"] == "store_weighted_median_v1"
     assert len(avg["contributions"]) == len(included)
+    weighted = avg["store_weighted_distribution"]
+    assert weighted["total_store_count"] == str(n)
+    assert sum(int(b["store_count"]) for b in weighted["bins"]) == n
+    assert weighted["reference_count"] == len(included)
+    from bisect import bisect_left
+    from itertools import accumulate
+
+    weighted_pairs = sorted(
+        (
+            Fraction(int(i["metric"]["value"]), int(i["store_reference"]["total_stores"])),
+            int(i["store_reference"]["total_stores"]),
+        )
+        for i in included
+    )
+    cumulative = list(accumulate(weight for _, weight in weighted_pairs))
+    expected_weighted = (
+        weighted_pairs[bisect_left(cumulative, (n + 1) // 2)][0]
+        + weighted_pairs[bisect_left(cumulative, n // 2 + 1)][0]
+    ) / 2
+    m = weighted["median"]
+    assert Fraction(int(m["numerator"]), int(m["denominator"])) == expected_weighted
     assert all(c["metric"]["denominator"] == str(n) for c in avg["contributions"])
     assert sum(
         (
