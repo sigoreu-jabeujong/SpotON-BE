@@ -1,5 +1,35 @@
 # 동일 건물·층·자리의 폐업 점포 이력: 알고리즘 분석과 구조 설계
 
+후속 사용자 승인(2026-11-17): BE213/FE108에서 1·2단계의 실제 구현·공개 배포를 진행한다. 아래 설계 완료 기록과 현재 실행 결과를 구분하며, 물리 건물 evidence 적용과 새 AI 폐업 집계는 별도 검증 전까지 pending이다. 기존 원본/DB0013/환경·구 API/AI 계약을 보존한다.
+
+## 12. 후속 구현·실행 기록 (BE213 / FE108)
+
+Codex 구현 검토 후 결정: 아래 비차단 권고 R-a의 범위 선택 UI 복구, R-b의 0건 문구, R-d의 원본 배치 조회 한정, R-e의 원본 누락 시 식별자 없는 고정 오류, R-f의 ‘검증 대기’ 표현을 반영했다. R-c는 현재 라벨이 같은 층과 자리 미확인을 이미 분리하므로 범위 제목과 함께 유지한다. FE 실제 테스트229+프로필4, 타입 포함 build/lint 통과. API 단위14/격리 PostGIS2와 로컬 실제 브라우저7 통과를 확인했고 최종 CI/공개 검증은 후속이다.
+
+새 GET `/api/v2/stores/location-history`는 별도 모델·서비스를 사용한다. legacy get_history는 변경하지 않고 같은 RR의 지번 후보 로더로 재사용한다(브랜드 보강은 반환 폐업 행에만 적용). 각 폐업 원본의 location_level·층호를 다시 비교하고, 기간/폐업일은 자기 source batch 기준으로 재산정한다. 결과 수/정보 완전성/제외 계수와 dated/undated를 검증한다. 구 API의 전체/영업 중 집계 의미는 유지한다.
+
+FE는 새 훅을 표·보고서·요약 이미지에 공통 사용하며 폐업일 순서를 유지한다. scope/identity를 URL과 캐시에 포함하고 층·호수가 없으면 조회하지 않는다. 같은 층으로 확대는 명시 선택이며, verified_building은 검증 대기를 반환한다. 구 AI 선택 history는 실제 Summary/보고서 요청·캐시에서 생략한다. 새 폐업 이력의 AI 해석을 연결했다고 주장하지 않는다.
+
+현재 실제 실행: BE 일반2641 통과/Windows권한3 skip(최종 소규모 날짜·메타 보완 전), 새 단위14 통과, 격리 PostGIS2 통과. Ruff·mypy220파일 통과. FE 타입 포함 build/lint와 기존+신규 테스트를 실행했다(최종 건수는 CI/후속 기록에서 확인). 실제 로컬 FE+BE 브라우저7개 통과: 층closed2, unit201호 확정0/미확인37, 명시 범위 확대, 직접 보고서/PDF, 건물 근거 대기, 360/390px 가로 넘침 없음, 명시 층 부재시 이력요청0. 브라우저 실행오류0/구 이력 요청0. 로컬의 미확인37과 운영 표본31을 같다고 가정하지 않는다. 공개 검증과 배포는 아직 수행 전이다.
+
+현재 운영: 물리 건물의 과거 evidence는 검증되지 않아 주소 범위로만 공개하며, 엄격 건물 요청은 데이터 없이 pending_identity다. SEMAS snapshot 건물/층/호수 필드는 과거 폐업 장소의 검증된 매핑이 아니며 원본을 임의 보정하지 않는다. 반경 상권 분석은 기존 집합을 유지한다.
+
+실제 Claude Code 구현 검토 및 최종 CI/배포 증거는 완료 후 아래에 추가한다. 구현 검토자는 MD Read/Edit만 사용하며 테스트/DB/네트워크/앱 수정은 실행하지 않는다.
+
+### 12.1 Claude Code 구현 정적 검토 (2026-11-17, Read/Edit만, 1·2단계 범위)
+
+판정: **PASS, 차단 결함 0**. 테스트/DB/브라우저 수치는 Codex 전달값이며 검토자가 실행하지 않았다. 읽은 범위: BE `services/location_history.py`·`schemas/location_history.py`·`routers/chains.py`, FE `api/locationHistory.ts`·`utils/closedHistory.ts`·`HistorySection.tsx`·`useReportData.ts`·`SummaryPage.tsx`·`ReportPage.tsx`. `store_history.py`는 변경 파일이 아니어서 import 지점만 확인했다.
+
+확인: ① 정규화 상태 `closed`만 남기고 open/other는 `excluded_counts.status`로만 계수하며 위치 판정·coverage에 쓰지 않는다. ② `compare_detail`은 원본 `location_level`·`floor_unit`을 다시 파싱해 4절 표대로 층 정확 일치, unit 범위의 호수 결측=unresolved, 호수만 있는 행=unresolved로 처리한다(호수로 층 추정 없음). ③ `verified_building`은 DB 세션 없이 `pending_identity`·빈 목록·`not_evaluated`이며 주소 범위로 승격하지 않는다. ④ `matched/no_data`와 `partial↔unresolved>0`, dated/undated 합계=total을 스키마와 FE 어댑터가 양쪽에서 검증해 0건과 미확인을 구분한다. ⑤ 기간/폐업일은 자기 source batch의 `data_updated_at` 기준이며 source 불일치·기준일 초과·개업일 역전 폐업일은 undated로 내린다. ⑥ legacy `get_history`는 수정하지 않고 RR 세션의 후보 로더로만 재사용하며, Summary/보고서의 해석 요청은 history 인자 없이 호출한다. ⑦ 화면·보고서가 같은 `closedHistoryParams`→`useLocationHistory` 키를 쓰고 실패는 '이력 없음'이 아닌 실패 문구로 표시한다.
+
+권고(비차단):
+- R-a FE `HistorySection`의 범위 select 값이 `params?.scope ?? 'floor'`라서, URL에 `historyScope=unit`이 남은 상태로 상세가 층만으로 바뀌면 params=null·select는 'floor'로 보여 같은 값 선택이 onChange를 일으키지 않는다. `query.historyScope` 기반 값 또는 상세 변경 시 scope 초기화를 권장한다.
+- R-b 보고서 `HistoryBlock`의 0행 분기가 `h.message`(adapter 산출)를 출력한다. 그 문구가 '이 건물 이력 없음'류이면 R3(0건≠부재)과 충돌하므로 `closedHistoryNotice`만 쓰거나 문구를 확인할 것.
+- R-c 행의 `location_relation`은 legacy가 전체 floor_unit(호수 포함)으로 계산하므로 scope=floor·`unit_ignored`일 때 '다른/미확인 호수'류 라벨이 붙을 수 있다. 범위에 맞춘 라벨 또는 안내를 권장한다.
+- R-d `select(StoreImportBatch)` 전 배치를 요청마다 읽는다. 선택 행의 batch_id로 한정 권장(성능, 의미 동일).
+- R-e `raw[(source, license_no)]`는 같은 RR 스냅샷·(source, license_no) 유일성 전제이며 누락 시 KeyError→500이다. 의도된 안전 실패라면 유지 가능.
+- R-f pending 제목 '같은 건물 식별 정보 확인 중'은 진행 중으로 읽힐 수 있어 '검증 대기'류 표현을 권장한다.
+
 작성일: 2026-11-17 (Asia/Seoul) · 이슈 #209 · 상태: 설계/분석, 구현·데이터 보정·추가 배포 전.
 
 ## 1. 결론과 이번 요구의 적용 기준

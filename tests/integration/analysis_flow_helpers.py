@@ -26,6 +26,7 @@ JIBUN = "서울특별시 마포구 서교동 123-4"
 KEY = "마포구-서교동-123-4"
 PRIVATE = "CANARY_STORE_76"
 ENDPOINTS = {
+    "/api/v2/stores/location-history",
     "/api/address-detail",
     "/api/v2/location-reference",
     "/api/v2/population-reference",
