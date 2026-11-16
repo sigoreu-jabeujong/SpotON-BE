@@ -166,6 +166,10 @@ def validate(items: list[DraftItem], catalog: ReportCatalog, role: Role) -> list
             if unit == "퍼센트":
                 unit = "%"
             unit_values = set().union(*(numbers(m.display) for m in evidence if m.unit == unit))
+            if unit in {"개", "건"}:
+                unit_values.update(
+                    number for metric in evidence for number in numbers(metric.denominator or "")
+                )
             # "최근 12개월" names a source window, not a monthly metric value.
             unit_values.update(
                 Decimal(v.replace(",", ""))
