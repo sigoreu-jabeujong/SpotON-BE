@@ -74,6 +74,8 @@ API_PATHS = frozenset(
         "/api/v2/brands/status",
         "/api/v2/stores/history",
         "/api/v2/stores/location-history",
+        "/api/v3/address-context",
+        "/api/v3/stores/location-history",
         "/api/v2/stores/nearby",
         "/api/v2/stores/snapshot",
         "/api/v2/market/activity",

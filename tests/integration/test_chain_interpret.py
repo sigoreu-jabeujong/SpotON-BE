@@ -155,7 +155,10 @@ def test_v2_ai_truth_matrix_history_and_public_api_agree(db):
     assert provider.calls == 13
 
 
-def test_pending_and_source_drift_cached_revalidation(db):
+def test_pending_and_source_drift_cached_revalidation(db, monkeypatch):
+    # The cluster-wide snapshot may change for unrelated DB activity. This test must
+    # prove source revalidation invalidates cache even with an unchanged snapshot token.
+    monkeypatch.setattr(chain_context, "snapshot_token", lambda *args: "fixed-source-drift-view")
     app, provider = application(db)
     query = {**PARAMS, "brand_scope": "chain", "brand_unknown": "exclude"}
     with TestClient(app) as client:

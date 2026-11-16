@@ -30,6 +30,10 @@ class KakaoAddress(BaseModel):
     main_address_no: str | None = None
     sub_address_no: str | None = None
     mountain_yn: str | None = None
+    road_name: str | None = None
+    underground_yn: str | None = None
+    main_building_no: str | None = None
+    sub_building_no: str | None = None
 
 
 class KakaoDocument(BaseModel):

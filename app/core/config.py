@@ -30,12 +30,13 @@ class Settings(BaseSettings):
     # from the per-statement timeout. This is not an overall HTTP response deadline.
     database_pool_timeout: float = Field(default=10, ge=0.1, le=30)
     database_connection_budget: int = Field(default=8, ge=1, le=1000)
-    database_expected_revision: str = Field(default="0013", pattern=r"^[0-9]{4}$")
+    database_expected_revision: str = Field(default="0014", pattern=r"^[0-9]{4}$")
     web_concurrency: int = Field(default=1, ge=1, le=8)
     risk_boundary_version_id: UUID | None = None
     data_go_kr_service_key: SecretStr | None = None
     kakao_rest_api_key: SecretStr | None = None
     kakao_request_timeout: float = Field(default=5, ge=1, le=10)
+    history_context_signing_key: SecretStr | None = Field(default=None, min_length=32)
     juso_search_key: SecretStr | None = None
     juso_coord_key: SecretStr | None = None
     llm_provider: str = "google"
@@ -57,6 +58,11 @@ class Settings(BaseSettings):
     ai_cache_ttl_seconds: int = Field(default=300, ge=1, le=604800)
     cache_max_entries: int = Field(default=256, ge=1, le=4096)
     cache_max_bytes: int = Field(default=4194304, ge=1024, le=67108864)
+
+    @field_validator("history_context_signing_key", mode="before")
+    @classmethod
+    def blank_history_key_is_unset(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
 
     @model_validator(mode="after")
     def bounded_database_connections(self) -> Self:
