@@ -21,12 +21,14 @@ from app.schemas.chains import (
     ChainSnapshotQuery,
 )
 from app.schemas.common import ApiMeta, ApiResponse, ErrorCode
+from app.schemas.location_history import LocationHistory, LocationHistoryQuery
 from app.schemas.market_activity import MarketActivity
 from app.schemas.responses import VALIDATION_ERROR_RESPONSES
 from app.schemas.risk import Risk
 from app.schemas.stores import HistoryQuery
 from app.services import chain_api
 from app.services.chains import ChainSelection
+from app.services.location_history import get_location_history
 
 router = APIRouter(tags=["brand v2"], responses=VALIDATION_ERROR_RESPONSES)
 T = TypeVar("T", bound=ChainQuery)
@@ -102,6 +104,51 @@ def status_session(request: Request) -> Iterator[Session]:
     if request.query_params:
         raise AppError(ErrorCode.INVALID_PARAM, headers=NO_STORE)
     yield from history_session(request)
+
+
+def location_query(request: Request) -> LocationHistoryQuery:
+    params = request.query_params
+    if any(
+        k not in LocationHistoryQuery.model_fields or len(params.getlist(k)) != 1 for k in params
+    ):
+        raise AppError(ErrorCode.INVALID_PARAM, headers=NO_STORE)
+    try:
+        return LocationHistoryQuery.model_validate(dict(params))
+    except ValidationError:
+        raise AppError(ErrorCode.INVALID_PARAM, headers=NO_STORE) from None
+
+
+def location_session(
+    request: Request, query: Annotated[LocationHistoryQuery, Depends(location_query)]
+) -> Iterator[Session | None]:
+    if query.identity_requirement == "verified_building":
+        yield None
+    else:
+        yield from history_session(request)
+
+
+@router.get(
+    "/stores/location-history",
+    response_model=ApiResponse[LocationHistory],
+    openapi_extra={
+        "parameters": [
+            {
+                "name": key,
+                "in": "query",
+                "required": key != "category",
+                "schema": {"type": "string"},
+            }
+            for key in ("building_key", "floor_unit", "scope", "identity_requirement", "category")
+        ]
+    },
+)
+def location_history(
+    query: Annotated[LocationHistoryQuery, Depends(location_query)],
+    session: Annotated[Session | None, Depends(location_session)],
+    response: Response,
+) -> ApiResponse[LocationHistory]:
+    response.headers.update(NO_STORE)
+    return get_location_history(session, query)
 
 
 @router.get("/brands/status", response_model=ApiResponse[ApiMeta])
