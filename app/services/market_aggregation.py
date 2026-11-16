@@ -71,7 +71,11 @@ def market_aggregation(
         result.append(
             dict(
                 market_code=code,
-                market_name=None if conflict else first.market_name,
+                market_name=None
+                if conflict
+                else total["market_name"]
+                if total
+                else first.market_name,
                 market_type=first.market_type,
                 spatial_relation=first.spatial_relation,
                 source_quarter=quarter,

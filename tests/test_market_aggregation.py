@@ -176,3 +176,16 @@ def test_aggregate_dto_accepts_exact_sums_above_individual_source_int64():
     result = calculate(big=True)
     assert result.market_aggregation.items[0].total_sales == str(4 * (2**63 - 1))
     assert result.top_markets_estimate["total_sales"] == str(12 * (2**63 - 1))
+
+
+def test_current_market_name_never_comes_from_excluded_other_quarter():
+    data = calculate(old=(2, 0)).model_dump(mode="json")
+    stale = next(
+        i
+        for i in data["items"]
+        if i["market_code"] == "3110002" and i["industry_code"] == "CS100001"
+    )
+    stale["market_name"] = "stale-other-quarter-name"
+    validated = SalesBlock.model_validate_json(json.dumps(data))
+    market = next(m for m in validated.market_aggregation.items if m.market_code == "3110002")
+    assert market.market_name == "3110002"
