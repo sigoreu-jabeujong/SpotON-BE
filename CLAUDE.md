@@ -1,4 +1,4 @@
-2026-11-17 현재 요청과 추가 답변: GPT-6.1 Sol/low로 교체하고 GPT가 직접 이점·유의점·종합 해석을 작성한다. 기존 문장 선택 대신 구조화 items를 받고 수치·단위·근거ID·자료그룹을 검증하며 검증 실패 역할은 숨긴다. 의미/인과 전체의 정확성을 보장하지 않는다. 3호출/재시도0/기존 baseline·범위·고정 한계·체크리스트와 참고 카드 제거를 유지한다. 서버70초/FE90초, 새 캐시 prefix v2. docs/gpt-generated-interpretation.md 참고. 키는 기존 서버 비밀 환경을 재사용한다.
+2026-11-17 현재 요청과 추가 답변: GPT-6.1 Sol/low로 교체하고 GPT가 직접 이점·유의점·종합 해석을 작성한다. 기존 문장 선택 대신 구조화 items를 받고 수치·단위·근거ID·자료그룹을 검증하며 검증 실패 역할은 숨긴다. 의미/인과 전체의 정확성을 보장하지 않는다. 3호출/재시도0/기존 baseline·범위·고정 한계·체크리스트와 참고 카드 제거를 유지한다. 서버80초/役할20초/FE90초, 새 캐시 prefix v2. docs/gpt-generated-interpretation.md 참고. 키는 기존 서버 비밀 환경을 재사용한다.
 
 2026-11-17 현재 사용자 승인: AI 해석을 좌측 이점·우측 유의점·아래 수치 해석과 기존 계약 전 체크리스트 3개로 변경한다. 새 `/api/v2/risk/interpret/sections`는 정상 신규 Gemini 3회, 캐시/PDF 0회, 실패 최대 3회이며 공급자/검증 재시도는 없다. 서버 문장 ID만 모델에 보내고 화면 GET baseline과 같은 RR 재조회 결과를 검증한다. 필수 limitations는 역할 실패와 무관하게 반환한다. 주소 context2는 좌표·업종을 바인딩하고 기존 GET의 context1 호환을 유지한다. DB/환경 변경 없이 BE 선배포 후 FE 공개한다. 이번 요청은 Claude Code 검수를 명시했으므로 실제 검수 결과를 기록하며, 추가 테스트는 생략하고 정적 검사·빌드만 수행한다. docs/designs/ai-three-section-implementation.md 및 docs/fe-ai-sections-api.md 참고.
 

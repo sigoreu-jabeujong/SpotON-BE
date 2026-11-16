@@ -58,7 +58,7 @@ from app.services.location_reference import get_location_reference
 from app.services.population_reference import get_population_reference
 from app.services.risk_interpret import InterpretationResources
 
-BUDGET = 70.0
+BUDGET = 80.0
 PREPARATION_BUDGET = 35.0
 ROLES: tuple[Role, ...] = ("advantages", "cautions", "summary")
 PROMPT_SHA = hashlib.sha256(
@@ -260,7 +260,7 @@ class ReportResources:
             config,
             limiter=resources.provider_limiter,
             policy=RetryPolicy(
-                request_timeout=15, time_budget=35, max_retries=0, base_delay=1, max_delay=1
+                request_timeout=20, time_budget=35, max_retries=0, base_delay=1, max_delay=1
             ),
         )
 
@@ -367,7 +367,7 @@ class ReportResources:
                                 return
                             try:
                                 async with asyncio.timeout(
-                                    min(15, max(0, deadline - time.monotonic()))
+                                    min(20, max(0, deadline - time.monotonic()))
                                 ):
                                     request = LlmRequest(
                                         system_instruction=COMMON + " " + INSTRUCTIONS[role],
