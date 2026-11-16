@@ -113,6 +113,7 @@ def test_historical_active_period_does_not_use_future_closure_or_latest_data(
     result = payload(activity_client, as_of="2021-02")
     rows = result["data"]["by_sub_category"]
     assert rows[0]["open_count"] == 2 and rows[0]["avg_operating_months"] == 13
+    assert result["data"]["avg_operating_months"] == 13
     assert result["data"]["recent_12m"]["closed"] == 0
     assert [r["year"] for r in result["data"]["yearly_trend"]] == [2020]
     assert result["meta"]["as_of"] == "2021-02-28"

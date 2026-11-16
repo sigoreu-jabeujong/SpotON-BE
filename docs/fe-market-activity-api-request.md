@@ -31,9 +31,10 @@
 | recent_12m.period | `(YYYY-MM-DD, YYYY-MM-DD]` 실제 기간. 시작일 제외·종료일 포함 |
 | recent_12m.opened/closed | 검증된 인허가 기록의 기간 내 개업/폐업 사건 수. 폐업한 점포 기록도 포함 |
 | yearly_trend | 각 연도1월1일~같은 월일까지의 YTD 비교. 연간 전체로 표기하지 않음 |
+| avg_operating_months | 선택 조건(세부 업종·반경·면적 등)을 모두 적용한 전체 영업 점포의 통합 평균 영업 개월. 점포별 완료 개월 합계 ÷ 전체 open_count를 마지막에 버림. 점포 현황·보고서는 이 값 하나를 표시 |
 | by_sub_category.open_count | T에 유효한 인허가 점포 수. 최신 상태가 폐업이어도 폐업일이T 뒤면 포함 |
 | by_sub_category.avg_operating_months | 위 점포가T까지 경과한 달력 완료 개월의 평균을 버린 정수. 폐업 점포의 수명 평균/생존율이 아님 |
-| avg_operating_months=null | open_count=0인 계산 불가. 정보 없음 표시 |
+| avg_operating_months=null | 통합값은 전체 open_count 합계=0, 업종별 값은 해당 open_count=0일 때 계산 불가. 정보 없음 표시 |
 | avg_operating_months=0 | 실제0개월. 정보 없음과 구분 |
 | sales/living_pop | 이번 릴리스는 항상null. 수치 활성화는 후속 |
 | flags.missing | 요청했지만 미산정인 선택 항목만. 미요청 항목을 결측으로 추가하지 않음 |
@@ -44,7 +45,7 @@
 
 ## 4. 미확인 자료와 meta
 
-meta.denominator는null입니다. 평균의 분모는 업종별open_count이며 활동 응답 전체에 임의의 하나의 분모를 붙이지 않습니다. meta.cohort_size는 폐업 기록을 포함한 활동 집계 대상 수이므로 현재 영업 점포 수로 표시하지 않습니다.
+meta.denominator는null입니다. 통합 평균의 분모는 `sum(by_sub_category.open_count)`, 업종별 평균의 분모는 해당 업종의 open_count입니다. 통합 평균은 원본 점포별 개월 수로 계산하므로 FE에서 업종별 평균을 단순 평균하거나 버림된 업종별 평균에 점포 수를 곱해 재계산하지 않습니다. meta.cohort_size는 폐업 기록을 포함한 활동 집계 대상 수이므로 현재 영업 점포 수로 표시하지 않습니다.
 
 `meta.excluded_no_coord`는 서울 전체의 같은 비공간 조건·T 이전 개업 기록 중 좌표 미확보 수입니다. `excluded_no_coord_scope=seoul_nonspatial_cohort`, `excluded_no_coord_cohort=opened_by_as_of`이며 T 이전 폐업도 포함해 nearby/snapshot의 값과 다를 수 있습니다. 반경 내 누락 수나 점포 총수에 합산하지 않습니다.
 
@@ -71,6 +72,7 @@ collected_at은 실제 전체 수집 완료일 미확인으로null입니다. 오
     "recent_12m": {"period": "(2025-11-08, 2026-11-08]", "opened": 2, "closed": 1},
     "yearly_trend": [{"year": 2025, "opened": 2, "closed": 0}, {"year": 2026, "opened": 2, "closed": 1}],
     "by_sub_category": [{"sub_category": "cafe", "open_count": 3, "avg_operating_months": 12}],
+    "avg_operating_months": 12,
     "sales": null,
     "living_pop": null,
     "flags": {"missing": ["sales"]}

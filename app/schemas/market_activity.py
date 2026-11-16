@@ -68,6 +68,10 @@ class MarketActivity(ActivityModel):
     recent_12m: RecentActivity
     yearly_trend: list[YearlyActivity]
     by_sub_category: list[SubCategoryActivity]
+    avg_operating_months: int | None = Field(
+        ge=0,
+        description="Floor mean of completed months for all selected active stores; null if none.",
+    )
     sales: None = Field(description="This release returns null; see meta.optional_data.")
     living_pop: None = Field(description="This release returns null; see meta.optional_data.")
     flags: ActivityFlags
@@ -78,4 +82,8 @@ class MarketActivity(ActivityModel):
         categories = [row.sub_category for row in self.by_sub_category]
         if years != sorted(set(years)) or len(categories) != len(set(categories)):
             raise ValueError("duplicate or unordered activity groups")
+        if (sum(row.open_count for row in self.by_sub_category) == 0) != (
+            self.avg_operating_months is None
+        ):
+            raise ValueError("average requires a positive denominator")
         return self

@@ -129,6 +129,54 @@ def test_subcategories_and_requested_optional_flags_are_canonical():
     ] == ["cafe"]
 
 
+def test_combined_average_uses_raw_months_and_store_counts_before_rounding():
+    rows = [
+        record("k1", "2024-07-31"),  # 1 completed month
+        record("k2", "2024-06-30"),  # 2 completed months
+        record("k3", "2024-06-30"),
+        record("j1", "2024-01-31", "2025-01-01", sub="japanese"),  # 7 months
+        record("closed", "2020-01-01", "2024-08-31", sub="japanese"),
+    ]
+    result = aggregate_activity(rows, query(sub_category="korean,japanese"), date(2024, 8, 31))
+    assert [r.open_count for r in result.by_sub_category] == [3, 1]
+    assert [r.avg_operating_months for r in result.by_sub_category] == [1, 7]
+    # Raw sum 12 / 4 = 3; averaging category means gives 4, weighting rounded means gives 2.
+    assert result.avg_operating_months == 3
+    assert result.model_dump()["avg_operating_months"] == 3
+    korean = aggregate_activity(rows[:3], query(sub_category="korean"), date(2024, 8, 31))
+    assert korean.avg_operating_months == korean.by_sub_category[0].avg_operating_months == 1
+
+
+@pytest.mark.parametrize("category,sub", [("restaurant", "korean"), ("cafe", "cafe")])
+def test_combined_average_distinguishes_zero_months_and_no_active_stores(category, sub):
+    q = query(category=category)
+    target = date(2024, 8, 31)
+    assert aggregate_activity([], q, target).avg_operating_months is None
+    assert (
+        aggregate_activity(
+            [record("closed", "2020-01-01", "2024-08-31", sub=sub)], q, target
+        ).avg_operating_months
+        is None
+    )
+    assert (
+        aggregate_activity([record("new", "2024-08-31", sub=sub)], q, target).avg_operating_months
+        == 0
+    )
+
+
+def test_combined_average_is_required_nullable_nonnegative_integer_in_openapi():
+    schema = MarketActivity.model_json_schema()
+    assert "avg_operating_months" in schema["required"]
+    assert schema["properties"]["avg_operating_months"]["anyOf"] == [
+        {"minimum": 0, "type": "integer"},
+        {"type": "null"},
+    ]
+    data = aggregate_activity([], query(), date(2024, 8, 31)).model_dump()
+    for invalid in [0, -1, True, 1.5]:
+        with pytest.raises(ValidationError):
+            MarketActivity.model_validate({**data, "avg_operating_months": invalid})
+
+
 @pytest.mark.parametrize(
     "bad",
     [
