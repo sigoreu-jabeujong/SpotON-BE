@@ -50,7 +50,8 @@ from app.services.location_reference import get_location_reference
 from app.services.population_reference import get_population_reference
 from app.services.risk_interpret import InterpretationResources
 
-BUDGET = 35.0
+BUDGET = 60.0
+PREPARATION_BUDGET = 35.0
 ROLES: tuple[Role, ...] = ("advantages", "cautions", "summary")
 PROMPT_SHA = hashlib.sha256(
     canonical({"common": COMMON, "roles": INSTRUCTIONS, "version": PROMPT_VERSION})
@@ -303,12 +304,12 @@ class ReportResources:
                             self.shared,
                             body,
                             pair,
-                            min(deadline, time.monotonic() + 8),
+                            min(deadline, time.monotonic() + PREPARATION_BUDGET),
                             stop,
                         )
 
                 preparation = asyncio.create_task(prepare())
-                async with asyncio.timeout(8):
+                async with asyncio.timeout(PREPARATION_BUDGET):
                     prepared = await asyncio.shield(preparation)
                 cache = self.shared.database.cache.ai
                 cached: CachedReport | None = None
