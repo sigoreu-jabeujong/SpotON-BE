@@ -3,7 +3,7 @@ import json
 import pytest
 
 from app.ai.report_catalog import ReportCatalog
-from app.ai.report_narrative import DraftItem, parse, payload, validate
+from app.ai.report_narrative import DraftItem, adverse_signals, parse, payload, validate
 from app.schemas.ai_report import ReportMetric
 
 
@@ -42,7 +42,7 @@ def item(text="폐업률은 13.2%로 현장 상황과 함께 살펴볼 필요가
 
 
 def test_accepts_new_model_authored_text_without_predefined_candidates():
-    result = validate([item()], catalog(), "cautions")
+    result = validate([item()], catalog(), "advantages")
     assert result[0].text == item().text
     assert result[0].evidence_ids == ["closure"]
 
@@ -50,9 +50,9 @@ def test_accepts_new_model_authored_text_without_predefined_candidates():
 def test_source_window_units_are_allowed_but_value_unit_changes_are_not():
     source = catalog()
     source.metrics[0].label = "최근 12개월 참고 폐업률"
-    assert validate([item("최근 12개월 참고 폐업률은 13.2%입니다.")], source, "cautions")
+    assert validate([item("최근 12개월 참고 폐업률은 13.2%입니다.")], source, "advantages")
     with pytest.raises(ValueError):
-        validate([item("폐업률은 13.2개월입니다.")], source, "cautions")
+        validate([item("폐업률은 13.2개월입니다.")], source, "advantages")
 
 
 def test_indicator_labels_are_vocabulary_but_uncited_values_are_not_evidence():
@@ -62,18 +62,20 @@ def test_indicator_labels_are_vocabulary_but_uncited_values_are_not_evidence():
     source.metrics[1].value = "90"
     source.metrics[1].display = "90%"
     source.metrics[1].unit = "%"
-    assert validate([item("개업 1주년 지표와 다른 개업 집단입니다.")], source, "cautions")
+    assert validate([item("개업 1주년 지표와 다른 개업 집단입니다.")], source, "advantages")
     with pytest.raises(ValueError):
-        validate([item("생존율은 90%입니다.")], source, "cautions")
+        validate([item("생존율은 90%입니다.")], source, "advantages")
 
 
 @pytest.mark.parametrize("unit", ["개", "건"])
 def test_denominator_counts_remain_valid_without_becoming_percentage_values(unit):
     source = catalog()
     source.metrics[0].denominator = "684"
-    assert validate([item(f"계산 대상은 684{unit}이며 폐업률은 13.2%입니다.")], source, "cautions")
+    assert validate(
+        [item(f"계산 대상은 684{unit}이며 폐업률은 13.2%입니다.")], source, "advantages"
+    )
     with pytest.raises(ValueError):
-        validate([item("폐업률은 684%입니다.")], source, "cautions")
+        validate([item("폐업률은 684%입니다.")], source, "advantages")
 
 
 @pytest.mark.parametrize(
@@ -95,7 +97,7 @@ def test_denominator_counts_remain_valid_without_becoming_percentage_values(unit
 )
 def test_rejects_unsupported_claims_and_wrong_role(draft):
     with pytest.raises(ValueError):
-        validate([draft], catalog(), "cautions")
+        validate([draft], catalog(), "advantages")
 
 
 def test_summary_requires_each_group_and_group_specific_evidence():
@@ -124,3 +126,39 @@ def test_payload_contains_metrics_not_ui_names_or_predefined_choices():
     assert "보내지 않을 주소 이름" not in content and "area_label" not in content
     assert "candidates" not in json.loads(content)
     assert len(json.loads(content)["metrics"]) == 3
+
+
+def adverse_catalog(local="13.2", reference="9.6"):
+    from dataclasses import replace
+
+    source = catalog()
+    source.metrics[0].id = "closure_rate_12m"
+    source.metrics[0].value = local
+    source.metrics[0].display = "資料 없음" if local is None else local + "%"
+    comparison = source.metrics[0].model_copy(
+        update={"id": "closure_rate_12m_seoul", "value": reference, "display": reference + "%"}
+    )
+    return replace(source, metrics=source.metrics + (comparison,))
+
+
+def test_cautions_require_both_sides_of_an_actual_adverse_comparison():
+    source = adverse_catalog()
+    assert len(adverse_signals(source)) == 1
+    draft = item(
+        "폐업률은 13.2%로 서울 비교값 9.6%보다 높아 영업 지속 부담에 주의할 신호입니다.",
+        ["closure_rate_12m", "closure_rate_12m_seoul"],
+    )
+    assert validate([draft], source, "cautions")
+    with pytest.raises(ValueError):
+        validate([item("표본을 현장에서 확인하세요.", ["closure_rate_12m"])], source, "cautions")
+
+
+@pytest.mark.parametrize("value", ["6.8", "9.6", None])
+def test_no_adverse_signal_means_empty_cautions_instead_of_generic_disclaimers(value):
+    source = adverse_catalog(value)
+    assert adverse_signals(source) == []
+    assert validate([], source, "cautions") == []
+    with pytest.raises(ValueError):
+        validate(
+            [item("실제 고객 수가 아니므로 확인하세요.", ["closure_rate_12m"])], source, "cautions"
+        )

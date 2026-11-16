@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.ai.report_catalog import ReportCatalog
 from app.schemas.ai_report import ReportText, Role
 
-VERSION = "ai-generated-interpretation-v2.1"
+VERSION = "ai-generated-interpretation-v2.2"
 COMMON = (
     "당신은 공공데이터를 해석하는 한국어 분석가입니다. 제공된 metrics를 직접 읽어 "
     "예비창업자가 이해할 수 있는 새로운 해석 문장을 작성하세요. 사전 문장 선택이나 "
@@ -23,21 +23,37 @@ COMMON = (
     "최신 원천 기록이고 공실/물리적 동일 점포를 보장하지 않습니다. "
     "창업 성공/실패·수익·미래 매출·고객 전환을 예측하거나 계약/투자를 권고하지 마세요. "
     "유리/불리한 방향은 실제 비교 가능한 지표로만 설명하고 정보가 부족하면 명시하세요. "
+    "본문은 수치와 그 의미·운영상 시사점에 집중하세요. 데이터 한계·개별 점포 매출 아님·"
+    "실제 고객 수 아님·자료 시점 차이·현장 확인 필요 등 공통 주의 문구는 UI의 별도 설명에 "
+    "제공되므로 본문에서 반복하지 마세요. 한계를 지키되 매 문단을 경고나 "
+    "확인하세요로 끝내지 마세요. "
+    "관측 사실과 해석 가설을 구별하고 해석은 가능성이 있어요/시사해요/검토할 수 있어요로 "
+    "표현하세요. 확률 근거 없이 가능성이 높다고 단정하거나 상권 유형을 확정하지 마세요. "
     "URL·마크다운·원천 식별자·주소·모델 이름은 쓰지 마세요. 정해진 JSON만 반환하세요."
 )
 INSTRUCTIONS: dict[Role, str] = {
     "advantages": (
-        "이점: 자료에서 확인 가능한 유리한 특성/검토에 활용할 점을 최대 3개 작성하세요. "
+        "이점: 자료에서 확인 가능한 유리한 특성과 운영에 활용할 점을 최대 3개 작성하세요. "
         "이점 근거가 없으면 빈 items로 반환하고 억지 장점을 만들지 마세요. group_id는 null입니다."
     ),
     "cautions": (
-        "유의점: 불리한 비교와 자료 범위/해석의 한계를 최대 3개로 우선순위화하세요. "
-        "막연한 위험을 만들지 마세요. group_id는 null입니다."
+        "유의점은 이점의 반대인 불리한 신호입니다. adverse_signals에 제공된 불리한 비교만 "
+        "최대 3개로 설명하세요. 예: 폐업률이 서울 비교값보다 높으면 폐업 부담을, 생존율이 "
+        "낮으면 영업 지속의 어려움을 주의할 신호로 설명하세요. 각 항목에 해당 비교의 "
+        "evidence_ids 전체를 인용하세요. 자료 한계/현장 확인/일반적인 면책 문구로 채우지 "
+        "마세요. adverse_signals가 비어 있으면 items를 빈 배열로 반환하세요. group_id는 null입니다."
     ),
     "summary": (
-        "종합 해석: 제공된 groups 각각에 대해 정확히 한 문단씩 작성하세요. 대표 수치를 짧게 "
-        "인용하고 의미와 현장에서 확인할 점을 연결하세요. 수치를 전부 나열하지 마세요. "
-        "각 문단의 group_id와 근거는 해당 그룹으로만 연결하세요."
+        "수치 해석: 각 groups에 정확히 한 문단씩 '대표 수치/비교 → 가능한 특성 → 운영상 "
+        "시사점'으로 작성하세요. 가설의 조건부 표현을 유지하고 수치 나열에 그치지 마세요. "
+        "예: 야간 생활인구가 주간보다 많다면 야간 체류·주거 수요와 연결된 생활권일 가능성을 "
+        "설명하고 저녁 시간대 서비스·영업시간 구성의 검토 의미를 연결할 수 있어요. 야간 "
+        "생활인구만으로 유흥/먹자 상권이나 야간 소비/방문이 활발하다고 확정하면 안 됩니다. "
+        "매출 참고값은 시장의 선택 업종 매출 규모·점포 구성을 해석하되 개별 점포 예상 수익으로 "
+        "바꾸지 마세요. 폐업/생존 지표는 비교 방향을 운영 지속 부담과 연결하고 인과를 "
+        "단정하지 마세요. 공통 한계·자료 분기 확인·현장 확인 권고를 반복하지 마세요. "
+        "자료가 없는 그룹은 해석 보류를 짧게 명시하고 추측하지 마세요. 각 문단의 group_id와 "
+        "근거는 해당 그룹으로만 연결하세요."
     ),
 }
 
@@ -96,9 +112,40 @@ def payload(catalog: ReportCatalog, role: Role) -> str:
             "groups": list(catalog.group_ids),
             "metrics": metrics,
             "limitations": [m.model_dump(mode="json") for m in catalog.mandatory_cautions],
+            "adverse_signals": adverse_signals(catalog),
         },
         ensure_ascii=False,
     )
+
+
+def adverse_signals(catalog: ReportCatalog) -> list[dict[str, Any]]:
+    """Only observed adverse comparisons; no arbitrary competition/sales cutoffs."""
+    metrics = {m.id: m for m in catalog.metrics}
+    signals: list[dict[str, Any]] = []
+    for key, compare, higher_bad in (
+        ("closure_rate_12m", "closure_rate_12m_seoul", True),
+        ("survival_rate_1y", "survival_rate_1y_seoul", False),
+        ("survival_rate_3y", "survival_rate_3y_seoul", False),
+        ("closed", "opened", True),
+    ):
+        local, reference = metrics.get(key), metrics.get(compare)
+        if (
+            local is None
+            or reference is None
+            or local.value is None
+            or reference.value is None
+            or local.period != reference.period
+            or local.unit != reference.unit
+            or local.status not in {"fact", "ready"}
+            or reference.status not in {"fact", "ready"}
+        ):
+            continue
+        a, b = Decimal(local.value), Decimal(reference.value)
+        if (a > b) if higher_bad else (a < b):
+            signals.append(
+                {"evidence_ids": [key, compare], "relationship": "higher" if a > b else "lower"}
+            )
+    return signals
 
 
 NUMBER = re.compile(r"(?<![A-Za-z])\d[\d,]*(?:\.\d+)?")
@@ -131,6 +178,11 @@ def validate(items: list[DraftItem], catalog: ReportCatalog, role: Role) -> list
             raise ValueError("unsafe narrative")
         if any(key not in metrics for key in item.evidence_ids):
             raise ValueError("unknown narrative evidence")
+        if role == "cautions" and not any(
+            set(signal["evidence_ids"]) <= set(item.evidence_ids)
+            for signal in adverse_signals(catalog)
+        ):
+            raise ValueError("caution lacks an adverse comparison")
         evidence = [metrics[key] for key in item.evidence_ids]
         if role == "summary" and any(m.group != item.group_id for m in evidence):
             raise ValueError("wrong narrative group")
