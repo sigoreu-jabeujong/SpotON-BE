@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-16 #178은 [생활인구·주야간 실제 연결과 부분 공개자료 설계](docs/designs/feat178-population-api-partial.md)다. 원천별 동일 공개 구성24시간 비교를 새 GET `/api/v2/population-reference`로 제공하는 후속안이며 전체 인구/기존 Risk·living_pop·AI 계약과 분리한다. 비공개/부재를0으로 채우지 않고 source별 부분 참고값·선택 편향/출처·T를 표시한다. #176 전체 인구 승인 계획은 보존하되 부분 산술은0013/8표를 선행조건으로 삼지 않는다. [FE 전달안](docs/fe-population-reference-api-request.md)을 BE에만 작성했고 이번에는 문서만 변경한다. 앱/FE/DB0012/환경/서버/Render/Task는 미변경이며 구현·화면 활성화/산정률 개선을 완료로 표시하지 않는다.
+
 2026-11-16 #176은 [브랜드 갱신·조건부 지표 실제 연결 설계](docs/designs/feat176-reference-activation.md) 문서 작업이다. 다음 구현은 브랜드 clone/새 publication·복구 검증과 별도 source 근거/승인 publication·RSS loader·새 reference API/AI다. 제안0013·8표·source epoch/vector·10원천trigger·reader역할·새경로는 아직 구현/적용하지 않았다. 기존0012·source unverified·API/AI pending·FE/.env/서버/Render/Task는 유지한다. 공식 근거는 hash/코드 PASS로 대체하지 않으며 설계 완료와 기능 활성화를 구분한다.
 
 2026-11-16 #174는 [브랜드 검토 목록 보강·조건부 통계 연결 기반](docs/designs/feat174-analysis-foundations.md)이다. 검토 seed17개·지점 parent 오흡수/중복 catalog 이름 방어와 chain-membership-estimate-v2를 따른다. 매출/상권변화의 분기 선택·typed 원천 투영과 인구의 독립 기대 구성/격자별 source-hour 완전성 조립→기존 주야간 산술을 구현한다. 내부 계산은 source 검증/공개 활성화가 아니며 두 고정 플래그는false다. 공식 기간·도형·합산/부재/격자 근거 부족으로 API/AI pending과 immutable unverified를 유지한다. 기존 공개 세대를 자동 교체하지 않으며 FE/schema0012/.env/원본·운영 DB/Render/Task/runtime은 유지한다.
