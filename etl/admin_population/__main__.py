@@ -2,6 +2,7 @@
 
 import argparse
 import json
+from datetime import date
 from pathlib import Path
 
 from etl.admin_population.source import inspect_sources
@@ -13,8 +14,27 @@ def main() -> int:
     parser.add_argument("--population-sha256", required=True)
     parser.add_argument("--boundary-zip", type=Path, required=True)
     parser.add_argument("--boundary-sha256", required=True)
+    parser.add_argument("--observation-date", type=date.fromisoformat)
+    parser.add_argument("--write", action="store_true")
+    parser.add_argument("--quarantine", type=Path)
     args = parser.parse_args()
     try:
+        if args.write and args.observation_date is None:
+            raise ValueError("observation date required")
+        if args.observation_date is not None:
+            from etl.admin_population.runner import run_import
+
+            report = run_import(
+                args.population_zip,
+                args.population_sha256,
+                args.boundary_zip,
+                args.boundary_sha256,
+                args.observation_date,
+                write=args.write,
+                quarantine=args.quarantine,
+            )
+            print(json.dumps(report, ensure_ascii=True))
+            return 0
         report = inspect_sources(
             args.population_zip,
             args.population_sha256,

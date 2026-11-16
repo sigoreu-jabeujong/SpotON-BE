@@ -1,5 +1,11 @@
 """Spot:ON 데이터 모델."""
 
+from app.models.admin_population import (
+    AdminArea,
+    AdminBoundaryVersion,
+    AdminPopulationHour,
+    AdminPopulationVersion,
+)
 from app.models.brand import (
     Brand,
     BrandCatalogVersion,
@@ -28,6 +34,10 @@ from app.models.store import Store
 from app.models.store_import_batch import StoreImportBatch
 
 __all__ = [
+    "AdminArea",
+    "AdminBoundaryVersion",
+    "AdminPopulationHour",
+    "AdminPopulationVersion",
     "ChainPublication",
     "ChainPublicationBrand",
     "ChainPublicationState",
