@@ -136,6 +136,12 @@ def validate(items: list[DraftItem], catalog: ReportCatalog, role: Role) -> list
             raise ValueError("wrong narrative group")
         # Deliberately exclude IDs/source identifiers from numeric evidence.
         allowed: set[Decimal] = set()
+        cited_groups = {metric.group for metric in evidence}
+        # Indicator names (e.g. 1st/3rd anniversary) are group vocabulary;
+        # their uncited numeric values are still never admitted.
+        for metric in catalog.metrics:
+            if metric.group in cited_groups:
+                allowed.update(numbers(metric.label))
         for metric in evidence:
             for value in (
                 metric.value,
