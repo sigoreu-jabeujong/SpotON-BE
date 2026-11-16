@@ -179,8 +179,11 @@ def test_previous_weighted_payload_remains_readable():
     avg = payload["per_store_average"]
     avg.pop("distribution")
     avg.pop("representative_method")
+    avg.pop("graph_basis")
+    avg.pop("contributions")
     for group in avg["groups"]:
         group.pop("distribution")
+        group.pop("contributions")
     assert SalesBlock.model_validate(payload).per_store_average["metric"]["value"] == "10"
 
 
@@ -236,5 +239,52 @@ def test_cannot_drop_valid_member_and_recompute_representative():
     avg = payload["per_store_average"]
     avg.update(listed_item_count=2, excluded_counts={"store_row_missing": 1})
     avg["groups"][0].update(candidate_item_count=2, excluded_counts={"store_row_missing": 1})
+    with pytest.raises(ValidationError):
+        SalesBlock.model_validate(payload)
+
+
+def test_pooled_contributions_use_one_total_denominator_and_sum_to_mean():
+    from fractions import Fraction
+
+    result = calculate(
+        [item("3110001", 100), item("3110002", 900), item("3110003", 700, "20253")],
+        [row("3110001", 10), row("3110002", 30), row("3110003", 7, "20253")],
+    )
+    avg = result.per_store_average
+    assert avg["representative_method"] == "pooled_sales_over_total_stores_v1"
+    assert avg["metric"]["value"] == "25"
+    assert [c["metric"]["value"] for c in avg["contributions"]] == ["2.5", "22.5"]
+    assert all(c["metric"]["denominator"] == "40" for c in avg["contributions"])
+    assert sum(
+        (
+            Fraction(int(c["metric"]["numerator"]), int(c["metric"]["denominator"]))
+            for c in avg["contributions"]
+        ),
+        Fraction(0),
+    ) == Fraction(1000, 40)
+    assert avg["groups"][1]["contributions"][0]["metric"]["denominator"] == "7"
+
+
+@pytest.mark.parametrize("tamper", ["denominator", "value", "missing", "projection", "basis"])
+def test_rejects_wrong_common_denominator_and_contribution_projection(tamper):
+    from copy import deepcopy
+
+    from pydantic import ValidationError
+
+    payload = calculate(
+        [item("3110001", 100), item("3110002", 900)], [row("3110001", 10), row("3110002", 30)]
+    ).model_dump()
+    avg = payload["per_store_average"]
+    avg["contributions"] = deepcopy(avg["contributions"])
+    if tamper == "denominator":
+        avg["groups"][0]["contributions"][0]["metric"]["denominator"] = "10"
+    elif tamper == "value":
+        avg["groups"][0]["contributions"][0]["metric"]["value"] = "999"
+    elif tamper == "missing":
+        avg["groups"][0]["contributions"].pop()
+    elif tamper == "projection":
+        avg["contributions"] = []
+    else:
+        avg["graph_basis"] = "different"
     with pytest.raises(ValidationError):
         SalesBlock.model_validate(payload)

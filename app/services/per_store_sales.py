@@ -190,6 +190,16 @@ def attach(
             total_sales=str(s) if used else None,
             total_store_count=str(n) if used else None,
             metric=metric(s, n) if used else None,
+            contributions=[
+                dict(
+                    market_code=i.market_code,
+                    industry_code=i.industry_code,
+                    source_quarter=quarter,
+                    metric=metric(int(i.metric.value), n),
+                )
+                for i in used
+                if i.metric
+            ],
             distribution=distribution(
                 [
                     (int(i.metric.value), int(i.store_reference["total_stores"]))
@@ -251,7 +261,9 @@ def attach(
         total_store_count=selected["total_store_count"] if selected else None,
         metric=selected["metric"] if selected else None,
         distribution=selected["distribution"] if selected else None,
-        representative_method="median_of_reference_per_store_ratios_v1",
+        representative_method="pooled_sales_over_total_stores_v1",
+        graph_basis="each_sales_over_group_total_stores_v1",
+        contributions=selected["contributions"] if selected else [],
         groups=groups,
     )
     return SalesBlock.model_validate(

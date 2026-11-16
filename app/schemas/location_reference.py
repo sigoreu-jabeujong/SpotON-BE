@@ -163,10 +163,14 @@ class SalesBlock(ReferenceModel):
             has_distribution = "representative_method" in avg or "distribution" in avg
             if has_distribution and "distribution" not in avg:
                 raise ValueError("missing representative distribution")
-            if has_distribution and avg.get("representative_method") != (
-                "median_of_reference_per_store_ratios_v1"
+            if has_distribution and avg.get("representative_method") not in (
+                "median_of_reference_per_store_ratios_v1",
+                "pooled_sales_over_total_stores_v1",
             ):
                 raise ValueError("invalid representative method")
+            pooled = avg.get("representative_method") == "pooled_sales_over_total_stores_v1"
+            if pooled and avg.get("graph_basis") != "each_sales_over_group_total_stores_v1":
+                raise ValueError("invalid pooled graph basis")
             if avg["listed_item_count"] != len(self.items) or (
                 avg["included_item_count"] + sum(avg["excluded_counts"].values()) != len(self.items)
             ):
@@ -269,8 +273,21 @@ class SalesBlock(ReferenceModel):
                         metric(s, n),
                     ):
                         raise ValueError("invalid average value")
+                    if pooled and group.get("contributions") != [
+                        dict(
+                            market_code=i.market_code,
+                            industry_code=i.industry_code,
+                            source_quarter=i.source_quarter,
+                            metric=metric(int(i.metric.value), n),
+                        )
+                        for i in used
+                        if i.metric
+                    ]:
+                        raise ValueError("invalid pooled contributions")
                 elif group["metric"] is not None or group.get("distribution") is not None:
                     raise ValueError("invalid empty average")
+                elif pooled and group.get("contributions") != []:
+                    raise ValueError("invalid empty contributions")
             primary = next(
                 (g for g in avg["groups"] if g["source_quarter"] == avg["primary_quarter"]), None
             )
@@ -279,6 +296,8 @@ class SalesBlock(ReferenceModel):
                 raise ValueError("invalid primary count projection")
             if has_distribution:
                 projection_keys.append("distribution")
+            if pooled and avg.get("contributions") != (primary["contributions"] if primary else []):
+                raise ValueError("invalid contribution projection")
             for key in projection_keys:
                 if avg[key] != (primary[key] if primary else None):
                     raise ValueError("invalid average projection")

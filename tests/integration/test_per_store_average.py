@@ -50,5 +50,15 @@ def test_actual_api_store_join_and_weighted_summary(reference_db):  # noqa: F811
     actual = avg["distribution"]["median"]
     assert Fraction(int(actual["numerator"]), int(actual["denominator"])) == expected
     assert avg["distribution"]["sample_count"] == len(included)
+    assert avg["representative_method"] == "pooled_sales_over_total_stores_v1"
+    assert len(avg["contributions"]) == len(included)
+    assert all(c["metric"]["denominator"] == str(n) for c in avg["contributions"])
+    assert sum(
+        (
+            Fraction(int(c["metric"]["numerator"]), int(c["metric"]["denominator"]))
+            for c in avg["contributions"]
+        ),
+        Fraction(0),
+    ) == Fraction(s, n)
     assert body["meta"]["items_additive"] is False
     assert any(r["id"] == "store-counts" for r in body["meta"]["source_refs"])
