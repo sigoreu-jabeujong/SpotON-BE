@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-17 #208 [목록 합계 기준 평균·막대](docs/designs/feat208-sales-pooled-contributions.md)는 최신 사용자 선택이다. 대표S/N과 각 막대sᵢ/N에 동일한 전체 점포 수N을 쓴다. 새 대표 marker/graph_basis/contributions를 추가 검증하고 기존 중앙값 distribution은 호환 보존한다. DB/환경·원자료·AI/인구 계약 변경 없이 BE 선배포→FE 정상 공개 PR로 적용한다.
+
 
 사용자 후속 승인 #202는 [주소 상세 구현·배포](docs/designs/feat202-address-implementation.md)다. POST /api/address-detail은 DB/외부API 없이 기존 파서로 정규화한다. v1/v2 이력에 독립 location_relation을 추가하고 기존 location_match·AI 집계·0013/원본/환경은 보존한다. FE 후보 확인·복원·검증과 함께 BE 선배포 후 FE 공개 release를 검증한다.
 
