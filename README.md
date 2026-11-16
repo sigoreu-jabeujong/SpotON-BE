@@ -277,6 +277,14 @@ uv run --locked --extra dev python -m etl.brands.apply --snapshot "<snapshot.jso
 
 현재2025원천11,167행·정확이름근거6,839건을명시적용했습니다. 실제DB의원래14테이블전체행/공간hash·원본snapshot은동일하고모델차이0입니다. localhost8000에서도추정응답을확인했습니다. 실제LLM추가송신/최신원천수집·자동일정·공개배포는하지않습니다. [판정 적용 설계](docs/designs/feat57-franchise-classification.md)와 [FE 변경 요청서](docs/fe-franchise-classification-api-request.md)를따르며FE/CLAUDE.md 반영은담당자대기입니다.
 
+## 브랜드 보강과 조건부 통계 연결 기반
+
+#174는 검토 브랜드를5개에서17개로 늘렸습니다. 이디야·메가MGC커피·빽다방·할리스·블루보틀과 검토된 음식점 브랜드, 프릳츠·앤트러사이트를 포함합니다. 프릳츠의 점 없는 매장명은 공식 전체 표기만 허용하며 공정위 전체 목록의 지점명/퍼지 매칭은 추가하지 않습니다. 다른 catalog 세부 브랜드를 parent 브랜드로 흡수하지 않고, 검토 alias와 중복 catalog 식별자가 충돌하면 재계산을 거절합니다. 규칙은 `chain-membership-estimate-v2`이며 기존 공개 세대를 자동 갱신하지 않습니다.
+
+내부 `app.analysis.market_reference`는 명시한 검증 기간 목록에서 현재/과거 분기를 고르고 매출 원천값·상권변화 유형을 별도 typed 결과로 투영합니다. 실제0/null/행 부재를 구분하며 통계에 인허가·브랜드 필터를 적용하지 않습니다. `app.analysis.population_totals`는 독립적으로 입증된 기대 구성과 같은 관측일/버전/격자 집합의 원천을 대조해 완전한 시간만 합산하고 기존 주야간 계산기로 전달합니다. 비공개/누락/부재는0으로 대체하지 않습니다.
+
+두 모듈은 DB/HTTP/공개 API·AI에 연결되지 않은 기반입니다. `source_validation_performed=false`, `public_activation_ready=false`이며 입력의 공식 정당성을 검증하는 기능이 아닙니다. 매출 기간·분기별 도형 적용과 생활인구 구성의 공식 근거가 확보될 때까지 기존 공개 pending을 유지합니다. [설계·실제 검수·검증과 필요한 자료](docs/designs/feat174-analysis-foundations.md)를 따릅니다.
+
 ## 개인정보 없는 운영 로그
 
 API·ETL·LLM의 추가 운영 이벤트는 한 줄 JSON으로 **stderr**에 기록합니다. 기존 ETL stdout 결과와 API 본문·헤더는 유지합니다. 원문을 마스킹해 저장하는 방식 대신 고정 필드·허용 건수만 선택하며 주소·좌표·건물/층호·헤더/IP·원자료·프롬프트/출력·키를 기록하지 않습니다.

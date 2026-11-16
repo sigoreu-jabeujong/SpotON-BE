@@ -127,6 +127,7 @@ def extend_catalog(
     counts = Counter(b.management_no for b in rows)
     names = Counter(b.normalized_name for b in rows)
     approved = {ref: b for b in seeds for ref in b.ftc_refs}
+    seed_names = {normalize_name(alias) for seed in seeds for alias in seed.aliases}
     result = list(seeds)
     for row in rows:
         ref = (row.management_no, row.headquarter_no)
@@ -136,6 +137,9 @@ def extend_catalog(
             if row.normalized_name not in {normalize_name(a) for a in seed.aliases}:
                 fail("approved_catalog_alias_changed")
             continue
+        if row.normalized_name in seed_names and names[row.normalized_name] > 1:
+            # Duplicate catalog identities must not disappear behind a reviewed name.
+            fail("ambiguous_reviewed_catalog_name")
         if (
             row.industry != "외식"
             or counts[row.management_no] != 1

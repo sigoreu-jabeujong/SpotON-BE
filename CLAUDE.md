@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-16 #174는 [브랜드 검토 목록 보강·조건부 통계 연결 기반](docs/designs/feat174-analysis-foundations.md)이다. 검토 seed17개·지점 parent 오흡수/중복 catalog 이름 방어와 chain-membership-estimate-v2를 따른다. 매출/상권변화의 분기 선택·typed 원천 투영과 인구의 독립 기대 구성/격자별 source-hour 완전성 조립→기존 주야간 산술을 구현한다. 내부 계산은 source 검증/공개 활성화가 아니며 두 고정 플래그는false다. 공식 기간·도형·합산/부재/격자 근거 부족으로 API/AI pending과 immutable unverified를 유지한다. 기존 공개 세대를 자동 교체하지 않으며 FE/schema0012/.env/원본·운영 DB/Render/Task/runtime은 유지한다.
+
 2026-11-16 #172 [B2 연결 사전 점검](docs/designs/feat172-b2-preflight.md)은 metadata 세 필드의 기본 offline preview와 명시 execute의 Native v4 auth/list_buckets 두 읽기 작업이다. .env/키 저장/캐시·객체/버킷 변경·전송·원격 만료는 하지 않는다. scope/host/region/private·권한 상한과 body/time 예산, proxy/redirect/retry 차단을 검증한다. listBuckets가 최소 권한이며 부족한 향후 파일 grant는 backup_capabilities_complete=false로 구분한다. 공유 보고 객체로 최외곽 중단에도 기존 phase/모드/요청 수를 유지한다. 실제 계정/키는 없으며 MockTransport 결과를 공급자 연결 성공으로 표시하지 않는다. FE/API/0012/의존성/환경/Task/runtime·운영 DB/Render는 유지한다.
 
 2026-11-16 #170은 실제 Claude MD Read/Edit 검토 PASS 후 중단 보고/경합 검증과 문서를 보완한다. cleanup/계수 중 추가 인터럽트·예외에도 생성/부분 효과를 보존하고, CLI 최외곽 실패도 execute 여부에 맞춰 보수적으로 보고한다. same_file·source_path/source_ownership/source_missing을 구분하며 공개 API는 유지한다. next_expiry_at은 복원 기한이 아니며 모든 세대 cursor를 현재 시각으로 재검증한다. orphan_files는 소유 파일 수가 아닌 출력 경로 점유/미확인 수이고 계수 중단/기본0도 부재의 증명이 아니다. [실제 검토·권고 결정·검증](docs/designs/feat168-operation-log-export.md)을 따르며 FE/DB/환경/Task/원격 전송은 바꾸지 않는다.
