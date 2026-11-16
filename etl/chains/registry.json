@@ -1,10 +1,320 @@
 {
   "schema": "chain-registry-v1",
   "brands": [
-    {"key":"starbucks-kr","name":"스타벅스","aliases":["스타벅스","Starbucks"],"legal_prefixes":["(주)에스씨케이컴퍼니","주식회사 에스씨케이컴퍼니"],"source_url":"https://www.starbucks.co.kr/store/store_map.do","reviewed_on":"2026-11-15","branch_patterns":true},
-    {"key":"pascucci-kr","name":"파스쿠찌","aliases":["파스쿠찌","PASCUCCI","카페파스쿠찌","카페 파스쿠찌"],"legal_prefixes":["(주)파리크라상","주식회사 파리크라상"],"source_url":"https://www.pascucci.co.kr/store/storeList.asp","reviewed_on":"2026-11-15","branch_patterns":true},
-    {"key":"cocoichibanya-kr","name":"코코이찌방야","aliases":["코코이찌방야","CoCoICHIBANYA"],"legal_prefixes":["(주)농심","주식회사 농심"],"source_url":"https://www.cocoichibanya.co.kr/","reviewed_on":"2026-11-15","branch_patterns":true,"ftc_refs":[["BRD_20100100189","JNG_000555"]]},
-    {"key":"bonjuk-kr","name":"본죽","aliases":["본죽"],"approved_short_aliases":["본죽"],"source_url":"https://www.bonif.co.kr/brand/store","reviewed_on":"2026-11-15","branch_patterns":true,"ftc_refs":[["BRD_20080100243","JNG_018965"]]},
-    {"key":"bonjuk-bibimbap-kr","name":"본죽&비빔밥","aliases":["본죽&비빔밥","본죽앤비빔밥","본죽&비빔밥 cafe","본죽&비빔밥cafe"],"source_url":"https://www.bonif.co.kr/brand/store","reviewed_on":"2026-11-15","branch_patterns":true,"ftc_refs":[["BRD_20141221","JNG_018965"]]}
+    {
+      "key": "starbucks-kr",
+      "name": "스타벅스",
+      "aliases": [
+        "스타벅스",
+        "Starbucks"
+      ],
+      "legal_prefixes": [
+        "(주)에스씨케이컴퍼니",
+        "주식회사 에스씨케이컴퍼니"
+      ],
+      "source_url": "https://www.starbucks.co.kr/store/store_map.do",
+      "reviewed_on": "2026-11-15",
+      "branch_patterns": true
+    },
+    {
+      "key": "pascucci-kr",
+      "name": "파스쿠찌",
+      "aliases": [
+        "파스쿠찌",
+        "PASCUCCI",
+        "카페파스쿠찌",
+        "카페 파스쿠찌"
+      ],
+      "legal_prefixes": [
+        "(주)파리크라상",
+        "주식회사 파리크라상"
+      ],
+      "source_url": "https://www.pascucci.co.kr/store/storeList.asp",
+      "reviewed_on": "2026-11-15",
+      "branch_patterns": true
+    },
+    {
+      "key": "cocoichibanya-kr",
+      "name": "코코이찌방야",
+      "aliases": [
+        "코코이찌방야",
+        "CoCoICHIBANYA"
+      ],
+      "legal_prefixes": [
+        "(주)농심",
+        "주식회사 농심"
+      ],
+      "source_url": "https://www.cocoichibanya.co.kr/",
+      "reviewed_on": "2026-11-15",
+      "branch_patterns": true,
+      "ftc_refs": [
+        [
+          "BRD_20100100189",
+          "JNG_000555"
+        ]
+      ]
+    },
+    {
+      "key": "bonjuk-kr",
+      "name": "본죽",
+      "aliases": [
+        "본죽"
+      ],
+      "approved_short_aliases": [
+        "본죽"
+      ],
+      "source_url": "https://www.bonif.co.kr/brand/store",
+      "reviewed_on": "2026-11-15",
+      "branch_patterns": true,
+      "ftc_refs": [
+        [
+          "BRD_20080100243",
+          "JNG_018965"
+        ]
+      ]
+    },
+    {
+      "key": "bonjuk-bibimbap-kr",
+      "name": "본죽&비빔밥",
+      "aliases": [
+        "본죽&비빔밥",
+        "본죽앤비빔밥",
+        "본죽&비빔밥 cafe",
+        "본죽&비빔밥cafe"
+      ],
+      "source_url": "https://www.bonif.co.kr/brand/store",
+      "reviewed_on": "2026-11-15",
+      "branch_patterns": true,
+      "ftc_refs": [
+        [
+          "BRD_20141221",
+          "JNG_018965"
+        ]
+      ]
+    },
+    {
+      "key": "ediya-kr",
+      "name": "이디야커피",
+      "aliases": [
+        "이디야커피",
+        "이디야",
+        "EDIYA",
+        "EDIYA COFFEE"
+      ],
+      "source_url": "https://www.ediya.com/contents/find_store.html",
+      "reviewed_on": "2026-11-16",
+      "branch_patterns": true,
+      "ftc_refs": [
+        [
+          "BRD_20080100014",
+          "JNG_000002"
+        ]
+      ]
+    },
+    {
+      "key": "mega-mgc-kr",
+      "name": "메가MGC커피",
+      "aliases": [
+        "메가MGC커피",
+        "메가커피",
+        "메가엠지씨커피",
+        "메가엠지씨커피(MEGA MGC COFFEE)",
+        "MEGA MGC COFFEE"
+      ],
+      "source_url": "https://www.mega-mgccoffee.com/store/find/",
+      "reviewed_on": "2026-11-16",
+      "branch_patterns": true,
+      "ftc_refs": [
+        [
+          "BRD_20160628",
+          "JNG_001285"
+        ]
+      ]
+    },
+    {
+      "key": "paikdabang-kr",
+      "name": "빽다방",
+      "aliases": [
+        "빽다방"
+      ],
+      "source_url": "https://paikdabang.com/",
+      "reviewed_on": "2026-11-16",
+      "branch_patterns": true,
+      "ftc_refs": [
+        [
+          "BRD_20090100502",
+          "JNG_010469"
+        ]
+      ],
+      "legal_prefixes": [
+        "(주)더본코리아",
+        "주식회사 더본코리아"
+      ]
+    },
+    {
+      "key": "hollys-kr",
+      "name": "할리스",
+      "aliases": [
+        "할리스",
+        "할리스커피",
+        "HOLLYS"
+      ],
+      "source_url": "https://www.hollys.co.kr/store/korea/korStore.do",
+      "reviewed_on": "2026-11-16",
+      "branch_patterns": true,
+      "ftc_refs": [
+        [
+          "BRD_20080100199",
+          "JNG_000064"
+        ]
+      ]
+    },
+    {
+      "key": "bluebottle-kr",
+      "name": "블루보틀",
+      "aliases": [
+        "블루보틀",
+        "블루보틀커피",
+        "BLUE BOTTLE",
+        "BLUE BOTTLE COFFEE"
+      ],
+      "source_url": "https://kr.bluebottlecoffee.com/pages/cafe-list",
+      "reviewed_on": "2026-11-16",
+      "branch_patterns": true
+    },
+    {
+      "key": "newmaul-kr",
+      "name": "새마을식당",
+      "aliases": [
+        "새마을식당"
+      ],
+      "source_url": "https://newmaul.com/",
+      "reviewed_on": "2026-11-16",
+      "branch_patterns": true,
+      "ftc_refs": [
+        [
+          "BRD_20080100208",
+          "JNG_010469"
+        ]
+      ],
+      "legal_prefixes": [
+        "(주)더본코리아",
+        "주식회사 더본코리아"
+      ]
+    },
+    {
+      "key": "hanshinpocha-kr",
+      "name": "한신포차",
+      "aliases": [
+        "한신포차"
+      ],
+      "source_url": "https://hanshinpocha.com/",
+      "reviewed_on": "2026-11-16",
+      "branch_patterns": true,
+      "ftc_refs": [
+        [
+          "BRD_20090100498",
+          "JNG_010469"
+        ]
+      ],
+      "legal_prefixes": [
+        "(주)더본코리아",
+        "주식회사 더본코리아"
+      ]
+    },
+    {
+      "key": "udon0410-kr",
+      "name": "역전우동0410",
+      "aliases": [
+        "역전우동0410"
+      ],
+      "source_url": "https://udon0410.com/",
+      "reviewed_on": "2026-11-16",
+      "branch_patterns": true,
+      "ftc_refs": [
+        [
+          "BRD_20120100352",
+          "JNG_010469"
+        ]
+      ],
+      "legal_prefixes": [
+        "(주)더본코리아",
+        "주식회사 더본코리아"
+      ]
+    },
+    {
+      "key": "rollingpasta-kr",
+      "name": "롤링파스타",
+      "aliases": [
+        "롤링파스타"
+      ],
+      "source_url": "https://rolling-pasta.com/",
+      "reviewed_on": "2026-11-16",
+      "branch_patterns": true,
+      "ftc_refs": [
+        [
+          "BRD_20190227",
+          "JNG_010469"
+        ]
+      ],
+      "legal_prefixes": [
+        "(주)더본코리아",
+        "주식회사 더본코리아"
+      ]
+    },
+    {
+      "key": "mijung0410-kr",
+      "name": "미정국수0410",
+      "aliases": [
+        "미정국수0410"
+      ],
+      "source_url": "https://www.0410noodle.com/",
+      "reviewed_on": "2026-11-16",
+      "branch_patterns": true,
+      "ftc_refs": [
+        [
+          "BRD_20090100499",
+          "JNG_010469"
+        ]
+      ],
+      "legal_prefixes": [
+        "(주)더본코리아",
+        "주식회사 더본코리아"
+      ]
+    },
+    {
+      "key": "fritz-kr",
+      "name": "프릳츠",
+      "aliases": [
+        "프릳츠",
+        "프릳츠커피컴퍼니",
+        "프릳츠 도화",
+        "프릳츠 원서",
+        "프릳츠 양재",
+        "하이브 프릳츠",
+        "프릳츠 성산",
+        "프릳츠 독립문",
+        "프릳츠 장충"
+      ],
+      "source_url": "https://fritz.co.kr/",
+      "reviewed_on": "2026-11-16",
+      "branch_patterns": false
+    },
+    {
+      "key": "anthracite-kr",
+      "name": "앤트러사이트",
+      "aliases": [
+        "앤트러사이트",
+        "앤트러사이트커피",
+        "ANTHRACITE COFFEE"
+      ],
+      "source_url": "https://anthracitecoffee.com/visit",
+      "reviewed_on": "2026-11-16",
+      "branch_patterns": true,
+      "legal_prefixes": [
+        "(주)앤트러사이트커피",
+        "주식회사 앤트러사이트커피"
+      ]
+    }
   ]
 }

@@ -7,7 +7,7 @@ from typing import Any, NoReturn
 
 from etl.brands.catalog import canonical, parse_json
 
-RULE_VERSION = "chain-membership-estimate-v1"
+RULE_VERSION = "chain-membership-estimate-v2"
 POLICY_VERSION = "franchised-direct-small-chains-v1"
 
 

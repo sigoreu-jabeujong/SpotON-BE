@@ -1,5 +1,7 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
+2026-11-16 #174는 사용자 요청한 세 항목 중 공식 근거가 확보된 브랜드 목록을17개로 보강하고, 매출/상권변화 분기·원천 투영과 생활인구 기대 구성/24시간 완전성→주야간 산술을 내부 모듈로 구현한다. [설계·실제 검토·검증](designs/feat174-analysis-foundations.md)을 따른다. 실제 검토/공식 근거 부족을 mock으로 대체하지 않으며 API/AI 활성화·새 publication·운영 배포는 완료로 표시하지 않는다. #115/#78의 공식 근거/공개 연결은 후속으로 유지하고 FE/DB/환경/runtime은 보존한다.
+
 2026-11-16 #172의 [B2 연결 사전 점검](designs/feat172-b2-preflight.md)은 계정 연결 전에 구현 가능한 BE CLI다. 실제 Claude 설계 MD 검토 PASS 후 metadata-only preview·명시 execute의 Native v4 auth/list 조회·엄격한 단일 대상/리전/권한/private 확인과 비노출/유한 요청을 구현한다. MockTransport와 실제 B2 검증을 구분하고, 키·계정/버킷 미제공 상태에서 실제 전송/연결을 활성화하지 않는다. FE/API/0012/의존성/.env/기존 Task/runtime·운영 DB/Render를 유지한다. 실제 검토·전체 검사·CI/통합 근거는 설계 후속 절에 기록한다.
 
 2026-11-16 #170은 [내보내기 Claude 후속 검토](designs/feat168-operation-log-export.md)의 실제 실행과 보완이다. 계정 초기화 후 실제 MD Read/Edit 정적 검토와 보완본 재검토·생성 경계 제한 재검토 세 번의 PASS/차단0을 확보했다. 추가 중단 시 생성/부분 효과 보존·생성 직후 불확실성·정확한 O_EXCL 경합·실패 preview·고정 오류 구분과 복원 기한/orphan 문서를 보완했고 전체2241통과·권한2skip 및 실제0행 내보내기/복원·원본SHA 보존·검증 사본 정리를 확인했다. FE/API/0012/.env/기존 Task/runtime·운영 DB/Render는 유지하며 실제 근거·최종CI/통합은 설계12~17절과 #170 연결 PR을 따른다. 원격 업로드/키 연결은 미실행이다.

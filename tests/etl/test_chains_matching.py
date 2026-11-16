@@ -1,4 +1,6 @@
+import json
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -151,7 +153,7 @@ def test_legacy_brand_unchecked_and_loss_are_not_reported_as_brand_identity_agre
     assert "legacy_positive" not in report["legacy_comparison"]
 
 
-def test_seed_review_date_is_korean_calendar_even_on_utc_hosts(monkeypatch):
+def test_seed_review_date_is_korean_calendar_even_on_utc_hosts(monkeypatch, tmp_path):
     from datetime import UTC, datetime
 
     from etl.chains import registry
@@ -162,5 +164,11 @@ def test_seed_review_date_is_korean_calendar_even_on_utc_hosts(monkeypatch):
             instant = datetime(2026, 11, 14, 16, tzinfo=UTC)
             return instant.astimezone(tz) if tz else instant.replace(tzinfo=None)
 
+    fixture = json.loads(
+        Path(registry.__file__).with_name("registry.json").read_text(encoding="utf-8")
+    )
+    fixture["brands"] = [b for b in fixture["brands"] if b["reviewed_on"] == "2026-11-15"]
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps(fixture), encoding="utf-8")
     monkeypatch.setattr(registry, "datetime", Clock)
-    assert len(registry.load_registry()) == 5
+    assert len(registry.load_registry(path)) == 5

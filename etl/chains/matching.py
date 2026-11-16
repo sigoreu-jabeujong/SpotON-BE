@@ -42,10 +42,13 @@ class ChainMatcher:
         self.exact: dict[str, set[int]] = defaultdict(set)
         self.brands = brands
         self.patterns: list[tuple[str, int]] = []
+        self.reviewed_aliases: list[tuple[str, int]] = []
         for i, brand in enumerate(brands):
             for alias in brand.aliases:
                 norm = normalize_name(alias)
                 self.exact[norm].add(i)
+                if brand.origin == "reviewed_seed":
+                    self.reviewed_aliases.append((norm, i))
                 if brand.branch_patterns:
                     self.patterns.append((norm, i))
         self.patterns.sort(key=lambda pair: (-len(pair[0]), pair[0], pair[1]))
@@ -70,7 +73,9 @@ class ChainMatcher:
     def branch_words_allowed(self, value: str, brand_key: str) -> bool:
         normalized = normalize_name(value)
         return not any(word in normalized for word in _DENIED) and not any(
-            alias in normalized for alias, i in self.patterns if self.brands[i].key != brand_key
+            alias in normalized
+            for alias, i in self.reviewed_aliases
+            if self.brands[i].key != brand_key
         )
 
     def classify(self, name: str | None) -> Decision:
@@ -88,6 +93,13 @@ class ChainMatcher:
                 hits.add(i)
                 continue
             if not current.startswith(alias):
+                continue
+            # A reviewed parent must not swallow a distinct catalog sub-brand.
+            # Longer catalog names remain exact-only: this guard adds no positives.
+            if any(
+                any(j != i for j in self.exact.get(current[:end], ()))
+                for end in range(len(alias) + 1, len(current) + 1)
+            ):
                 continue
             suffix = current[len(alias) :]
             separator = suffix.startswith((" ", "(", "-"))
