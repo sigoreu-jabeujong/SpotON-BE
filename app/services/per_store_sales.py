@@ -1,5 +1,6 @@
 """Source-row weighted references, never a deduplicated merchant average."""
 
+import json
 from collections import Counter
 from datetime import date
 from decimal import ROUND_HALF_UP, Context, Decimal, localcontext
@@ -9,7 +10,7 @@ from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
 
 from app.models import MarketStore, MarketStoreVersion
-from app.schemas.location_reference import SalesBlock
+from app.schemas.location_reference import MarketAggregation, SalesBlock
 from app.services.sales_distribution import distribution
 from app.services.store_weighted_sales import store_weighted_distribution
 from app.services.top_markets_sales import top_markets_estimate
@@ -41,7 +42,14 @@ def metric(sales: int, stores: int) -> dict[str, Any]:
 
 
 def attach(
-    session: Session, block: SalesBlock, version: MarketStoreVersion | None, target: date, mode: str
+    session: Session,
+    block: SalesBlock,
+    version: MarketStoreVersion | None,
+    target: date,
+    mode: str,
+    *,
+    category: str | None = None,
+    requested_industries: tuple[tuple[str, str], ...] = (),
 ) -> SalesBlock:
     from app.services.location_reference import TYPES, _bounds, _temporal
 
@@ -276,11 +284,40 @@ def attach(
         contributions=selected["contributions"] if selected else [],
         groups=groups,
     )
-    return SalesBlock.model_validate(
+    from app.services.market_aggregation import market_aggregation
+
+    result = SalesBlock.model_validate(
         block.model_dump()
         | dict(
             items=tuple(enriched),
             per_store_average=summary,
             top_markets_estimate=top_markets_estimate(tuple(enriched), primary),
+            market_aggregation=MarketAggregation.model_validate_json(
+                json.dumps(
+                    market_aggregation(
+                        tuple(enriched),
+                        primary,
+                        requested_industries,
+                        block.status,
+                        block.reason,
+                        summary["temporal_relation"],
+                    )
+                )
+            )
+            if category == "restaurant"
+            else None,
         )
     )
+    if category == "restaurant":
+        if (
+            result.market_aggregation is None
+            or tuple(
+                (i.industry_code, i.industry_name)
+                for i in result.market_aggregation.requested_industries
+            )
+            != requested_industries
+        ):
+            raise ValueError("restaurant request mismatch")
+    elif result.market_aggregation is not None:
+        raise ValueError("unexpected restaurant aggregation")
+    return result

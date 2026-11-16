@@ -6,9 +6,9 @@ if TYPE_CHECKING:
     from app.schemas.location_reference import SalesItem
 
 
-def top_markets_estimate(items: tuple["SalesItem", ...], quarter: str | None) -> dict[str, Any]:
-    from app.services.per_store_sales import metric
-
+def ranked_market_totals(
+    items: tuple["SalesItem", ...], quarter: str | None
+) -> tuple[list["SalesItem"], list["SalesItem"], list[dict[str, Any]]]:
     markets: dict[str, dict[str, Any]] = {}
     candidates = [i for i in items if i.source_quarter == quarter and i.metric is not None]
     eligible = [i for i in candidates if i.per_store_metric is not None]
@@ -33,7 +33,15 @@ def top_markets_estimate(items: tuple["SalesItem", ...], quarter: str | None) ->
         market["sales"] += int(item.metric.value)
         market["stores"] += int(item.store_reference["total_stores"])
         market["industry_codes"].append(item.industry_code)
-    ranked = sorted(markets.values(), key=lambda m: (-m["stores"], m["market_code"]))[:3]
+    ranked = sorted(markets.values(), key=lambda m: (-m["stores"], m["market_code"]))
+    return candidates, eligible, ranked
+
+
+def top_markets_estimate(items: tuple["SalesItem", ...], quarter: str | None) -> dict[str, Any]:
+    from app.services.per_store_sales import metric
+
+    candidates, eligible, all_markets = ranked_market_totals(items, quarter)
+    ranked = all_markets[:3]
     sales = sum(m["sales"] for m in ranked)
     stores = sum(m["stores"] for m in ranked)
     return dict(
@@ -51,7 +59,7 @@ def top_markets_estimate(items: tuple["SalesItem", ...], quarter: str | None) ->
         else "fewer_than_three_markets"
         if len(ranked) < 3
         else None,
-        eligible_market_count=len(markets),
+        eligible_market_count=len(all_markets),
         selected_market_count=len(ranked),
         excluded_item_count=len(candidates) - len(eligible),
         total_sales=str(sales) if ranked else None,
