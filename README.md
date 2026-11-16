@@ -827,6 +827,8 @@ uv run --locked --extra dev python -m etl.living_pop.quality --population-versio
 
 ## 생활인구 원천 검증과 주야간 계산 기반
 
+[생활인구 API·부분 공개자료 후속 설계](docs/designs/feat178-population-api-partial.md)는 원천별 같은 공개 구성24시간 비교와 새 GET `/api/v2/population-reference`를 제안합니다. [FE 전달안](docs/fe-population-reference-api-request.md)을 포함한 문서 작업이며 아직 endpoint/FE/DB/배포는 변경하지 않았습니다. 전체 인구 승인과 부분 공개자료 산술을 구분하고 비공개/행 부재를0으로 처리하지 않습니다. 아래 strict 계산/공식 근거 미확정은 전체 인구 경로의 현재 상태입니다.
+
 2026-11-14 공식 정의서·두 매뉴얼·SHP를 재확인했지만 행정동 행의 합산·행 부재·관측일별 격자 적용의 공식 근거는 미확정입니다. [검증 보고서와 제공기관 문의 초안](docs/population-source-verification.md)을 확인합니다. 문의는 아직 제출하지 않았으며 #115는 후속 추적용으로 열어 둡니다.
 
 `app.analysis.day_night.calculate_day_night`는 같은 날짜·공간·모집단의 검증된 시간별 총계24개를 향후 입력받는 내부 순수 계산 기반입니다. 주간06~17·야간나머지의 비중/평균/배수를 Decimal로 구분하고 결측이면 부분합을 반환하지 않습니다. 실제 원천 합산·DB 조회·activity/Risk/AI에는 미연결이며 **현재 공개 인구 pending을 유지**합니다. 산술 성공은 원천 검증이나 하루 고유 방문자 수가 아닙니다. [설계·Claude 검토](docs/designs/feat115-population-time-basis.md)를 따릅니다.

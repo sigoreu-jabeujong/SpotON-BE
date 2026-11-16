@@ -1,5 +1,7 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
+2026-11-16 #178은 [생활인구·주야간 연결/부분자료 설계](designs/feat178-population-api-partial.md)다. 다음 실제 구현은 전체 통계 승인8표보다 먼저 진행 가능한 원천별 고정 공개 구성 조립→새 typed GET `/api/v2/population-reference`→분리 clone의 산정 상태/제외 패턴/성능 검증이다. category 포함6개 입력과 전역 인허가D·허용월/T를 쓰고 다른 점포 필터는 인구에 적용하지 않는다. 기존 활동/Risk/AI는 유지하고 FE 담당자의 별도 카드·보고서 반영이 필요하다. [FE 연동 요청안](fe-population-reference-api-request.md)은 설계이며 앱/API/FE/배포는 아직 완료가 아니다. #115/#78의 공식 전체 인구 근거 검증은 별도 유지한다.
+
 2026-11-16 #176은 [실제 활성화 후속 설계](designs/feat176-reference-activation.md)다. PR175 내부 기반에서 다음으로 필요한 브랜드 새 세대/검수·복구, 공식 claim의 불변 승인과 epoch/vector 드리프트, 실제 조회·typed reference API/AI/캐시/FE 전달을 구체화한다. 제안0013/8표와역할/trigger는 설계만 작성하며 현재DB0012/원문/환경/FE/서버/Render/Task를 바꾸지 않는다. 실행 순서는A브랜드 clone→B승인저장/CLI→C조회/API이고, 실제 근거 승인D와 공개 활성화/배포는 별도 조건을 충족해야 한다. #115/#78을 유지한다.
 
 2026-11-16 #174는 사용자 요청한 세 항목 중 공식 근거가 확보된 브랜드 목록을17개로 보강하고, 매출/상권변화 분기·원천 투영과 생활인구 기대 구성/24시간 완전성→주야간 산술을 내부 모듈로 구현한다. [설계·실제 검토·검증](designs/feat174-analysis-foundations.md)을 따른다. 실제 검토/공식 근거 부족을 mock으로 대체하지 않으며 API/AI 활성화·새 publication·운영 배포는 완료로 표시하지 않는다. #115/#78의 공식 근거/공개 연결은 후속으로 유지하고 FE/DB/환경/runtime은 보존한다.

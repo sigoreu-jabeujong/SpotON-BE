@@ -1,5 +1,7 @@
 # 브랜드 갱신·조건부 지표 실제 연결 설계 (#176)
 
+2026-11-16 후속 [#178 부분 공개자료·실제 API 연결 설계](feat178-population-api-partial.md)는 이 문서의 인구 gate를 **전체 인구 경로**로 한정하고, source별 고정 공개 구성의 기술 산술을 별도 GET으로 제공하는 안을 추가한다. 이 부분 참고 경로는0013/8표/전체 기대 구성 승인을 선행조건으로 삼지 않는다. 이 문서의 원천 승인·전체 인구/매출/변화·AI/브랜드 계획은 보존하며 원천/FE/앱은 이번 문서 작업에서 바꾸지 않는다. 새 부분값은 기존 living_pop.total·Risk pending에 넣지 않는다.
+
 작성2026-11-16, 기준 develop `ec90d64`(PR175). **이 문서는 다음 구현을 위한 설계이며 실제 DB·API·AI 활성화 기록이 아니다.** FE·앱 코드·migration·.env·기존 서버/Render·Task/runtime은 이번 문서 작업에서 변경하지 않는다. RSS는 이후 문맥에서 READ ONLY REPEATABLE READ snapshot session을 뜻한다. [이전 구현/실제 검토](feat174-analysis-foundations.md), [공식 통계 감사](feat156-market-applicability.md), [생활인구 근거](../population-source-verification.md)를 이어간다.
 
 ## 1. 현재 구현과 다음 결과물
