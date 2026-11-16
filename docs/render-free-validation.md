@@ -1,5 +1,7 @@
 # Render 무료 검증 환경 안내
 
+2026-11-16 #202/#206 주소 상세 공개 검증 완료. 현재 BE 검증 기준은 `02e8bde4146c28880dfb6ea5172b0093575717e8` / `dep-dbth87m1egvs73al18g0` live, schema0013이다. FE 공개 검증 기준은 PR97/`3bd77fdfcbf8d4f57588aed6f80092a29177ef9b`이며 사이드바 표시 후속은 FE PR101을 따른다. 기존 매출 중앙값 변경을 포함하고 DB/원본 쓰기·DDL 없이17개 환경값 지문/자동배포off를 보존했다. 실제 ready·주소/정규화·v1/v2이력·공개 주요 API200, 실제 주소의 선택 후보·층호 복원·PDF·390px 모바일/실행오류0을 확인했다. 정규화 동시10건200, 첫 후보 이력75건 중 같은층3건이며 같은자리/실제 입점으로 승격하지 않는다. [배포·검수 상세](designs/feat202-address-implementation.md)를 따른다. 아래 2026-11-15 구성은 과거 검증 기록이며 최신 스키마/배포 기준은 이 문단이다.
+
 2026-11-15 #153 운영 전환 완료. BE `71eaef9c276ed5b2c70d761e47a9d2eeb7bdcd69` / `dep-dbslqv5ckfvc73dbu6a0` live, schema0012·ALWAYS trigger·공개 세대 `366fdaa8-c678-50fb-bf47-d67f0ca60d56`·source_drift=false다. 공개 FE의 v2 활성화 기준은 `93099f1bea68384b360ce16ac230aef5630eda22`(PR62)이며 이후 문서 전용 배포는 앱 코드가 같다. Vercel Production은v2, Preview/development와 일반 로컬 기본값은v1이다. [실행·검수·복구 기록](designs/production-chain-v2-rollout.md)을 따른다.
 
 카페/음식점24필터 조합에서 nearby=snapshot=activity=risk 개수 일치, 브랜드 무관 건물 이력·오류422·CORS/no-store를 확인했다. 실제 v2 AI 카페/음식점·음식점 non_chain 모두200/4문단/수치 검증 통과, 보고서 캐시 재사용·조건 변경·취소·모바일390/360·키보드를 공개 브라우저에서 확인했다. 503·혼합 세대·불일치 응답은 브라우저에서만 대체했고 DB를 쓰지 않았다. Free·자동 배포off·풀1/SQL10초/AI20초·기존17개 환경 중 기대 schema 외 모든 값·키/CORS를 보존했다.
