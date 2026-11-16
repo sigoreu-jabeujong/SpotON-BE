@@ -40,6 +40,7 @@ from app.schemas.location_reference import (
     TimeRelation,
 )
 from app.services.admin_reference import get_admin_reference
+from app.services.industry_selection import effective_industries
 from app.services.location_catalog import catalog_digest, load_catalog
 from app.services.per_store_sales import attach
 from app.services.spatial_stores import effective_date
@@ -50,13 +51,6 @@ MAX_DETAILS = 500
 MAX_SOURCE_ROWS = 50_000
 FORMAT_VERSION = "location-reference-v1"
 RULE_VERSION = "spatial-source-reported-sales-v1"
-INDUSTRIES = {
-    "korean": ("CS100001", "한식음식점"),
-    "chinese": ("CS100002", "중식음식점"),
-    "japanese": ("CS100003", "일식음식점"),
-    "western": ("CS100004", "양식음식점"),
-    "cafe": ("CS100010", "커피-음료"),
-}
 TYPES = {"A": "alley", "D": "developed", "R": "traditional_market", "U": "tourism_zone"}
 Version = TypeVar("Version", B, V, MV)
 
@@ -248,6 +242,7 @@ def _sales(
     target: date,
     catalog: LocationCatalog,
     store_context: list[MV] | None = None,
+    industries: tuple[tuple[str, str], ...] | None = None,
 ) -> tuple[SalesBlock, list[dict[str, object]]]:
     entry = catalog.sales
     if entry is None:
@@ -264,10 +259,7 @@ def _sales(
         return _empty("not_supported", "scope_too_large"), sources
     if not areas:
         return _empty("no_data", "no_spatial_overlap"), sources
-    chosen = query.sub_category or (
-        ("cafe",) if query.category == "cafe" else ("korean", "chinese", "japanese", "western")
-    )
-    industries = [INDUSTRIES[sub] for sub in chosen]
+    industries = industries or effective_industries(query).source_order
     if len(areas) * len(industries) > MAX_DETAILS:
         return _empty("not_supported", "scope_too_large"), sources
     desired = f"{target.year}{(target.month - 1) // 3 + 1}"
@@ -390,6 +382,7 @@ def _get_location_reference(
     session: Session,
     query: LocationReferenceQuery,
 ) -> ApiResponse[LocationReference]:
+    selection = effective_industries(query)
     _batches, reference = current_provenance(session)
     minimum = session.scalar(
         select(func.min(Store.open_date)).where(*temporal_cohort(query, reference))
@@ -397,9 +390,17 @@ def _get_location_reference(
     target = effective_date(reference, minimum, query.as_of)
     catalog = load_catalog()
     store_context: list[MV] = []
-    sales, sources = _sales(session, query, target, catalog, store_context)
+    sales, sources = _sales(session, query, target, catalog, store_context, selection.source_order)
     store_version = store_context[0] if store_context else None
-    sales = attach(session, sales, store_version, target, query.time_mode)
+    sales = attach(
+        session,
+        sales,
+        store_version,
+        target,
+        query.time_mode,
+        category=query.category,
+        requested_industries=selection.canonical_order,
+    )
     if store_version is not None:
         sources.append(
             dict(

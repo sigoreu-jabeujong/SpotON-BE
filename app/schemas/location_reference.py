@@ -144,7 +144,86 @@ class SalesItem(ReferenceModel):
         return self
 
 
+FoodCode = Literal["CS100001", "CS100002", "CS100003", "CS100004"]
+Quarter = Annotated[str, Field(pattern=r"^20[0-9]{2}[1-4]$")]
+IntegerString = Annotated[str, Field(pattern=r"^(0|[1-9][0-9]*)$")]
+
+
+class PerStoreNumber(ReferenceModel):
+    numerator: IntegerString
+    denominator: Annotated[str, Field(pattern=r"^[1-9][0-9]*$")]
+    value: Annotated[str, Field(pattern=r"^(0|[1-9][0-9]*)(\.[0-9]+)?$")]
+    value_precision: Literal["decimal50"]
+    display: str
+    unit: Literal["KRW_source_reported_per_store"]
+    rounded: bool
+    exact_zero: bool
+
+
+class RequestedIndustry(ReferenceModel):
+    industry_code: FoodCode
+    industry_name: str
+
+
+class UnavailableIndustry(ReferenceModel):
+    industry_code: FoodCode
+    source_quarter: Quarter | None
+    reason: Literal[
+        "mapping_conflict",
+        "source_value_null",
+        "no_source_rows",
+        "no_data_in_analysis_period",
+        "different_quarter",
+        "store_row_missing",
+        "store_mapping_conflict",
+        "zero_store_count",
+        "zero_store_count_with_sales",
+        "market_name_conflict",
+    ]
+
+
+class MarketItemKey(ReferenceModel):
+    market_code: str = Field(pattern=r"^[0-9]{7}$")
+    industry_code: FoodCode
+    source_quarter: Quarter
+
+
+class AggregatedMarket(ReferenceModel):
+    market_code: str = Field(pattern=r"^[0-9]{7}$")
+    market_name: Annotated[str, Field(min_length=1)] | None
+    market_type: Literal["alley", "developed", "traditional_market", "tourism_zone"]
+    spatial_relation: Relation
+    source_quarter: Quarter | None
+    temporal_relation: TimeRelation | None
+    status: Literal["ready", "partial", "no_data"]
+    reason: (
+        Literal["partial_selected_industries", "market_name_conflict", "no_valid_sales_store_pairs"]
+        | None
+    )
+    included_industry_codes: tuple[FoodCode, ...]
+    unavailable_industries: tuple[UnavailableIndustry, ...]
+    included_item_keys: tuple[MarketItemKey, ...]
+    total_sales: IntegerString | None
+    total_store_count: IntegerString | None
+    per_store_metric: PerStoreNumber | None
+    rank: int | None = Field(ge=1, le=100)
+    selected_for_estimate: bool
+
+
+class MarketAggregation(ReferenceModel):
+    rule_version: Literal["restaurant_market_rollup_v1"]
+    category: Literal["restaurant"]
+    source_quarter: Quarter | None
+    requested_industries: tuple[RequestedIndustry, ...] = Field(min_length=1, max_length=4)
+    status: Status
+    reason: Reason | Literal["no_valid_sales_store_pairs", "fewer_than_three_markets"] | None
+    eligible_market_count: int = Field(ge=0, le=100)
+    selected_market_codes: tuple[str, ...] = Field(max_length=3)
+    items: tuple[AggregatedMarket, ...] = Field(max_length=100)
+
+
 class SalesBlock(ReferenceModel):
+    market_aggregation: MarketAggregation | None = None
     top_markets_estimate: dict[str, Any] | None = None
     per_store_average: dict[str, Any] | None = None
     status: Status
@@ -336,6 +415,49 @@ class SalesBlock(ReferenceModel):
                 sort_keys=True,
             ):
                 raise ValueError("invalid top markets estimate")
+        if self.market_aggregation is not None:
+            from app.services.market_aggregation import market_aggregation
+
+            restaurant_avg = self.per_store_average
+            if restaurant_avg is None or self.top_markets_estimate is None:
+                raise ValueError("missing restaurant estimate")
+            projection = self.market_aggregation.model_dump(mode="json")
+            expected = market_aggregation(
+                self.items,
+                restaurant_avg["primary_quarter"],
+                tuple(
+                    (i.industry_code, i.industry_name)
+                    for i in self.market_aggregation.requested_industries
+                ),
+                self.status,
+                self.reason,
+                restaurant_avg.get("temporal_relation"),
+            )
+            if projection != expected:
+                raise ValueError("invalid market aggregation")
+            top = self.top_markets_estimate
+            if (projection["selected_market_codes"], projection["eligible_market_count"]) != (
+                [m["market_code"] for m in top["markets"]],
+                top["eligible_market_count"],
+            ):
+                raise ValueError("invalid restaurant selection")
+            for m, t in zip(
+                (i for i in projection["items"] if i["selected_for_estimate"]),
+                top["markets"],
+                strict=True,
+            ):
+                if (
+                    m["total_sales"],
+                    m["total_store_count"],
+                    m["per_store_metric"],
+                    m["included_industry_codes"],
+                ) != (
+                    t["total_sales"],
+                    t["total_store_count"],
+                    t["metric"],
+                    t["industry_codes"],
+                ):
+                    raise ValueError("inconsistent restaurant totals")
         if (self.status == "ready") != (self.reason is None):
             raise ValueError("invalid sales block")
         if self.excluded_count != sum(self.excluded_counts.values()) or any(
