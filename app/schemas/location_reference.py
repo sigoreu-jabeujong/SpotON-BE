@@ -1,6 +1,7 @@
 """Location-linked source values; independent from historical Risk and whole population."""
 
 from datetime import date
+from decimal import ROUND_HALF_UP, Context, Decimal, localcontext
 from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -68,9 +69,31 @@ class SalesCatalog(ReferenceModel):
         return self
 
 
+class AdminObservation(Fingerprint):
+    observation_date: date
+
+
+class AdminCatalog(ReferenceModel):
+    boundary: Fingerprint
+    observations: tuple[AdminObservation, ...] = Field(min_length=1, max_length=40)
+    code_system: Literal["mois_admin8_reference"] = "mois_admin8_reference"
+    source_series: Literal["seoul_250m_admin_local"] = "seoul_250m_admin_local"
+
+    @model_validator(mode="after")
+    def unique_days(self) -> Self:
+        if (
+            self.boundary.source_dataset != "OA-22160"
+            or any(v.source_dataset != "OA-23016" for v in self.observations)
+            or len({v.observation_date for v in self.observations}) != len(self.observations)
+        ):
+            raise ValueError("invalid admin catalog")
+        return self
+
+
 class LocationCatalog(ReferenceModel):
     format_version: Literal["location-reference-catalog-v1"] = "location-reference-catalog-v1"
     sales: SalesCatalog | None = None
+    population: AdminCatalog | None = None
 
 
 class SourceNumber(ReferenceModel):
@@ -141,10 +164,84 @@ class SalesBlock(ReferenceModel):
         return self
 
 
-class UnreleasedPopulation(ReferenceModel):
-    status: Literal["pending"] = "pending"
-    reason: Literal["population_source_not_released"] = "population_source_not_released"
-    items: tuple[()] = ()
+class PopulationNumber(ReferenceModel):
+    value: str | None = Field(pattern=r"^(0|[1-9][0-9]*)(\.[0-9]{1,80})?$")
+    display: str | None
+    unit: Literal["estimated_people_hourly_mean", "ratio", "pct_of_local_hourly_population"]
+    rounded: bool
+    exact_zero: bool
+    reason: Literal["zero_night_population", "zero_population_total"] | None = None
+
+    @model_validator(mode="after")
+    def coherent(self) -> Self:
+        if self.value is None:
+            if self.display is not None or self.rounded or self.exact_zero or self.reason is None:
+                raise ValueError("invalid population number")
+            return self
+        value = Decimal(self.value)
+        places = 5 if self.unit == "ratio" else 1
+        with localcontext(Context(prec=80, rounding=ROUND_HALF_UP)):
+            shown = value.quantize(Decimal(1).scaleb(-places))
+        suffix = (
+            "명"
+            if self.unit == "estimated_people_hourly_mean"
+            else "%"
+            if self.unit == "pct_of_local_hourly_population"
+            else ""
+        )
+        if (
+            self.reason is not None
+            or self.exact_zero != value.is_zero()
+            or self.rounded != (shown != value)
+            or self.display != f"{shown:,.{places}f}{suffix}"
+        ):
+            raise ValueError("invalid population number")
+        return self
+
+
+class AdminPopulationItem(ReferenceModel):
+    area_ref: Sha
+    area_name: str
+    spatial_relation: Relation
+    spatial_unit: Literal["admin_dong"] = "admin_dong"
+    observation_date: date
+    source_month: str = Field(pattern=r"^20[0-9]{2}(0[1-9]|1[0-2])$")
+    temporal_relation: TimeRelation
+    population_scope: Literal["local"] = "local"
+    mean_24h: PopulationNumber | None
+    status: Literal["ready", "no_data"]
+    reason: Reason | None
+    selection_reason: Literal["latest_complete_day", "analysis_period"]
+    observed_hours: int = Field(ge=0, le=24)
+    source_hours: int = Field(ge=0, le=24)
+    provenance_ref: str
+
+
+class AdminDayNightItem(ReferenceModel):
+    area_ref: Sha
+    observation_date: date
+    population_scope: Literal["local"] = "local"
+    mean_day: PopulationNumber | None
+    mean_night: PopulationNumber | None
+    day_night_ratio: PopulationNumber | None
+    day_share_pct: PopulationNumber | None
+    night_share_pct: PopulationNumber | None
+    hour_rule: Literal["spoton_06_18_v1"] = "spoton_06_18_v1"
+    status: Literal["ready", "partial", "no_data"]
+    reason: Reason | None
+    provenance_ref: str
+
+
+class AdminPopulationBlock(ReferenceModel):
+    status: Status = "pending"
+    reason: Reason | None = "population_source_not_released"
+    items: tuple[AdminPopulationItem, ...] = ()
+
+
+class AdminDayNightBlock(ReferenceModel):
+    status: Status = "pending"
+    reason: Reason | None = "population_source_not_released"
+    items: tuple[AdminDayNightItem, ...] = ()
 
 
 class LocationReference(ReferenceModel):
@@ -152,5 +249,5 @@ class LocationReference(ReferenceModel):
     analysis_as_of: date
     time_mode: TimeMode
     sales: SalesBlock
-    living_population: UnreleasedPopulation = Field(default_factory=UnreleasedPopulation)
-    day_night: UnreleasedPopulation = Field(default_factory=UnreleasedPopulation)
+    living_population: AdminPopulationBlock = Field(default_factory=AdminPopulationBlock)
+    day_night: AdminDayNightBlock = Field(default_factory=AdminDayNightBlock)

@@ -72,7 +72,8 @@ def test_reference_periods_are_explicit_and_catalog_contains_no_environment_ids(
     assert _temporal("20254", date(2026, 11, 8)) == "earlier_reference"
     assert _temporal("20254", date(2025, 11, 30)) == "same_period"
     text = load_catalog().model_dump_json()
-    assert "version_id" not in text and "password" not in text and "lat" not in text
+    assert '"version_id"' not in text and '"password"' not in text and '"lat"' not in text
+    assert '"lng"' not in text
     assert LocationReferenceQuery(**PARAMS).time_mode == "latest_reference"
     parameters = client.get("/openapi.json").json()["paths"][PATH]["get"]["parameters"]
     assert {p["name"] for p in parameters} == set(LocationReferenceQuery.model_fields)

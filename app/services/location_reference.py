@@ -39,6 +39,7 @@ from app.schemas.location_reference import (
     Status,
     TimeRelation,
 )
+from app.services.admin_reference import get_admin_reference
 from app.services.location_catalog import catalog_digest, load_catalog
 from app.services.spatial_stores import effective_date
 from app.services.store_cohort import current_provenance, temporal_cohort
@@ -392,11 +393,17 @@ def _get_location_reference(
     target = effective_date(reference, minimum, query.as_of)
     catalog = load_catalog()
     sales, sources = _sales(session, query, target, catalog)
+    living, day_night, population_sources = get_admin_reference(
+        session, query, target, catalog.population, _today()
+    )
+    sources.extend(population_sources)
     data = LocationReference(
         requested_as_of=query.as_of,
         analysis_as_of=target,
         time_mode=query.time_mode,
         sales=sales,
+        living_population=living,
+        day_night=day_night,
     )
     meta: dict[str, object] = {
         "format_version": FORMAT_VERSION,

@@ -23,5 +23,26 @@
       "content_sha256": "91946f1b9bdb64c9f36659e6ddbfb457c535ad29b9ba9b05ac4de0caf8e98ef4",
       "row_count": 24810
     }
+  },
+  "population": {
+    "boundary": {
+      "source_dataset": "OA-22160",
+      "rule_version": "admin-boundary-oa22160-v1",
+      "input_sha256": "969f7033bd3609a5fd586790f5b2cfedc638d7647ef45c78f9c75e1dabf79f68",
+      "content_sha256": "24032627fd24366968414959ee05e653f3bd3ca5c9fe09e47c56bcb86fdcc5a1",
+      "row_count": 425
+    },
+    "observations": [
+      {
+        "source_dataset": "OA-23016",
+        "rule_version": "admin-local-oa23016-v1",
+        "input_sha256": "f5731f68be93c44a8cf6d54e3bb8c5dc2e21994a5ff0c784e00c7dc521add4d7",
+        "content_sha256": "b135819117c011114ae2c006881dff1c5119dcbe65636f1afe489507f842a066",
+        "row_count": 10128,
+        "observation_date": "2026-10-31"
+      }
+    ],
+    "code_system": "mois_admin8_reference",
+    "source_series": "seoul_250m_admin_local"
   }
 }
