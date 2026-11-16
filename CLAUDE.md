@@ -1,6 +1,10 @@
 # SpotON-BE 작업 기준
 
+
 사용자 후속 승인 #202는 [주소 상세 구현·배포](docs/designs/feat202-address-implementation.md)다. POST /api/address-detail은 DB/외부API 없이 기존 파서로 정규화한다. v1/v2 이력에 독립 location_relation을 추가하고 기존 location_match·AI 집계·0013/원본/환경은 보존한다. FE 후보 확인·복원·검증과 함께 BE 선배포 후 FE 공개 release를 검증한다.
+
+2026-11-16 #203은 [상권·업종별 점포당 추정매출 중앙값](docs/designs/feat203-sales-median.md) 구현이다. `/api/v2/location-reference`의 `sales.per_store_average.distribution`에 같은 분기 유효 상권·업종별 S/N의 동일 비중 중앙값·median-of-halves 분위수·IQR·항목 간 기술통계 분산(/n)을 추가한다. `representative_method=median_of_reference_per_store_ratios_v1`으로 FE 대표값을 선택하며 기존 metric/합계/대상 집합·가중평균 규칙은 유지한다. 개별 가게 매출 중앙값이나 고유 점포 중복 제거를 의미하지 않는다. 임계값 전환/이상치 제거 없이 기존 저장 payload 호환과 새 분포/원천 정합성을 검증한다. FE는 4개 미만의 산포 표시를 숨긴다. DB0013/환경/AI·인구 계약 변경 없이 실제 Claude 검토·검증 후 정상 PR·공개 배포한다.
+
 
 2026-11-16 #194는 [점포 1개당 평균 추정매출 설계](docs/designs/feat194-per-store-sales-average.md)다. 기존 목록의 같은 분기·상권·업종 매출 합계/해당 전체 점포 수 합계로 계산하는 가중 참고평균을 설계한다. 자료행 중첩은 고유 점포 중복 제거로 승격하지 않고, 혼합 분기는 분리하며 기존 raw 목록/AI·인구·DB0013·환경을 유지한다. 실제 읽기 전용 비교와 Claude MD 검토·보완/재검토를 문서화하며 이번에는 앱/FE/DB/배포를 변경하지 않는다. 구현은 기존 GET의 새 점포 수·평균 필드/FE 표시로 별도 진행한다.
 

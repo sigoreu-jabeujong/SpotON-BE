@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models import MarketStore, MarketStoreVersion
 from app.schemas.location_reference import SalesBlock
+from app.services.sales_distribution import distribution
 
 
 def metric(sales: int, stores: int) -> dict[str, Any]:
@@ -189,6 +190,13 @@ def attach(
             total_sales=str(s) if used else None,
             total_store_count=str(n) if used else None,
             metric=metric(s, n) if used else None,
+            distribution=distribution(
+                [
+                    (int(i.metric.value), int(i.store_reference["total_stores"]))
+                    for i in used
+                    if i.metric and i.store_reference
+                ]
+            ),
             included_item_keys=[
                 dict(
                     market_code=i.market_code, industry_code=i.industry_code, source_quarter=quarter
@@ -242,6 +250,8 @@ def attach(
         total_sales=selected["total_sales"] if selected else None,
         total_store_count=selected["total_store_count"] if selected else None,
         metric=selected["metric"] if selected else None,
+        distribution=selected["distribution"] if selected else None,
+        representative_method="median_of_reference_per_store_ratios_v1",
         groups=groups,
     )
     return SalesBlock.model_validate(
