@@ -8,24 +8,25 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
-from app.ai import chain_context
+from app.ai import context_v2
 from app.ai.context import prepare_risk_interpretation
 from app.ai.prompts.builder import build_interpret_request
-from app.ai.prompts.chain_version import CHAIN_PROMPT_SHA256
-from app.ai.prompts.loader import CHAIN_PROMPT_VERSION, load_chain_prompt_bundle, load_prompt_bundle
+from app.ai.prompts.loader import V2_PROMPT_VERSION, load_prompt_bundle, load_v2_prompt_bundle
+from app.ai.prompts.v2_version import V2_PROMPT_SHA256
 from app.core.config import Settings
 from app.main import create_app
-from app.schemas.chains import ChainRiskQuery
+from app.schemas.analysis_v2 import AnalysisRiskQuery
 from app.schemas.risk import RiskQuery
 from app.services import risk_interpret as service
-from app.services.chains import ChainSelection
 from tests.ai.context_helpers import activity_response, response, use_risk
 from tests.ai.population_helpers import population_response
 from tests.ai.test_interpretation import Client, choice
 
 
 def query(**changes):
-    return ChainRiskQuery(**{**dict(lat=37.56789123, lng=126.98765432, category="cafe"), **changes})
+    return AnalysisRiskQuery(
+        **{**dict(lat=37.56789123, lng=126.98765432, category="cafe"), **changes}
+    )
 
 
 @pytest.fixture
@@ -33,18 +34,10 @@ def prepared(monkeypatch):
     q = query()
     risk = response(q.legacy(RiskQuery))
     activity = activity_response(risk, q.legacy(RiskQuery))
-    for r in (risk, activity):
-        r.meta.pop("franchise_classification")
-    monkeypatch.setattr(chain_context, "get_risk", lambda *args, **kw: copy.deepcopy(risk))
-    monkeypatch.setattr(chain_context, "get_activity", lambda *args, **kw: copy.deepcopy(activity))
-    monkeypatch.setattr(
-        chain_context.ChainSelection, "load", lambda s, q: ChainSelection(None, False, q)
-    )
-    monkeypatch.setattr(chain_context, "source_revision", lambda s: 17)
-    monkeypatch.setattr(
-        chain_context, "get_population_reference", lambda s, q: population_response(q)
-    )
-    return chain_context.prepare_chain_interpretation(Mock(), q, Settings(_env_file=None))
+    monkeypatch.setattr(context_v2, "get_risk", lambda *args, **kw: copy.deepcopy(risk))
+    monkeypatch.setattr(context_v2, "get_activity", lambda *args, **kw: copy.deepcopy(activity))
+    monkeypatch.setattr(context_v2, "get_population_reference", lambda s, q: population_response(q))
+    return context_v2.prepare_v2_interpretation(Mock(), q, Settings(_env_file=None))
 
 
 def app_with(monkeypatch, prepared, provider, **config):
@@ -58,7 +51,7 @@ def app_with(monkeypatch, prepared, provider, **config):
     return app
 
 
-def test_chain_context_projection_prompt_and_render_cache(monkeypatch, prepared):
+def test_context_v2_projection_prompt_and_render_cache(monkeypatch, prepared):
     captured = []
 
     class Provider(Client):
@@ -75,15 +68,15 @@ def test_chain_context_projection_prompt_and_render_cache(monkeypatch, prepared)
         data = first.json()["data"]
         assert data["verification"]["passed"]
         assert len(data["paragraphs"]) == 4
-        assert "브랜드 판정 자료가 준비되지" in data["body"]
-        assert "과거 브랜드 소속" in data["body"]
+        assert "브랜드" not in data["body"]
+        assert "brand_classification" not in data["evidence"]
         assert provider.calls == 1
-        assert first.json()["meta"]["prompt_version"] == CHAIN_PROMPT_VERSION
+        assert first.json()["meta"]["prompt_version"] == V2_PROMPT_VERSION
         assert "franchise_classification" not in data["evidence"]
         assert "generation" not in json.dumps(data["evidence"])
         assert "37.56789123" not in captured[0].user_content
         assert captured[0].system_instruction == prepared.bundle.system_instruction
-        assert "analysis.brand_classification" in captured[0].system_instruction
+        assert "analysis.brand_classification" not in captured[0].system_instruction
         entry = next(iter(app.state.database.cache.ai._entries.values()))
         assert set(json.loads(entry.value)) == {"selection", "model"}
 
@@ -121,7 +114,7 @@ def test_v1_v2_cache_and_prompt_are_separate(monkeypatch, prepared):
     monkeypatch.setattr(
         service,
         "_prepare",
-        lambda resources, q, *args: new if isinstance(q, ChainRiskQuery) else old,
+        lambda resources, q, *args: new if isinstance(q, AnalysisRiskQuery) else old,
     )
     with TestClient(app) as client:
         for _ in range(2):
@@ -205,13 +198,13 @@ def test_shared_v1_v2_limiter(monkeypatch, prepared):
 )
 def test_forbidden_internal_identifiers(key):
     with pytest.raises(ValueError):
-        build_interpret_request({"analysis": {key: "canary"}}, bundle=load_chain_prompt_bundle())
+        build_interpret_request({"analysis": {key: "canary"}}, bundle=load_v2_prompt_bundle())
 
 
 def test_chain_prompt_is_independent_packaged_and_current():
-    bundle = load_chain_prompt_bundle()
-    assert bundle.version == CHAIN_PROMPT_VERSION
-    assert bundle.sha256 == CHAIN_PROMPT_SHA256
+    bundle = load_v2_prompt_bundle()
+    assert bundle.version == V2_PROMPT_VERSION
+    assert bundle.sha256 == V2_PROMPT_SHA256
     assert bundle.sha256 != load_prompt_bundle().sha256
     assert "$context_json" in bundle.user_template.template
     assert "franchise_classification" not in bundle.system_instruction
@@ -274,7 +267,7 @@ def test_v1_v2_share_generation_gate(monkeypatch, prepared):
     monkeypatch.setattr(
         service,
         "_prepare",
-        lambda resources, q, *args: prepared if isinstance(q, ChainRiskQuery) else old,
+        lambda resources, q, *args: prepared if isinstance(q, AnalysisRiskQuery) else old,
     )
 
     async def run():

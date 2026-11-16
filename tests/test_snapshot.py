@@ -85,7 +85,6 @@ def test_bad_selection_fails_without_partial_rows_or_cache(monkeypatch, caplog, 
         operating_period_status="fact",
         operating_period_reason=None,
         current_status="open",
-        franchise="unknown",
         area_m2=None,
     )
     selected = SpatialStores(

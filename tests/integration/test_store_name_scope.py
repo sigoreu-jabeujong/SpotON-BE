@@ -1,13 +1,12 @@
 """Shared name policy against real PostGIS; all data is synthetic and isolated."""
 
-import hashlib
 import re
 from datetime import date
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import event, select, text, update
+from sqlalchemy import event, select, text
 from sqlalchemy.orm import Session
 
 from app.ai.context import prepare_risk_interpretation
@@ -17,7 +16,7 @@ from app.models import Store
 from app.schemas.risk import RiskQuery
 from app.schemas.stores import HistoryQuery
 from app.services.risk import get_risk
-from app.services.store_cohort import current_provenance, orphan_exists
+from app.services.store_cohort import orphan_exists
 from app.services.store_scope import (
     NAME_EXCLUSION_KEYWORDS,
     NAME_EXCLUSION_VERSION,
@@ -25,9 +24,6 @@ from app.services.store_scope import (
     excluded_by_name,
     name_exclusion_meta,
 )
-from etl.brands.assignment import plan
-from etl.brands.catalog import canonical, digest
-from tests.etl.brands_helpers import catalog, item
 from tests.integration.test_localdata_upsert import migrate
 from tests.integration.test_nearby import PARAMS, batch, store
 from tests.integration.test_store_provenance_index import plan_nodes, reference_orphan
@@ -220,44 +216,6 @@ def test_hidden_name_cannot_hide_broken_provenance(db, client, orphan):
         assert s.scalar(orphan_exists()) is True
     r = client.get("/api/meta/data-range", params={"category": "restaurant"})
     assert r.status_code == 500 and r.json()["meta"] == {}
-
-
-def test_all_filtered_newest_batch_keeps_reference_and_brand_input(db, client):
-    with Session(db) as s, s.begin():
-        old = batch(s, data_updated_at=date(2026, 10, 1))
-        latest = batch(s)
-        store(s, old, "older", name="일반식당")
-        store(s, latest, "newest", name="Unique Cafe", building_key=KEY)
-    source = catalog([item("1", "Unique Cafe")])
-    with db.connect() as c:
-        actual = plan(c, source)
-        # Original brand hash independently calculated from all synthetic source rows.
-        rows = c.execute(
-            select(
-                Store.source,
-                Store.license_no,
-                Store.name,
-                Store.category,
-                Store.sub_category,
-                Store.is_franchise,
-                Store.brand_id,
-            ).order_by(Store.license_no)
-        ).mappings()
-        expected = hashlib.sha256(b"store-brand-input-v1\n")
-        for row in rows:
-            expected.update(digest(canonical(dict(row))).encode("ascii") + b"\n")
-        assert actual.input_sha256 == expected.hexdigest() and actual.counts["total"] == 2
-    with Session(db) as s:
-        batches, reference = current_provenance(s)
-        assert len(batches) == 2 and reference == date(2026, 11, 10)
-    response = result(client, "/api/stores/history", building_key=KEY)
-    assert response["data"]["total"] == 0
-    with db.begin() as c:
-        c.execute(update(Store).where(Store.license_no == "newest").values(name="정상식당"))
-    assert result(client, "/api/stores/history", building_key=KEY)["data"]["total"] == 1
-    with db.begin() as c:
-        c.execute(update(Store).where(Store.license_no == "newest").values(name="호프"))
-    assert result(client, "/api/stores/history", building_key=KEY)["data"]["total"] == 0
 
 
 def test_operational_index_eligible_with_actual_generic_risk_query(db):

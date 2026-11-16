@@ -77,7 +77,7 @@ def test_geocode_etl_identity_and_history_scope(database, caplog, capfd):
         assert items[("rest_cafe", "FLOW_SHARED")]["operating_months"] == 0
         assert history["stores"][-1]["open_date"] is None
         for item in history["stores"]:
-            assert item["franchise"] == "unknown"
+            assert "franchise" not in item
         assert provider.calls == 0
         # #98: the same geocode identity as optional AI history context.
         body = {
@@ -108,7 +108,6 @@ def test_geocode_etl_identity_and_history_scope(database, caplog, capfd):
         ("cafe", {}, 1),
         ("restaurant", {"as_of": "2025-06"}, 4),
         ("restaurant", {"area": "lt33", "include_unknown_area": False}, 1),
-        ("restaurant", {"franchise": "independent", "include_unknown_franchise": False}, 0),
         ("restaurant", {"sub_category": "japanese"}, 0),
     ],
 )

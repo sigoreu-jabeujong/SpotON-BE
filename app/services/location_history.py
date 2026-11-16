@@ -1,6 +1,5 @@
 """All-status license history at an explicit location; legacy/AI cohorts stay unchanged."""
 
-from collections import Counter
 from datetime import date
 from typing import Literal
 
@@ -17,8 +16,7 @@ from app.schemas.location_history import (
     LocationHistoryStore,
 )
 from app.schemas.stores import HistoryQuery
-from app.services.chain_api import stores as enrich_stores
-from app.services.chains import ChainSelection
+from app.services.analysis_v2 import stores as enrich_stores
 from app.services.store_history import get_history, operating_period
 from etl.address.floor_unit import parse_floor_unit
 
@@ -73,13 +71,11 @@ def get_location_history(
             meta={"history_policy_version": POLICY, "building_mapping_version": None},
         )
     assert session is not None
-    chain = ChainSelection.load(session)
     original = get_history(
         session,
         HistoryQuery(
             building_key=query.building_key, floor_unit=query.floor_unit, category=query.category
         ),
-        chain=chain,
     )
     assert original.data is not None
     excluded: dict[Literal["floor", "unit"], int] = {"floor": 0, "unit": 0}
@@ -157,7 +153,7 @@ def get_location_history(
         LocationHistoryStore.model_validate(
             {**s.model_dump(), "closure_date_status": closure_status[(s.source, s.license_no)]}
         )
-        for s in enrich_stores(session, chain, accepted)
+        for s in enrich_stores(accepted)
     ]
     rows.sort(
         key=lambda s: (
@@ -168,7 +164,6 @@ def get_location_history(
         )
     )
     meta = dict(original.meta)
-    meta.pop("franchise_classification", None)
     version = meta.get("data_version")
     if isinstance(version, dict):
         meta["data_version"] = {**version, "rule_version": POLICY}
@@ -178,17 +173,8 @@ def get_location_history(
             "building_mapping_version": None,
             "date_basis": "per_store_source_batch",
             "denominator": len(rows),
-            "brand_classification": chain.meta(),
-            "brand_counts_scope": "returned_location_history",
         }
     )
-    counts = Counter(
-        "stale_or_drift" if s.brand.reason in {"source_drift", "stale_input"} else s.brand.status
-        for s in rows
-    )
-    meta["brand_counts"] = {
-        key: counts[key] for key in ("estimated", "unknown", "conflict", "stale_or_drift")
-    }
     dated_count = sum(s.closure_date_status == "dated" for s in rows)
     return ApiResponse(
         data=LocationHistory(

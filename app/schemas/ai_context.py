@@ -25,7 +25,6 @@ Limit = Literal[
     "ownership_transfer_not_separated",
     "historical_intervals_from_current_snapshot",
     "coordinate_selection_bias_possible",
-    "franchise_name_match_not_contract_or_history",
     "restaurant_name_keywords_may_exclude_valid_stores",
 ]
 
@@ -38,9 +37,7 @@ class ContextModel(BaseModel):
 
 class ContextFilters(ContextModel):
     area: Literal["all", "lt33", "33to66", "66to99", "gte99"]
-    franchise: Literal["all", "franchise", "independent"]
     include_unknown_area: bool
-    include_unknown_franchise: bool
 
 
 class ContextIndicator(ContextModel):
@@ -246,9 +243,6 @@ class RiskInterpretContext(ContextModel):
         "source_completion_time_not_recorded"
     )
     market_status: Literal["unverified"] = "unverified"
-    franchise_classification: Literal["pending", "estimate"] = "pending"
-    franchise_reference_year: int | None = Field(default=None, ge=2000, le=9999)
-    franchise_basis: Literal["reference_catalog_name_match"] | None = None
     indicators: tuple[ContextIndicator, ...] = Field(repr=False)
     flags: ContextFlags
     methodology: ContextMethodology = Field(default_factory=ContextMethodology)
@@ -272,50 +266,18 @@ class RiskInterpretContext(ContextModel):
         return self
 
 
-class ContextChainFilters(ContextModel):
+class ContextAnalysisFilters(ContextModel):
     area: Literal["all", "lt33", "33to66", "66to99", "gte99"]
     include_unknown_area: bool
-    brand_scope: Literal["all", "chain", "non_chain"]
-    brand_unknown: Literal["include", "exclude"]
-    brand_evidence: Literal["include_estimates", "confirmed_only"]
-    brand_time_basis: Literal["observed_record"] = "observed_record"
-    operation_type: Literal["any"] = "any"
 
 
-class ContextChainClassification(ContextModel):
-    status: Literal["pending", "estimate"]
-    source_drift: bool
-    catalog_year: int | None = Field(default=None, ge=2000, le=9999)
-    semas_month: str | None = Field(default=None, pattern=r"^20\d{2}-(0[1-9]|1[0-2])$")
-    coverage: Literal["partial"] = "partial"
-    policy: Literal["franchised_direct_small_chains"] = "franchised_direct_small_chains"
-    time_basis: Literal["observed_record"] = "observed_record"
-    historical_membership: Literal["not_verified"] = "not_verified"
-    operation_type: Literal["unknown"] = "unknown"
-    limitations: tuple[
-        Literal[
-            "estimated_membership_not_contract",
-            "license_records_not_outlet_count",
-            "historical_membership_not_verified",
-            "unknown_is_not_non_chain",
-        ],
-        ...,
-    ] = (
-        "estimated_membership_not_contract",
-        "license_records_not_outlet_count",
-        "historical_membership_not_verified",
-        "unknown_is_not_non_chain",
-    )
-
-
-class ChainRiskInterpretContext(ContextModel):
+class AnalysisRiskInterpretContext(ContextModel):
     """Independent outbound allowlist; no legacy franchise or publication identifiers."""
 
     category: Category
     sub_category: tuple[SubCategory, ...]
     radius_m: Literal[300, 500, 1000]
-    filters: ContextChainFilters
-    brand_classification: ContextChainClassification
+    filters: ContextAnalysisFilters
     population_reference: ContextPopulationReference
     as_of: date
     data_updated_at: date
@@ -343,8 +305,8 @@ class ChainRiskInterpretContext(ContextModel):
             or self.nearby is not None
             and self.nearby.active_at_as_of != sum(g.open_count for g in self.activity.groups)
         ):
-            raise ValueError("chain context scope mismatch")
+            raise ValueError("analysis context scope mismatch")
         return self
 
 
-InterpretContext = RiskInterpretContext | ChainRiskInterpretContext
+InterpretContext = RiskInterpretContext | AnalysisRiskInterpretContext

@@ -18,8 +18,7 @@ from app.schemas.address_history import (
 from app.schemas.common import ApiMeta, ApiResponse
 from app.schemas.stores import HistoryStore
 from app.services.address_context import AddressPair
-from app.services.chain_api import stores as enrich_stores
-from app.services.chains import ChainSelection
+from app.services.analysis_v2 import stores as enrich_stores
 from app.services.store_history import operating_period
 from app.services.store_scope import (
     SOURCE_SUPPORTED_STORES,
@@ -167,14 +166,12 @@ def get_address_history(
                 operating_months=months,
                 operating_period_status="fact" if months is not None else "no_data",
                 operating_period_reason=reason,
-                franchise="unknown",
                 floor_unit=actual,
                 location_match="unverified",
             )
         )
         evidence[(store.source, store.license_no)] = match
         closure[(store.source, store.license_no)] = quality
-    chain = ChainSelection.load(session)
     rows = [
         AddressHistoryStore.model_validate(
             {
@@ -184,7 +181,7 @@ def get_address_history(
                 "closure_date_status": closure[(s.source, s.license_no)],
             }
         )
-        for s in enrich_stores(session, chain, accepted)
+        for s in enrich_stores(accepted)
     ]
     rows.sort(
         key=lambda s: (
@@ -209,8 +206,6 @@ def get_address_history(
         "history_policy_version": RULE,
         "address_index_version": "spoton_history_road_key_v1",
         "name_exclusion": name_exclusion_meta(),
-        "brand_classification": chain.meta(),
-        "brand_counts_scope": "returned_location_history",
         "data_version": {
             "rule_version": RULE,
             "stores_batch_ids": [str(b.batch_id) for b in batches],

@@ -19,7 +19,6 @@ from app.db.dependencies import NO_STORE
 from app.models import Store
 from app.models.store import STORE_GEOGRAPHY
 from app.schemas.common import ApiMeta, ApiResponse, ErrorCode
-from app.schemas.franchise import ESTIMATE_LIMIT, EstimatedClassification
 from app.schemas.market_judgement import BoundaryQuery
 from app.schemas.risk import (
     MIN_CLOSURE_SAMPLE,
@@ -34,8 +33,6 @@ from app.schemas.risk import (
     RiskQuery,
     RiskQueryEcho,
 )
-from app.services.chains import ChainSelection
-from app.services.franchise import brand_context, enrich_meta
 from app.services.market_activity import year_cutoff
 from app.services.market_judgement import judge_market
 from app.services.risk_cache import load_risk, risk_key, save_risk, snapshot_token
@@ -232,11 +229,8 @@ def get_risk(
     settings: Settings,
     *,
     cache: CacheResources | None = None,
-    chain: ChainSelection | None = None,
 ) -> ApiResponse[Risk]:
     try:
-        if chain is not None:
-            return _get_risk(session, query, settings, chain=chain)
         key = None
         if cache is not None and cache.enabled:
             key = risk_key(cache, snapshot_token(session, cache), query, settings, RULE_VERSION)
@@ -252,66 +246,16 @@ def get_risk(
     raise AppError(ErrorCode.INTERNAL_ERROR, headers=NO_STORE)
 
 
-def _get_risk(
-    session: Session, query: RiskQuery, settings: Settings, *, chain: ChainSelection | None = None
-) -> ApiResponse[Risk]:
+def _get_risk(session: Session, query: RiskQuery, settings: Settings) -> ApiResponse[Risk]:
     batches, reference = current_provenance(session)
     cohort = temporal_cohort(query, reference)
     minimum = session.scalar(select(func.min(Store.open_date)).where(*cohort))
     target = effective_date(reference, minimum, query.as_of)
-    attributes = attribute_filters(query, chain)
+    attributes = attribute_filters(query)
     base = [*cohort, attributes[0], Store.open_date <= target]
-    conditions = [*base, attributes[1]]
-    complement = (
-        chain is not None
-        and chain.query is not None
-        and chain.query.brand_scope == "non_chain"
-        and chain.query.brand_unknown == "include"
-        and chain.query.brand_evidence == "include_estimates"
-    )
-    estimates = (
-        chain is not None
-        and chain.query is not None
-        and chain.query.brand_evidence == "include_estimates"
-        and (
-            complement
-            or (chain.query.brand_unknown == "exclude" and chain.query.brand_scope != "non_chain")
-        )
-    )
-    if estimates:
-        # Each reference count is additive. Avoid a wide city-wide anti join:
-        # the identical non-chain/unknown cohort is all records minus valid estimates.
-        assert chain is not None
-        records = chain.aggregate_estimates(query.category)
-        known = (
-            session.execute(
-                reference_count_query(
-                    [*base, Store.geom.is_not(None)], target, records=records
-                ).add_columns(
-                    unlocated_query(base, records=records).scalar_subquery().label("unlocated")
-                )
-            )
-            .mappings()
-            .one()
-        )
-        excluded = int(known["unlocated"])
-        seoul = ReferenceCounts.model_validate(
-            {key: known[key] for key in ReferenceCounts.model_fields}
-        )
-        if complement:
-            excluded = int(session.scalar(unlocated_query(base)) or 0) - excluded
-            total = aggregate_counts(session, [*base, Store.geom.is_not(None)], target)
-            seoul = ReferenceCounts.model_validate(
-                {
-                    key: getattr(total, key) - getattr(seoul, key)
-                    for key in ReferenceCounts.model_fields
-                }
-            )
-            if excluded < 0:
-                raise ValueError("estimated cohort exceeds full cohort")
-    else:
-        excluded = int(session.scalar(unlocated_query(conditions)) or 0)
-        seoul = aggregate_counts(session, [*conditions, Store.geom.is_not(None)], target)
+    conditions = base
+    excluded = int(session.scalar(unlocated_query(conditions)) or 0)
+    seoul = aggregate_counts(session, [*conditions, Store.geom.is_not(None)], target)
     located = [*conditions, Store.geom.is_not(None)]
     point = cast(func.ST_SetSRID(func.ST_MakePoint(query.lng, query.lat), 4326), STORE_GEOGRAPHY)
     geography = cast(Store.geom, STORE_GEOGRAPHY)
@@ -357,9 +301,7 @@ def _get_risk(
         include={
             "sub_category",
             "area",
-            "franchise",
             "include_unknown_area",
-            "include_unknown_franchise",
         },
         mode="json",
     )
@@ -409,11 +351,4 @@ def _get_risk(
             NAME_EXCLUSION_LIMITATION,
         ],
     }
-    branding = brand_context(session) if chain is None else None
-    if branding is not None:
-        enrich_meta(meta, branding)
-    if branding is not None and isinstance(branding.classification, EstimatedClassification):
-        limitations = meta["limitations"]
-        if isinstance(limitations, list):
-            limitations.append(ESTIMATE_LIMIT)
     return ApiResponse(data=data, meta=meta)

@@ -149,7 +149,6 @@ def test_past_empty_and_source_not_ready_are_distinct(db):
         {"sub_category": "korean,western"},
         {"radius": 300},
         {"area": "lt33", "include_unknown_area": False},
-        {"franchise": "independent", "include_unknown_franchise": False},
         {"include_unknown": False},
     ],
 )

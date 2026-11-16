@@ -93,9 +93,7 @@ def test_opaque_per_app_keys_failure_and_disable(monkeypatch):
         {"category": "restaurant"},
         {"as_of": "2026-11"},
         {"area": "lt33"},
-        {"franchise": "franchise"},
         {"include_unknown_area": False},
-        {"include_unknown_franchise": False},
         {"include": "market_change"},
     ],
 )
@@ -113,9 +111,7 @@ def test_key_normalization_and_risk_codec_copy():
     assert key != risk_key(cache, "view2", first, config, "rule")
     assert key != risk_key(cache, "view", first, config, "rule2")
     assert query_parts(query()) == query_parts(query(sub_category="cafe"))
-    assert query_parts(query(include_unknown=True)) == query_parts(
-        query(include_unknown_area=True, include_unknown_franchise=True)
-    )
+    assert query_parts(query(include_unknown=True)) == query_parts(query(include_unknown_area=True))
     expected = response(first)
     save_risk(cache, key, expected)
     encoded = cache.risk.get(key)

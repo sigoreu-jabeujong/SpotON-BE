@@ -36,12 +36,6 @@ from app.schemas.ai_context import (
     RiskInterpretContext,
 )
 from app.schemas.common import ApiMeta, ApiResponse, ErrorCode
-from app.schemas.franchise import (
-    CLASSIFICATION,
-    ESTIMATE_LIMIT,
-    BrandDataVersion,
-    EstimatedClassification,
-)
 from app.schemas.market_activity import YEARLY_TREND_START_YEAR, ActivityQuery, MarketActivity
 from app.schemas.risk import Risk, RiskIndicator, RiskQuery
 from app.schemas.stores import HistoryQuery, StoreHistory
@@ -60,9 +54,7 @@ HISTORY_MAX_DISTANCE_M = 300
 FILTER_FIELDS = {
     "sub_category",
     "area",
-    "franchise",
     "include_unknown_area",
-    "include_unknown_franchise",
 }
 
 
@@ -72,7 +64,6 @@ class _DataVersion(ContextModel):
     map_version: str | None
     rule_version: Literal["risk-reference-fixed-anniversary-v2"]
     name_exclusion_version: Literal["store-name-keywords-v1"]
-    brand_mapping: BrandDataVersion | None = None
 
     @model_validator(mode="after")
     def unique_batches(self) -> "_DataVersion":
@@ -227,10 +218,6 @@ def _history(
     history: HistoryQuery,
     category: str,
     reference: date,
-    *,
-    classification_key: Literal[
-        "franchise_classification", "brand_classification"
-    ] = "franchise_classification",
 ) -> ContextHistory:
     """Same-session recomputation of #36 history; identifier-free aggregates only (§4·§5)."""
     if building.error is not None or building.data is None:
@@ -242,7 +229,6 @@ def _history(
         updated is None
         or updated != risk_meta.get("data_updated_at")
         or meta.get("as_of") != updated
-        or meta.get(classification_key) != risk_meta.get(classification_key)
         or meta.get("collected_at") is not None
         or meta.get("source") != ["R5", "R6"]
         or type(meta.get("denominator")) is not int
@@ -265,7 +251,6 @@ def _history(
         or version.get("rule_version") != HISTORY_RULE_VERSION
         or version.get("name_exclusion_version") != NAME_EXCLUSION_VERSION
         or version.get("name_exclusion_version") != risk_version.get("name_exclusion_version")
-        or version.get("brand_mapping") != risk_version.get("brand_mapping")
     ):
         raise ValueError("history data version mismatch")
     provided = history.floor_unit is not None
@@ -307,17 +292,13 @@ def _activity(
     risk_meta: dict[str, JsonValue],
     sub: tuple[str, ...],
     radius: int,
-    *,
-    classification_key: Literal[
-        "franchise_classification", "brand_classification"
-    ] = "franchise_classification",
 ) -> ContextActivity:
     """Same-session recomputation; reject any drift from the Risk cohort (design §4)."""
     if activity.error is not None or activity.data is None:
         raise ValueError("activity result unavailable")
     data = MarketActivity.model_validate(activity.data.model_dump(warnings="error"))
     meta = activity.meta
-    for key in ("as_of", "data_updated_at", classification_key, "cohort_size"):
+    for key in ("as_of", "data_updated_at", "cohort_size"):
         if key not in meta or meta.get(key) != risk_meta.get(key):
             raise ValueError("activity provenance mismatch")
     cohort = meta.get("cohort_size")
@@ -347,7 +328,6 @@ def _activity(
         or version.get("rule_version") != ACTIVITY_RULE_VERSION
         or version.get("name_exclusion_version") != NAME_EXCLUSION_VERSION
         or version.get("name_exclusion_version") != risk_version.get("name_exclusion_version")
-        or version.get("brand_mapping") != risk_version.get("brand_mapping")
     ):
         raise ValueError("activity data version mismatch")
     if data.sales is not None or data.living_pop is not None or data.flags.missing:
@@ -435,12 +415,7 @@ def _extract_context(
         raise ValueError("risk result date mismatch")
     if target != effective_date(reference, MIN_OPEN_DATE, query.as_of):
         raise ValueError("risk query date mismatch")
-    classification = CLASSIFICATION.validate_json(
-        json.dumps(meta.get("franchise_classification"), allow_nan=False)
-    )
     method = ContextMethodology()
-    if isinstance(classification, EstimatedClassification):
-        method = ContextMethodology(limitations=(*method.limitations, ESTIMATE_LIMIT))
     expected_meta = {
         "name_exclusion": name_exclusion_meta(),
         "collected_at": None,
@@ -448,7 +423,6 @@ def _extract_context(
         "source": ["R5", "R6"],
         "denominator": None,
         "event_basis": "validated_license_dates",
-        "franchise_classification": classification.model_dump(mode="json"),
         "minimum_samples": {"closure": 10, "survival": 5},
         **method.model_dump(
             mode="json", exclude={"minimum_closure_sample", "minimum_survival_sample"}
@@ -461,21 +435,7 @@ def _extract_context(
     )
     if version.rule_version != RULE_VERSION:
         raise ValueError("risk rule mismatch")
-    estimated = isinstance(classification, EstimatedClassification)
-    reference_year = (
-        classification.reference_year
-        if isinstance(classification, EstimatedClassification)
-        else None
-    )
-    if estimated != (version.brand_mapping is not None):
-        raise ValueError("brand classification version mismatch")
-    if estimated and (
-        version.brand_mapping is None or version.brand_mapping.reference_year != reference_year
-    ):
-        raise ValueError("brand reference year mismatch")
     version_json = version.model_dump(mode="json")
-    if version.brand_mapping is None:
-        version_json.pop("brand_mapping")
     version_json["stores_batch_ids"] = sorted(str(v) for v in version.stores_batch_ids)
     version_json["activity_rule_version"] = ACTIVITY_RULE_VERSION
     if history is not None:
@@ -497,15 +457,10 @@ def _extract_context(
         radius_m=query.radius,
         filters=ContextFilters(
             area=query.area,
-            franchise=query.franchise,
             include_unknown_area=query.include_unknown_area,
-            include_unknown_franchise=query.include_unknown_franchise,
         ),
         as_of=target,
         data_updated_at=reference,
-        franchise_classification=classification.status,
-        franchise_reference_year=reference_year,
-        franchise_basis="reference_catalog_name_match" if estimated else None,
         indicators=tuple(_indicator(r, target, query.radius) for r in data.indicators),
         flags=ContextFlags(
             insufficient_sample=data.flags.insufficient_sample, missing=tuple(data.flags.missing)

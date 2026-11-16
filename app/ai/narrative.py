@@ -13,9 +13,8 @@ from typing import Literal
 
 from pydantic import JsonValue
 
-from app.ai.chain_notices import chain_notice
 from app.ai.population_context import population_sentence
-from app.schemas.ai_context import ChainRiskInterpretContext, ContextIndicator, InterpretContext
+from app.schemas.ai_context import AnalysisRiskInterpretContext, ContextIndicator, InterpretContext
 from app.schemas.interpret import InterpretItem
 
 NOTICE = "이 해석은 공공데이터 기반 참고 정보이며 창업 성공이나 실패를 예측한 결과가 아닙니다."
@@ -76,8 +75,6 @@ def build_narrative(c: InterpretContext) -> NarrativeCatalog:
         f"폐업 기록은 {a.recent_closed:,}건입니다. "
     )
     averages = []
-    if isinstance(c, ChainRiskInterpretContext):
-        opening += chain_notice(c) + " "
     for group in a.groups:
         if group.avg_operating_months is not None:
             averages.append(f"{LABELS[group.sub_category]} {group.avg_operating_months:,}개월")
@@ -195,7 +192,7 @@ def build_narrative(c: InterpretContext) -> NarrativeCatalog:
         "확보되지 않은 매출·생활인구로 수요나 수익성을 추정하지 않았습니다. " + NOTICE
     )
     preparation_ids = []
-    if isinstance(c, ChainRiskInterpretContext):
+    if isinstance(c, AnalysisRiskInterpretContext):
         preparation = preparation.replace(
             "확보되지 않은 매출·생활인구로 수요나 수익성을 추정하지 않았습니다.",
             "전체 생활인구와 매출의 적용 기준을 확인하지 못해 수요나 수익성을 추정하지 않았습니다.",

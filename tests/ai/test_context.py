@@ -82,7 +82,7 @@ def test_allowlist_and_original_risk_numbers_and_statuses(monkeypatch):
     for before, after in zip(original.data.indicators, p.context.indicators, strict=True):
         assert after.value == before.value and after.source == tuple(before.source)
         assert after.status == before.status and after.denominator == before.denominator
-    assert p.prompt_version == "risk-interpret-v9"
+    assert p.prompt_version == "risk-interpret-v10"
     assert hashlib.sha256(serialize_context(safe).encode()).hexdigest() == p.context_hash
     assert serialize_context(safe) in p.request.user_content
 
@@ -354,11 +354,9 @@ def test_activity_values_change_context_hash_and_rule_changes_version_hash(monke
         (("meta", "collected_at"), "2026-11-12"),
         (("meta", "denominator"), 8),
         (("meta", "source"), ["R5"]),
-        (("meta", "franchise_classification"), {"status": "estimate"}),
         (("meta", "data_version", "stores_batch_ids"), ["00000000-0000-0000-0000-000000000099"]),
         (("meta", "data_version", "map_version"), "PRIVATE-CANARY"),
         (("meta", "data_version", "rule_version"), "market-activity-license-ytd-v0"),
-        (("meta", "data_version", "brand_mapping"), {"reference_year": 2025}),
         (("data", "recent_12m", "closed"), 3),
         (("data", "recent_12m", "period"), "(2025-11-07, 2026-11-07]"),
         (("data", "error"), None),
@@ -510,7 +508,6 @@ def test_history_changes_hashes(monkeypatch):
         (("meta", "as_of"), "2026-11-07"),
         (("meta", "denominator"), 5),
         (("meta", "collected_at"), "2026-11-12"),
-        (("meta", "franchise_classification"), {"status": "estimate"}),
         (("meta", "data_version", "stores_batch_ids"), ["00000000-0000-0000-0000-000000000099"]),
         (("meta", "data_version", "rule_version"), "store-history-calendar-months-v0"),
         (("meta", "data_version", "map_version"), "PRIVATE-CANARY"),

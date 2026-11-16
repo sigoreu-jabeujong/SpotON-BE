@@ -2,7 +2,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.schemas.chains import ChainStore
+from app.schemas.analysis_v2 import AnalysisStore
 from app.schemas.stores import HistoryQuery
 from etl.address.floor_unit import parse_floor_unit
 
@@ -33,7 +33,7 @@ class HistorySelection(BaseModel):
     unit_ignored: bool
 
 
-class LocationHistoryStore(ChainStore):
+class LocationHistoryStore(AnalysisStore):
     closure_date_status: Literal["dated", "undated", "not_applicable"]
 
     @model_validator(mode="after")

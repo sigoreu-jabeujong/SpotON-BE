@@ -1,8 +1,7 @@
-"""Independent v2 input: chain affiliation is never the legacy franchise flag."""
+"""General v2 analysis contracts, without affiliation classification."""
 
 from datetime import date
 from typing import Any, Literal, Self, TypeVar
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -15,45 +14,15 @@ from app.schemas.store_filters import CategoryFilters
 from app.schemas.stores import PeriodReason, StoreSource, StoreStatus, SubCategory
 
 T = TypeVar("T", bound=NearbyQuery)
-BRAND_FIELDS = {
-    "brand_scope",
-    "brand_unknown",
-    "brand_evidence",
-    "brand_time_basis",
-    "operation_type",
-}
-COMMON_FIELDS = {
-    "lat",
-    "lng",
-    "radius",
-    "category",
-    "sub_category",
-    "as_of",
-    "area",
-    "include_unknown_area",
-}
 
 
-class ChainQuery(CategoryFilters):
+class AnalysisQuery(CategoryFilters):
     lat: float = Field(ge=-90, le=90, allow_inf_nan=False, repr=False)
     lng: float = Field(ge=-180, le=180, allow_inf_nan=False, repr=False)
     radius: Literal[300, 500, 1000] = 500
     as_of: str | None = None
     area: Literal["all", "lt33", "33to66", "66to99", "gte99"] = "all"
     include_unknown_area: bool = True
-    brand_scope: Literal["all", "chain", "non_chain"] = "all"
-    brand_unknown: Literal["include", "exclude"] = "include"
-    brand_evidence: Literal["include_estimates", "confirmed_only"] = "include_estimates"
-    brand_time_basis: Literal["observed_record"] = "observed_record"
-    operation_type: Literal["any"] = "any"
-
-    @model_validator(mode="before")
-    @classmethod
-    def explicit_unknown(cls, value: Any) -> Any:
-        if isinstance(value, dict) and value.get("brand_scope", "all") != "all":
-            if "brand_unknown" not in value:
-                raise ValueError("brand_unknown must be explicit for selected scope")
-        return value
 
     @field_validator("radius", mode="before")
     @classmethod
@@ -71,26 +40,19 @@ class ChainQuery(CategoryFilters):
         return NearbyQuery.strict_boolean(value)
 
     def legacy(self, model: type[T]) -> T:
-        fields = COMMON_FIELDS | ({"include"} if "include" in model.model_fields else set())
-        return model.model_validate(
-            {
-                **self.model_dump(include=fields),
-                "franchise": "all",
-                "include_unknown_franchise": True,
-            }
-        )
+        return model.model_validate(self.model_dump(include=set(model.model_fields)))
 
     def echo_filters(self) -> ApiMeta:
         return self.model_dump(
-            include=BRAND_FIELDS | {"sub_category", "area", "include_unknown_area"}, mode="json"
+            include={"sub_category", "area", "include_unknown_area"}, mode="json"
         )
 
 
-class ChainSnapshotQuery(ChainQuery):
+class AnalysisSnapshotQuery(AnalysisQuery):
     as_of: str = Field(...)
 
 
-class ChainActivityQuery(ChainQuery):
+class AnalysisActivityQuery(AnalysisQuery):
     include: tuple[ActivityInclude, ...] = ()
 
     @field_validator("include", mode="before")
@@ -106,7 +68,7 @@ class ChainActivityQuery(ChainQuery):
         return value
 
 
-class ChainRiskQuery(ChainQuery):
+class AnalysisRiskQuery(AnalysisQuery):
     include: tuple[RiskInclude, ...] = ()
 
     @field_validator("include", mode="before")
@@ -120,28 +82,11 @@ class ChainRiskQuery(ChainQuery):
         return RiskQuery.unique_include(value)
 
 
-class ChainModel(BaseModel):
+class AnalysisModel(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True, allow_inf_nan=False)
 
 
-class ChainBrand(ChainModel):
-    status: Literal["estimated", "unknown", "conflict"]
-    brand_key: UUID | None = None
-    name: str | None = None
-    basis: str | None = None
-    reason: str | None = None
-    reference_year: int | None = None
-    reference_month: str | None = None
-    time_basis: Literal["observed_record"] = "observed_record"
-    historical_membership: Literal["not_verified"] = "not_verified"
-
-
-class ChainOperation(ChainModel):
-    type: Literal["unknown"] = "unknown"
-    basis: None = None
-
-
-class ChainStore(ChainModel):
+class AnalysisStore(AnalysisModel):
     source: StoreSource
     license_no: str
     name: str | None
@@ -162,8 +107,6 @@ class ChainStore(ChainModel):
     location_relation: LocationRelation | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
-    brand: ChainBrand
-    operation: ChainOperation = Field(default_factory=ChainOperation)
 
     @model_validator(mode="after")
     def consistent_period(self) -> Self:
@@ -175,13 +118,13 @@ class ChainStore(ChainModel):
         return self
 
 
-class ChainNearby(ChainModel):
+class AnalysisNearby(AnalysisModel):
     center: Center
     radius_m: int
     as_of: date
     count: int = Field(ge=0)
     excluded_no_coord: int = Field(ge=0)
-    markers: list[ChainStore]
+    markers: list[AnalysisStore]
     message: str | None
 
     @model_validator(mode="after")
@@ -191,13 +134,13 @@ class ChainNearby(ChainModel):
         return self
 
 
-class ChainSnapshot(ChainModel):
+class AnalysisSnapshot(AnalysisModel):
     as_of: date
     total_at_as_of: int = Field(ge=0)
     still_open: int = Field(ge=0)
     closed_since: int = Field(ge=0)
     other: int = Field(ge=0)
-    stores: list[ChainStore]
+    stores: list[AnalysisStore]
     summary_text: str
     excluded_no_coord: int = Field(ge=0)
 
@@ -211,9 +154,9 @@ class ChainSnapshot(ChainModel):
         return self
 
 
-class ChainHistory(ChainModel):
+class AnalysisHistory(AnalysisModel):
     total: int = Field(ge=0)
-    stores: list[ChainStore]
+    stores: list[AnalysisStore]
     message: str | None
 
     @model_validator(mode="after")

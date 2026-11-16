@@ -90,7 +90,7 @@ def test_closed_events_distance_boundaries_and_mean_at_requested_date(activity_d
     assert all(v["status"] == "pending" for v in data["meta"]["optional_data"].values())
     nearby = activity_client.get("/api/stores/nearby", params=PARAMS).json()
     assert nearby["data"]["count"] == 2 and nearby["data"]["excluded_no_coord"] == 1
-    assert data["meta"]["franchise_classification"]["status"] == "pending"
+    assert "franchise_classification" not in data["meta"]
     assert data["meta"]["collected_at"] is None
     assert data["meta"]["data_version"]["rule_version"] == "market-activity-license-ytd-v2"
 
@@ -212,21 +212,15 @@ def test_quality_cohort_and_source_identity(activity_db, activity_client):
     assert result["meta"]["optional_data"] == {} and result["data"]["flags"]["missing"] == []
 
 
-def test_filters_and_unknown_axes_match_nearby_without_brand_reclassification(
-    activity_db, activity_client
-):
+def test_area_filter_matches_nearby_for_all_source_classifications(activity_db, activity_client):
     with Session(activity_db.engine) as s, s.begin():
         b = batch(s)
         for n, (area, franchise) in enumerate(product([None, 0, 32, 66], [None, True, False])):
             store(s, b, str(n), area_m2=area, is_franchise=franchise)
-    for area_unknown, franchise_unknown, franchise in product(
-        ["true", "false"], ["true", "false"], ["all", "franchise", "independent"]
-    ):
+    for area_unknown in ["true", "false"]:
         params = {
             "area": "lt33",
-            "franchise": franchise,
             "include_unknown_area": area_unknown,
-            "include_unknown_franchise": franchise_unknown,
         }
         actual = payload(activity_client, **params)["data"]
         nearby = activity_client.get("/api/stores/nearby", params={**PARAMS, **params})
@@ -239,7 +233,7 @@ def test_filters_and_unknown_axes_match_nearby_without_brand_reclassification(
         payload(activity_client, include_unknown="false")["data"]["by_sub_category"][0][
             "open_count"
         ]
-        == 4
+        == 6
     )
 
 

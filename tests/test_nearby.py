@@ -67,21 +67,10 @@ def test_duplicate_key_rejected_before_database() -> None:
 
 
 @pytest.mark.parametrize("value", [True, False, "true", "false"])
-def test_legacy_flag_maps_to_both_axes(value) -> None:
+def test_legacy_flag_maps_to_area(value) -> None:
     query = NearbyQuery.model_validate({**BASE, "include_unknown": value})
     expected = value is True or value == "true"
     assert query.include_unknown_area is expected
-    assert query.include_unknown_franchise is expected
-
-
-@pytest.mark.parametrize(
-    "area,franchise", [(True, False), (False, True), (True, True), (False, False)]
-)
-def test_independent_unknown_flags(area: bool, franchise: bool) -> None:
-    query = NearbyQuery.model_validate(
-        {**BASE, "include_unknown_area": area, "include_unknown_franchise": franchise}
-    )
-    assert (query.include_unknown_area, query.include_unknown_franchise) == (area, franchise)
 
 
 def test_restaurant_categories_and_strict_numeric_inputs() -> None:

@@ -205,18 +205,12 @@ def test_unknown_filters_are_independent_and_bad_intervals_excluded(db, client):
             ),
         ]:
             store(s, b, name, **changes)
-    for area_unknown, fr_unknown, franchise in product(
-        [False, True], [False, True], ["all", "franchise", "independent"]
-    ):
+    for area_unknown in [False, True]:
         r = payload(
             client,
             include_unknown_area=area_unknown,
-            include_unknown_franchise=fr_unknown,
-            franchise=franchise,
         )
-        expected = (3 if area_unknown else 1) * (
-            (3 if fr_unknown else 2) if franchise == "all" else (2 if fr_unknown else 1)
-        )
+        expected = (3 if area_unknown else 1) * 3
         assert metrics(r)["competitor_count"]["value"] == expected
 
 

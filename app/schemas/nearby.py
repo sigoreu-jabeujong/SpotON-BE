@@ -4,7 +4,6 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.schemas.franchise import FranchiseBasis
 from app.schemas.store_filters import CategoryFilters
 from app.schemas.stores import PeriodReason, StoreSource, StoreStatus, SubCategory
 
@@ -15,9 +14,7 @@ class NearbyQuery(CategoryFilters):
     radius: Literal[300, 500, 1000] = 500
     as_of: str | None = None
     area: Literal["all", "lt33", "33to66", "66to99", "gte99"] = "all"
-    franchise: Literal["all", "franchise", "independent"] = "all"
     include_unknown_area: bool = True
-    include_unknown_franchise: bool = True
     include_unknown: bool | None = None
 
     @model_validator(mode="before")
@@ -25,8 +22,8 @@ class NearbyQuery(CategoryFilters):
     def exclusive_unknown_flags(cls, value: Any) -> Any:
         if (
             isinstance(value, dict)
-            and "include_unknown" in value
-            and ("include_unknown_area" in value or "include_unknown_franchise" in value)
+            and value.get("include_unknown") is not None
+            and "include_unknown_area" in value
         ):
             raise ValueError("mixed unknown flags")
         return value
@@ -49,9 +46,7 @@ class NearbyQuery(CategoryFilters):
             date(int(value[:4]), int(value[5:]), 1)
         return value
 
-    @field_validator(
-        "include_unknown_area", "include_unknown_franchise", "include_unknown", mode="before"
-    )
+    @field_validator("include_unknown_area", mode="before")
     @classmethod
     def strict_boolean(cls, value: Any) -> bool:
         if type(value) is bool:
@@ -62,11 +57,15 @@ class NearbyQuery(CategoryFilters):
             return False
         raise ValueError("invalid boolean")
 
+    @field_validator("include_unknown", mode="before")
+    @classmethod
+    def optional_boolean(cls, value: Any) -> bool | None:
+        return None if value is None else cls.strict_boolean(value)
+
     @model_validator(mode="after")
     def consistent_filters(self) -> Self:
         if self.include_unknown is not None:
             self.include_unknown_area = self.include_unknown
-            self.include_unknown_franchise = self.include_unknown
         return self
 
 
@@ -92,9 +91,6 @@ class NearbyMarker(BaseModel):
     operating_period_status: Literal["fact", "no_data"]
     operating_period_reason: PeriodReason | None
     current_status: StoreStatus
-    franchise: Literal["franchise", "independent", "unknown"]
-    franchise_basis: FranchiseBasis | None = None
-    franchise_reference_year: int | None = Field(default=None, ge=2000, le=9999)
     area_m2: float | None = Field(ge=0, allow_inf_nan=False)
 
     @model_validator(mode="after")

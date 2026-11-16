@@ -5,9 +5,9 @@ import time
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from sqlalchemy import event
 
-from app.ai.chain_context import chain_query_parts, prepare_chain_interpretation
 from app.ai.client import LlmClient, LlmError, LlmErrorKind
 from app.ai.context import PreparedRiskInterpretation, prepare_risk_interpretation
+from app.ai.context_v2 import prepare_v2_interpretation, v2_query_parts
 from app.ai.interpretation import build_catalog, render_interpretation
 from app.ai.limits import RequestLimiter
 from app.ai.prompts.builder import build_interpret_request
@@ -15,8 +15,8 @@ from app.ai.verified import AiVerifyFailedError, generate_verified
 from app.core.cache import Flights
 from app.core.errors import AppError
 from app.db.dependencies import NO_STORE, DatabaseResources, read_only_session
-from app.schemas.ai_context import ChainRiskInterpretContext
-from app.schemas.chains import ChainRiskQuery
+from app.schemas.ai_context import AnalysisRiskInterpretContext
+from app.schemas.analysis_v2 import AnalysisRiskQuery
 from app.schemas.common import ApiMeta, ApiResponse, ErrorCode
 from app.schemas.interpret import CandidateSelection, RiskInterpretation
 from app.schemas.risk import RiskQuery
@@ -24,8 +24,8 @@ from app.schemas.stores import HistoryQuery
 from app.services.risk_cache import query_parts
 
 MIN_REGENERATION_SECONDS = 1.0
-SELECTION_CACHE_RULE = "selection-current-validation-v5-significance"
-CHAIN_SELECTION_CACHE_RULE = "selection-chain-current-validation-v3-significance"
+SELECTION_CACHE_RULE = "selection-current-brand-free-v1"
+V2_SELECTION_CACHE_RULE = "selection-analysis-v2-brand-free-v1"
 
 
 class _CachedSelection(BaseModel):
@@ -49,7 +49,7 @@ class InterpretationResources:
 
 def _prepare(
     resources: InterpretationResources,
-    query: RiskQuery | ChainRiskQuery,
+    query: RiskQuery | AnalysisRiskQuery,
     deadline: float,
     stop: threading.Event,
     history: HistoryQuery | None = None,
@@ -63,8 +63,8 @@ def _prepare(
         connection = session.connection()
         event.listen(connection, "before_cursor_execute", check)
         try:
-            if isinstance(query, ChainRiskQuery):
-                result = prepare_chain_interpretation(
+            if isinstance(query, AnalysisRiskQuery):
+                result = prepare_v2_interpretation(
                     session,
                     query,
                     resources.database.settings,
@@ -87,7 +87,7 @@ def _prepare(
 
 async def interpret_risk(
     resources: InterpretationResources,
-    query: RiskQuery | ChainRiskQuery,
+    query: RiskQuery | AnalysisRiskQuery,
     history: HistoryQuery | None = None,
 ) -> ApiResponse[RiskInterpretation]:
     budget = resources.database.settings.llm_time_budget
@@ -106,15 +106,15 @@ async def interpret_risk(
                 "analysis": prepared.json_context(),
                 "candidates": catalog.candidates(),
             }
-            is_chain = isinstance(query, ChainRiskQuery)
-            if is_chain and (
-                not isinstance(prepared.context, ChainRiskInterpretContext)
+            is_v2 = isinstance(query, AnalysisRiskQuery)
+            if is_v2 and (
+                not isinstance(prepared.context, AnalysisRiskInterpretContext)
                 or prepared.bundle is None
                 or prepared.bundle.version != prepared.prompt_version
                 or prepared.bundle.sha256 != prepared.prompt_sha256
             ):
-                raise ValueError("chain prompt context mismatch")
-            if is_chain:
+                raise ValueError("analysis prompt context mismatch")
+            if is_v2:
                 request = build_interpret_request(
                     payload, response_json_schema=catalog.selection_schema(), bundle=prepared.bundle
                 )
@@ -133,10 +133,10 @@ async def interpret_risk(
             ):
                 key = cache.key(
                     "ai",
-                    CHAIN_SELECTION_CACHE_RULE if is_chain else SELECTION_CACHE_RULE,
+                    V2_SELECTION_CACHE_RULE if is_v2 else SELECTION_CACHE_RULE,
                     prepared.snapshot_token,
-                    chain_query_parts(query)
-                    if isinstance(query, ChainRiskQuery)
+                    v2_query_parts(query)
+                    if isinstance(query, AnalysisRiskQuery)
                     else query_parts(query),
                     prepared.data_version_hash,
                     prepared.context_hash,
@@ -210,9 +210,9 @@ async def interpret_risk(
                     "interpretation_method": "server_sentences_model_ordering",
                 }
                 response: ApiResponse[RiskInterpretation] = ApiResponse(data=output, meta=meta)
-                if is_chain:
+                if is_v2:
                     if prepared.response_meta is None:
-                        raise ValueError("chain response metadata missing")
+                        raise ValueError("analysis response metadata missing")
                     response.meta.update(prepared.response_meta)
                 before(1)
                 if key is not None and cached is None:

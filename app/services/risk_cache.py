@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app.core.cache import CacheResources
 from app.core.config import Settings
-from app.models.brand import MAPPING_RULE
 from app.schemas.common import ApiResponse
 from app.schemas.risk import Risk, RiskQuery
 from app.services.store_scope import NAME_EXCLUSION_VERSION
@@ -20,7 +19,7 @@ SNAPSHOT = text(
     "current_setting('DateStyle'), current_setting('extra_float_digits'), "
     "pg_current_snapshot()::text"
 )
-FILTERS = {"sub_category", "area", "franchise", "include_unknown_area", "include_unknown_franchise"}
+FILTERS = {"sub_category", "area", "include_unknown_area"}
 
 
 def snapshot_token(session: Session, cache: CacheResources) -> str | None:
@@ -48,9 +47,7 @@ def query_parts(query: RiskQuery) -> dict[str, object]:
         "as_of": query.as_of,
         "sub_category": sorted(sub),
         "area": query.area,
-        "franchise": query.franchise,
         "include_unknown_area": query.include_unknown_area,
-        "include_unknown_franchise": query.include_unknown_franchise,
         "include": sorted(query.include),
     }
 
@@ -66,7 +63,7 @@ def risk_key(
         query_parts(query),
         str(settings.risk_boundary_version_id),
         rule,
-        MAPPING_RULE,
+        "brand-free-v1",
         NAME_EXCLUSION_VERSION,
     )
 

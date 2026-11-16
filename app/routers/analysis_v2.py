@@ -1,4 +1,4 @@
-"""Independent v2 brand contract. Invalid input is rejected before a DB session."""
+"""General v2 analysis contract. Invalid input is rejected before a DB session."""
 
 from collections.abc import Iterator
 from typing import Annotated, TypeVar
@@ -11,41 +11,27 @@ from app.core.errors import AppError
 from app.db.dependencies import NO_STORE, history_session, read_only_session
 from app.routers.spatial_query import PARAMETERS
 from app.routers.stores import history_query, validated_session
-from app.schemas.chains import (
-    ChainActivityQuery,
-    ChainHistory,
-    ChainNearby,
-    ChainQuery,
-    ChainRiskQuery,
-    ChainSnapshot,
-    ChainSnapshotQuery,
+from app.schemas.analysis_v2 import (
+    AnalysisActivityQuery,
+    AnalysisHistory,
+    AnalysisNearby,
+    AnalysisQuery,
+    AnalysisRiskQuery,
+    AnalysisSnapshot,
+    AnalysisSnapshotQuery,
 )
-from app.schemas.common import ApiMeta, ApiResponse, ErrorCode
+from app.schemas.common import ApiResponse, ErrorCode
 from app.schemas.location_history import LocationHistory, LocationHistoryQuery
 from app.schemas.market_activity import MarketActivity
 from app.schemas.responses import VALIDATION_ERROR_RESPONSES
 from app.schemas.risk import Risk
 from app.schemas.stores import HistoryQuery
-from app.services import chain_api
-from app.services.chains import ChainSelection
+from app.services import analysis_v2
 from app.services.location_history import get_location_history
 
-router = APIRouter(tags=["brand v2"], responses=VALIDATION_ERROR_RESPONSES)
-T = TypeVar("T", bound=ChainQuery)
-V2_PARAMETERS = [
-    p
-    for p in PARAMETERS
-    if p["name"] not in {"franchise", "include_unknown_franchise", "include_unknown"}
-] + [
-    {"name": name, "in": "query", "required": False, "schema": {"type": "string", "enum": values}}
-    for name, values in {
-        "brand_scope": ["all", "chain", "non_chain"],
-        "brand_unknown": ["include", "exclude"],
-        "brand_evidence": ["include_estimates", "confirmed_only"],
-        "brand_time_basis": ["observed_record"],
-        "operation_type": ["any"],
-    }.items()
-]
+router = APIRouter(tags=["analysis v2"], responses=VALIDATION_ERROR_RESPONSES)
+T = TypeVar("T", bound=AnalysisQuery)
+V2_PARAMETERS = [p for p in PARAMETERS if p["name"] != "include_unknown"]
 
 
 def parse(request: Request, model: type[T]) -> T:
@@ -60,49 +46,43 @@ def parse(request: Request, model: type[T]) -> T:
         raise AppError(ErrorCode.INVALID_PARAM, headers=NO_STORE) from None
 
 
-def nearby_query(request: Request) -> ChainQuery:
-    return parse(request, ChainQuery)
+def nearby_query(request: Request) -> AnalysisQuery:
+    return parse(request, AnalysisQuery)
 
 
-def snapshot_query(request: Request) -> ChainSnapshotQuery:
-    return parse(request, ChainSnapshotQuery)
+def snapshot_query(request: Request) -> AnalysisSnapshotQuery:
+    return parse(request, AnalysisSnapshotQuery)
 
 
-def activity_query(request: Request) -> ChainActivityQuery:
-    return parse(request, ChainActivityQuery)
+def activity_query(request: Request) -> AnalysisActivityQuery:
+    return parse(request, AnalysisActivityQuery)
 
 
-def risk_query(request: Request) -> ChainRiskQuery:
-    return parse(request, ChainRiskQuery)
+def risk_query(request: Request) -> AnalysisRiskQuery:
+    return parse(request, AnalysisRiskQuery)
 
 
 def nearby_session(
-    request: Request, query: Annotated[ChainQuery, Depends(nearby_query)]
+    request: Request, query: Annotated[AnalysisQuery, Depends(nearby_query)]
 ) -> Iterator[Session]:
     yield from history_session(request)
 
 
 def snapshot_session(
-    request: Request, query: Annotated[ChainSnapshotQuery, Depends(snapshot_query)]
+    request: Request, query: Annotated[AnalysisSnapshotQuery, Depends(snapshot_query)]
 ) -> Iterator[Session]:
     yield from history_session(request)
 
 
 def activity_session(
-    request: Request, query: Annotated[ChainActivityQuery, Depends(activity_query)]
+    request: Request, query: Annotated[AnalysisActivityQuery, Depends(activity_query)]
 ) -> Iterator[Session]:
     yield from history_session(request)
 
 
 def risk_session(
-    request: Request, query: Annotated[ChainRiskQuery, Depends(risk_query)]
+    request: Request, query: Annotated[AnalysisRiskQuery, Depends(risk_query)]
 ) -> Iterator[Session]:
-    yield from history_session(request)
-
-
-def status_session(request: Request) -> Iterator[Session]:
-    if request.query_params:
-        raise AppError(ErrorCode.INVALID_PARAM, headers=NO_STORE)
     yield from history_session(request)
 
 
@@ -152,37 +132,23 @@ def location_history(
     return get_location_history(session, query)
 
 
-@router.get("/brands/status", response_model=ApiResponse[ApiMeta])
-def status(
-    session: Annotated[Session, Depends(status_session)], response: Response
-) -> ApiResponse[ApiMeta]:
-    response.headers.update(NO_STORE)
-    chain = ChainSelection.load(session)
-    data = chain.meta()
-    data["publication_counts"] = (
-        chain.publication.summary.get("status") if chain.publication else None
-    )
-    data["publication_counts_scope"] = "publication_source_supported_license_records"
-    return ApiResponse(data=data, meta={})
-
-
 @router.get(
     "/stores/nearby",
-    response_model=ApiResponse[ChainNearby],
+    response_model=ApiResponse[AnalysisNearby],
     openapi_extra={"parameters": V2_PARAMETERS},
 )
 def nearby(
-    query: Annotated[ChainQuery, Depends(nearby_query)],
+    query: Annotated[AnalysisQuery, Depends(nearby_query)],
     session: Annotated[Session, Depends(nearby_session)],
     response: Response,
-) -> ApiResponse[ChainNearby]:
+) -> ApiResponse[AnalysisNearby]:
     response.headers.update(NO_STORE)
-    return chain_api.nearby(session, query)
+    return analysis_v2.nearby(session, query)
 
 
 @router.get(
     "/stores/snapshot",
-    response_model=ApiResponse[ChainSnapshot],
+    response_model=ApiResponse[AnalysisSnapshot],
     openapi_extra={
         "parameters": [
             {**p, "required": True} if p["name"] == "as_of" else p for p in V2_PARAMETERS
@@ -190,22 +156,22 @@ def nearby(
     },
 )
 def snapshot(
-    query: Annotated[ChainSnapshotQuery, Depends(snapshot_query)],
+    query: Annotated[AnalysisSnapshotQuery, Depends(snapshot_query)],
     session: Annotated[Session, Depends(snapshot_session)],
     response: Response,
-) -> ApiResponse[ChainSnapshot]:
+) -> ApiResponse[AnalysisSnapshot]:
     response.headers.update(NO_STORE)
-    return chain_api.snapshot(session, query)
+    return analysis_v2.snapshot(session, query)
 
 
-@router.get("/stores/history", response_model=ApiResponse[ChainHistory])
+@router.get("/stores/history", response_model=ApiResponse[AnalysisHistory])
 def history(
     query: Annotated[HistoryQuery, Depends(history_query)],
     session: Annotated[Session, Depends(validated_session)],
     response: Response,
-) -> ApiResponse[ChainHistory]:
+) -> ApiResponse[AnalysisHistory]:
     response.headers.update(NO_STORE)
-    return chain_api.history(session, query)
+    return analysis_v2.history(session, query)
 
 
 @router.get(
@@ -224,12 +190,12 @@ def history(
     },
 )
 def activity(
-    query: Annotated[ChainActivityQuery, Depends(activity_query)],
+    query: Annotated[AnalysisActivityQuery, Depends(activity_query)],
     session: Annotated[Session, Depends(activity_session)],
     response: Response,
 ) -> ApiResponse[MarketActivity]:
     response.headers.update(NO_STORE)
-    return chain_api.activity(session, query)
+    return analysis_v2.activity(session, query)
 
 
 @router.get(
@@ -249,9 +215,9 @@ def activity(
 )
 def risk(
     request: Request,
-    query: Annotated[ChainRiskQuery, Depends(risk_query)],
+    query: Annotated[AnalysisRiskQuery, Depends(risk_query)],
     session: Annotated[Session, Depends(risk_session)],
     response: Response,
 ) -> ApiResponse[Risk]:
     response.headers.update(NO_STORE)
-    return chain_api.risk(session, query, request.app.state.settings)
+    return analysis_v2.risk(session, query, request.app.state.settings)

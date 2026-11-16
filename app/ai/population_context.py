@@ -170,7 +170,7 @@ def _sentence(context: ContextPopulationReference) -> tuple[str, dict[str, JsonV
         text += "주간 또는 야간에 치우친 제외 패턴으로 비중이 달라질 수 있습니다. "
     text += (
         "전체 인구나 실제 방문객을 대표하지 않으며 "
-        "점포의 업종·브랜드·면적 필터를 적용한 인구가 아닙니다. "
+        "점포의 업종·면적 필터를 적용한 인구가 아닙니다. "
         "행정동별 합산과 격자의 기간 적용 기준은 미확정입니다."
     )
     return text, evidence

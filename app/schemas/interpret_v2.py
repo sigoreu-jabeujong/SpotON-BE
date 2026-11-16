@@ -2,13 +2,13 @@ from typing import Self
 
 from pydantic import PrivateAttr, model_validator
 
-from app.schemas.chains import ChainRiskQuery
+from app.schemas.analysis_v2 import AnalysisRiskQuery
 from app.schemas.interpret import InterpretHistory, InterpretModel
 from app.schemas.stores import HistoryQuery
 
 
-class ChainInterpretRequest(InterpretModel):
-    query: ChainRiskQuery
+class AnalysisInterpretRequest(InterpretModel):
+    query: AnalysisRiskQuery
     history: InterpretHistory | None = None
     _history_query: HistoryQuery | None = PrivateAttr(default=None)
 
