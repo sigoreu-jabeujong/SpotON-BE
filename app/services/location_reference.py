@@ -41,6 +41,7 @@ from app.schemas.location_reference import (
 )
 from app.services.admin_reference import get_admin_reference
 from app.services.location_catalog import catalog_digest, load_catalog
+from app.services.per_store_sales import attach
 from app.services.spatial_stores import effective_date
 from app.services.store_cohort import current_provenance, temporal_cohort
 
@@ -246,6 +247,7 @@ def _sales(
     query: LocationReferenceQuery,
     target: date,
     catalog: LocationCatalog,
+    store_context: list[MV] | None = None,
 ) -> tuple[SalesBlock, list[dict[str, object]]]:
     entry = catalog.sales
     if entry is None:
@@ -253,7 +255,9 @@ def _sales(
     resolved = _versions(session, entry)
     if isinstance(resolved, SalesBlock):
         return resolved, []
-    sale, boundary, _ = resolved
+    sale, boundary, store = resolved
+    if store_context is not None:
+        store_context.append(store)
     sources = [_source(sale, boundary)]
     areas = _candidates(session, query, boundary)
     if len(areas) > MAX_MARKETS:
@@ -392,7 +396,25 @@ def _get_location_reference(
     )
     target = effective_date(reference, minimum, query.as_of)
     catalog = load_catalog()
-    sales, sources = _sales(session, query, target, catalog)
+    store_context: list[MV] = []
+    sales, sources = _sales(session, query, target, catalog, store_context)
+    store_version = store_context[0] if store_context else None
+    sales = attach(session, sales, store_version, target, query.time_mode)
+    if store_version is not None:
+        sources.append(
+            dict(
+                id="store-counts",
+                dataset="OA-15577",
+                url=store_version.source_url,
+                source_year=store_version.source_year,
+                rule_version=store_version.rule_version,
+                input_sha256=store_version.input_sha256,
+                content_sha256=store_version.content_sha256,
+                source_file_date=store_version.source_file_date.isoformat(),
+                loaded_at=store_version.loaded_at.isoformat(),
+                source_field="similr_induty_stor_co",
+            )
+        )
     living, day_night, population_sources = get_admin_reference(
         session, query, target, catalog.population, _today()
     )
