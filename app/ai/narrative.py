@@ -12,6 +12,7 @@ from decimal import Decimal
 from pydantic import JsonValue
 
 from app.ai.chain_notices import chain_notice
+from app.ai.population_context import population_sentence
 from app.schemas.ai_context import ChainRiskInterpretContext, ContextIndicator, InterpretContext
 from app.schemas.interpret import InterpretItem
 
@@ -186,11 +187,19 @@ def build_narrative(c: InterpretContext) -> NarrativeCatalog:
         "임대료·고정비와 예상 고객층을 별도로 확인해 장기 운영에 필요한 비용 구조를 검토해 주세요. "
         "확보되지 않은 매출·생활인구로 수요나 수익성을 추정하지 않았습니다. " + NOTICE
     )
+    preparation_ids = []
+    if isinstance(c, ChainRiskInterpretContext):
+        preparation = preparation.replace(
+            "확보되지 않은 매출·생활인구로 수요나 수익성을 추정하지 않았습니다.",
+            "전체 생활인구와 매출의 적용 기준을 확인하지 못해 수요나 수익성을 추정하지 않았습니다.",
+        )
+        preparation = population_sentence(c.population_reference) + " " + preparation
+        preparation_ids = ["population_public_subset"]
     texts = [
         (opening, opening_ids),
         (comparison, comparison_ids),
         (" ".join(activity), activity_ids),
-        (preparation, []),
+        (preparation, preparation_ids),
     ]
     groups = []
     for index, (text, ids) in enumerate(texts):

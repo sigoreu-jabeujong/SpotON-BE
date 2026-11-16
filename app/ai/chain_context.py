@@ -17,6 +17,7 @@ from app.ai.context import (
     _indicator,
     check_history_location,
 )
+from app.ai.population_context import project_population
 from app.ai.prompts.builder import build_interpret_request, serialize_context
 from app.ai.prompts.loader import PromptError, load_chain_prompt_bundle
 from app.core.cache import CacheResources
@@ -34,11 +35,13 @@ from app.schemas.ai_context import (
 from app.schemas.chains import BRAND_FIELDS, ChainRiskQuery
 from app.schemas.common import ApiMeta, ApiResponse, ErrorCode
 from app.schemas.market_activity import ActivityQuery
+from app.schemas.population_reference import PopulationReferenceQuery
 from app.schemas.risk import Risk, RiskQuery
 from app.schemas.stores import HistoryQuery
 from app.services.chains import ChainSelection, source_revision
 from app.services.market_activity import RULE_VERSION as ACTIVITY_RULE_VERSION
 from app.services.market_activity import get_activity
+from app.services.population_reference import get_population_reference
 from app.services.risk import RULE_VERSION, get_risk
 from app.services.risk_cache import snapshot_token
 from app.services.spatial_stores import effective_date
@@ -149,6 +152,23 @@ def prepare_chain_interpretation(
         for result in results:
             _brand_meta(result, chain)
         data, reference, method, version = _checked_risk(response, checked)
+        population_query = PopulationReferenceQuery.model_validate(
+            checked.model_dump(
+                include={
+                    "lat",
+                    "lng",
+                    "radius",
+                    "category",
+                    "sub_category",
+                    "as_of",
+                }
+            )
+        )
+        population, population_digest = project_population(
+            get_population_reference(session, population_query),
+            population_query,
+            data.query.as_of,
+        )
         sub = tuple(
             sorted(
                 checked.sub_category
@@ -186,6 +206,7 @@ def prepare_chain_interpretation(
                 checked.model_dump(include=BRAND_FIELDS | {"area", "include_unknown_area"})
             ),
             brand_classification=brand,
+            population_reference=population,
             as_of=data.query.as_of,
             data_updated_at=reference,
             indicators=tuple(
@@ -221,6 +242,7 @@ def prepare_chain_interpretation(
         version_json = version.model_dump(mode="json", exclude={"brand_mapping"})
         version_json["stores_batch_ids"] = sorted(str(v) for v in version.stores_batch_ids)
         version_json["activity_rule_version"] = ACTIVITY_RULE_VERSION
+        version_json["population_digest"] = population_digest
         if history is not None:
             version_json["history_rule_version"] = HISTORY_RULE_VERSION
         # Internal provenance is hashed here, never passed to serialize_context or LLM.
@@ -250,7 +272,13 @@ def prepare_chain_interpretation(
             prompt_sha256=bundle.sha256,
             snapshot_token=token,
             bundle=bundle,
-            response_meta={"brand_classification": public, "brand_filters": checked.echo_filters()},
+            response_meta={
+                "brand_classification": public,
+                "brand_filters": checked.echo_filters(),
+                "source": ["R5", "R6", "R4"]
+                if any(s.status == "partial" for s in population.sources)
+                else ["R5", "R6"],
+            },
         )
     except (ValueError, TypeError, AttributeError, PromptError):
         pass

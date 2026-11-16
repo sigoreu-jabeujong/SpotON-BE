@@ -1,5 +1,7 @@
 # Spot:ON BE 개발 기준 및 작업계획
 
+2026-11-16 #184는 [부분자료 AI 구현·FE 호환 선배포](designs/feat184-population-ai-implementation.md)다. #182 설계를 실제 v2 문맥·서버 문장/별도 검증·캐시·프롬프트와 FE #76에 연결한다. 전체 인구/공식 근거 승격과 구분하고 기존 DB0012/환경/원천/runtime을 유지한다. 코드·검수·검사와 공개 배포는 각 실제 실행 기록으로 구분한다.
+
 2026-11-16 #182는 [공개 부분자료의 AI 연결 후속 설계](designs/feat182-population-ai-integration.md)다. #180/FE #73의 공개 배포를 기준으로, 기존 v2 요청 유지·같은 RR 재계산·서버 제한 문장·새 근거 ID·v2 프롬프트/캐시·FE 정보창 계약과 구현 완료 검사를 정한다. 이번 작업은 설계/실제 Claude 검수이며 AI 연결 구현·새 배포와 구분한다. 전체 인구 공식 근거 #115/#78, DB0012·환경/원천·Task/runtime은 유지한다.
 
 2026-11-16 #180은 [생활인구 공개자료 API·FE 구현/배포](designs/feat180-population-implementation.md)다. #178의 설계 뒤 새 GET `/api/v2/population-reference`, 원천별 동일 공개 구성24시간·상태/숫자/편향, FE #73의 분석/종합/보고서 연결을 구현한다. 최신 사용자 지시가 FE 직접 수정·운영 배포를 승인했다. 기존 API/AI·source unverified/DB0012/환경은 유지하고 부분 자료를 인구 총계로 표시하지 않는다. 실제 clone/운영 READ ONLY·브라우저·Claude 검토·전체 검사·CI·배포 commit은 문서와 각 PR의 실행 기록을 따른다. #115/#78의 공식 전체 인구 검증은 별도 유지한다.

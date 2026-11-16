@@ -43,3 +43,7 @@ meta.brand_classification은 조회 API와 같은 상태/공개 세대를, meta.
 성공·오류 모두 no-store다. 일반 입력/위치 오류는422, DB·집계/메타 불일치는500, 모델 미설정·한도·예산 만료는503 AI_UNAVAILABLE, 선택 검증 실패는503 AI_VERIFY_FAILED다. 오류에서 부분 해석이나 추정 수치를 만들어 표시하지 않는다.
 
 v1/v2는 같은 요청 한도·동시 실행 자원을 사용한다(기본5회/분·50회/일·동시2·20초). 경로를 바꿔 한도를 우회할 수 없다. HTTP 캐시와 별도로 서버 내부 선택 캐시만 사용하며 현재 DB의 동일 조건/자료/프롬프트에만 재사용한다.
+
+## 2026-11-16 공개 부분자료 AI 추가 (#184 / FE #76)
+
+기존 v2 요청 query/history 형식은 유지합니다. 응답 evidence.population_reference와 새 근거 population_public_subset, chain-risk-interpret-v2 및 partial 사용 시 source R4가 추가됩니다. [전체 계약·배포 순서](designs/feat182-population-ai-integration.md), [실제 구현/검수](designs/feat184-population-ai-implementation.md)를 따릅니다. FE는 promptv1/필드없음과 promptv2/정합한 인구 evidence를 함께 지원하고 동적 안내/관측일을 표시한 뒤 먼저 배포합니다. 전체 living_pop/Risk pending은 유지합니다. 아래 기존 promptv1만 허용하는 설명은 이 호환 전환 이후 과거 이력입니다.

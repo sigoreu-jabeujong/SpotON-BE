@@ -25,7 +25,7 @@ from app.services.risk_cache import query_parts
 
 MIN_REGENERATION_SECONDS = 1.0
 SELECTION_CACHE_RULE = "selection-current-validation-v4-narrative"
-CHAIN_SELECTION_CACHE_RULE = "selection-chain-current-validation-v1"
+CHAIN_SELECTION_CACHE_RULE = "selection-chain-current-validation-v2-population"
 
 
 class _CachedSelection(BaseModel):
