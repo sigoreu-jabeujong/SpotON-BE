@@ -124,3 +124,117 @@ def test_empty_upstream_and_duplicate_items():
     assert result.per_store_average["reason"] == "source_not_loaded"
     with pytest.raises(ValueError):
         calculate([item("3110001", 100)] * 2, [])
+
+
+def test_distribution_uses_only_same_quarter_valid_pairs():
+    result = calculate(
+        [item("3110001", 100), item("3110002", 900), item("3110003", 2000, "20253")],
+        [row("3110001", 10), row("3110003", 20, "20253")],
+    )
+    avg = result.per_store_average
+    assert avg["distribution"]["median"]["value"] == "10"
+    assert avg["distribution"]["sample_count"] == avg["included_item_count"] == 1
+    assert avg["groups"][1]["distribution"]["median"]["value"] == "100"
+    assert avg["groups"][1]["distribution"]["sample_count"] == 1
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "missing_reference",
+        "no_data_reference",
+        "per_store",
+        "contribution",
+        "median",
+        "projection",
+        "sample_count",
+    ],
+)
+def test_rejects_corrupted_distribution_members_and_projection(tamper):
+    from pydantic import ValidationError
+
+    result = calculate([item("3110001", 100)], [row("3110001", 10)])
+    payload = result.model_dump()
+    avg = payload["per_store_average"]
+    if tamper == "missing_reference":
+        payload["items"][0]["store_reference"] = None
+    elif tamper == "no_data_reference":
+        payload["items"][0]["store_reference"].update(status="no_data", total_stores=None)
+    elif tamper == "per_store":
+        payload["items"][0]["per_store_metric"] = metric(200, 10)
+    elif tamper == "contribution":
+        payload["items"][0]["average_contribution"]["status"] = "excluded"
+    elif tamper == "median":
+        avg["groups"][0]["distribution"]["median"]["value"] = "999"
+    elif tamper == "sample_count":
+        avg["groups"][0]["distribution"]["sample_count"] = 0
+    else:
+        avg["distribution"] = None
+    with pytest.raises(ValidationError):
+        SalesBlock.model_validate(payload)
+
+
+def test_previous_weighted_payload_remains_readable():
+    payload = calculate([item("3110001", 100)], [row("3110001", 10)]).model_dump()
+    avg = payload["per_store_average"]
+    avg.pop("distribution")
+    avg.pop("representative_method")
+    for group in avg["groups"]:
+        group.pop("distribution")
+    assert SalesBlock.model_validate(payload).per_store_average["metric"]["value"] == "10"
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "partial_legacy",
+        "missing_distribution",
+        "missing_group",
+        "duplicate_group",
+        "other_contribution",
+        "candidate_count",
+    ],
+)
+def test_rejects_group_format_and_quarter_inconsistency(tamper):
+    from pydantic import ValidationError
+
+    payload = calculate(
+        [item("3110001", 100), item("3110002", 900, "20253")],
+        [row("3110001", 10), row("3110002", 30, "20253")],
+    ).model_dump()
+    avg = payload["per_store_average"]
+    if tamper == "partial_legacy":
+        avg.pop("distribution")
+        avg.pop("representative_method")
+    elif tamper == "missing_distribution":
+        avg["groups"][0].pop("distribution")
+    elif tamper == "missing_group":
+        avg["groups"].pop()
+    elif tamper == "duplicate_group":
+        avg["groups"].append(avg["groups"][0])
+    elif tamper == "other_contribution":
+        payload["items"][1]["average_contribution"]["status"] = "included"
+    else:
+        avg["groups"][0]["candidate_item_count"] = 2
+        avg["groups"][0]["excluded_counts"] = {"store_row_missing": 1}
+    with pytest.raises(ValidationError):
+        SalesBlock.model_validate(payload)
+
+
+def test_cannot_drop_valid_member_and_recompute_representative():
+    from pydantic import ValidationError
+
+    payload = calculate([item("3110001", 100)], [row("3110001", 10)]).model_dump()
+    full = calculate(
+        [item("3110001", 100), item("3110002", 900)],
+        [row("3110001", 10), row("3110002", 30)],
+    ).model_dump()
+    payload["items"] = full["items"]
+    payload["items"][1]["average_contribution"].update(
+        status="excluded", reason="store_row_missing"
+    )
+    avg = payload["per_store_average"]
+    avg.update(listed_item_count=2, excluded_counts={"store_row_missing": 1})
+    avg["groups"][0].update(candidate_item_count=2, excluded_counts={"store_row_missing": 1})
+    with pytest.raises(ValidationError):
+        SalesBlock.model_validate(payload)

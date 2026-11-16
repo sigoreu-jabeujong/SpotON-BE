@@ -1,4 +1,6 @@
 from decimal import Decimal, localcontext
+from fractions import Fraction
+from statistics import median
 
 import pytest
 from sqlalchemy import select, update
@@ -39,5 +41,14 @@ def test_actual_api_store_join_and_weighted_summary(reference_db):  # noqa: F811
         ctx.prec = 50
         assert Decimal(avg["metric"]["value"]) == Decimal(s) / n
     assert avg["unique_store_average"] is False
+    expected = median(
+        [
+            Fraction(int(i["metric"]["value"]), int(i["store_reference"]["total_stores"]))
+            for i in included
+        ]
+    )
+    actual = avg["distribution"]["median"]
+    assert Fraction(int(actual["numerator"]), int(actual["denominator"])) == expected
+    assert avg["distribution"]["sample_count"] == len(included)
     assert body["meta"]["items_additive"] is False
     assert any(r["id"] == "store-counts" for r in body["meta"]["source_refs"])

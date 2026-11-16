@@ -157,13 +157,49 @@ class SalesBlock(ReferenceModel):
     def coherent(self) -> Self:
         if self.per_store_average is not None:
             from app.services.per_store_sales import metric
+            from app.services.sales_distribution import distribution
 
             avg = self.per_store_average
+            has_distribution = "representative_method" in avg or "distribution" in avg
+            if has_distribution and "distribution" not in avg:
+                raise ValueError("missing representative distribution")
+            if has_distribution and avg.get("representative_method") != (
+                "median_of_reference_per_store_ratios_v1"
+            ):
+                raise ValueError("invalid representative method")
             if avg["listed_item_count"] != len(self.items) or (
                 avg["included_item_count"] + sum(avg["excluded_counts"].values()) != len(self.items)
             ):
                 raise ValueError("invalid average coverage")
+            group_quarters = [g["source_quarter"] for g in avg["groups"]]
+            expected_quarters = {i.source_quarter for i in self.items if i.metric}
+            if (
+                len(group_quarters) != len(set(group_quarters))
+                or set(group_quarters) != expected_quarters
+            ):
+                raise ValueError("invalid distribution quarters")
+            for item in self.items:
+                ref = item.store_reference
+                expected_metric = None
+                if item.metric and ref and ref.get("status") == "ready":
+                    count = ref.get("total_stores")
+                    if (
+                        not isinstance(count, str)
+                        or not count.isascii()
+                        or not count.isdigit()
+                        or str(int(count)) != count
+                        or not 0 <= int(count) <= 2**31 - 1
+                    ):
+                        raise ValueError("invalid member store count")
+                    if ref.get("source_quarter") != item.source_quarter:
+                        raise ValueError("invalid member store quarter")
+                    if int(count) > 0:
+                        expected_metric = metric(int(item.metric.value), int(count))
+                if item.per_store_metric != expected_metric:
+                    raise ValueError("invalid item per-store projection")
             for group in avg["groups"]:
+                if ("distribution" in group) != has_distribution:
+                    raise ValueError("inconsistent distribution format")
                 keys = group["included_item_keys"]
                 used = [
                     i
@@ -176,11 +212,53 @@ class SalesBlock(ReferenceModel):
                 ]
                 if len(used) != len(keys) or len(used) != group["included_item_count"]:
                     raise ValueError("invalid average membership")
+                candidates = [
+                    i
+                    for i in self.items
+                    if i.metric and i.source_quarter == group["source_quarter"]
+                ]
+                eligible = [i for i in candidates if i.per_store_metric is not None]
+                if used != eligible or group["candidate_item_count"] != len(candidates):
+                    raise ValueError("invalid distribution eligibility")
                 if group["candidate_item_count"] != len(used) + sum(
                     group["excluded_counts"].values()
                 ):
                     raise ValueError("invalid group coverage")
                 if used:
+                    pairs = []
+                    for item in used:
+                        reference = item.store_reference
+                        if (
+                            item.metric is None
+                            or reference is None
+                            or reference.get("status") != "ready"
+                            or not isinstance(reference.get("total_stores"), str)
+                            or not reference["total_stores"].isdigit()
+                            or int(reference["total_stores"]) <= 0
+                            or item.source_quarter != group["source_quarter"]
+                        ):
+                            raise ValueError("invalid distribution member")
+                        pair = (int(item.metric.value), int(reference["total_stores"]))
+                        if item.per_store_metric != metric(*pair):
+                            raise ValueError("invalid member per-store value")
+                        if group["source_quarter"] == avg["primary_quarter"] and (
+                            not item.average_contribution
+                            or item.average_contribution.get("status") != "included"
+                        ):
+                            raise ValueError("invalid primary member contribution")
+                        if group["source_quarter"] != avg["primary_quarter"] and (
+                            not item.average_contribution
+                            or item.average_contribution.get("status") != "different_quarter"
+                        ):
+                            raise ValueError("invalid other-quarter contribution")
+                        pairs.append(pair)
+                    expected_distribution = distribution(pairs)
+                    if has_distribution and (
+                        group.get("distribution") != expected_distribution
+                        or expected_distribution is None
+                        or expected_distribution["sample_count"] != len(used)
+                    ):
+                        raise ValueError("invalid sales distribution")
                     s = sum(int(i.metric.value) for i in used if i.metric)
                     n = sum(
                         int(i.store_reference["total_stores"]) for i in used if i.store_reference
@@ -191,12 +269,17 @@ class SalesBlock(ReferenceModel):
                         metric(s, n),
                     ):
                         raise ValueError("invalid average value")
-                elif group["metric"] is not None:
+                elif group["metric"] is not None or group.get("distribution") is not None:
                     raise ValueError("invalid empty average")
             primary = next(
                 (g for g in avg["groups"] if g["source_quarter"] == avg["primary_quarter"]), None
             )
-            for key in ("metric", "total_sales", "total_store_count"):
+            projection_keys = ["metric", "total_sales", "total_store_count"]
+            if avg["included_item_count"] != (primary["included_item_count"] if primary else 0):
+                raise ValueError("invalid primary count projection")
+            if has_distribution:
+                projection_keys.append("distribution")
+            for key in projection_keys:
                 if avg[key] != (primary[key] if primary else None):
                     raise ValueError("invalid average projection")
         if (self.status == "ready") != (self.reason is None):

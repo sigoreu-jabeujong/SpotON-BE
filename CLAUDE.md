@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-16 #203은 [상권·업종별 점포당 추정매출 중앙값](docs/designs/feat203-sales-median.md) 구현이다. `/api/v2/location-reference`의 `sales.per_store_average.distribution`에 같은 분기 유효 상권·업종별 S/N의 동일 비중 중앙값·median-of-halves 분위수·IQR·항목 간 기술통계 분산(/n)을 추가한다. `representative_method=median_of_reference_per_store_ratios_v1`으로 FE 대표값을 선택하며 기존 metric/합계/대상 집합·가중평균 규칙은 유지한다. 개별 가게 매출 중앙값이나 고유 점포 중복 제거를 의미하지 않는다. 임계값 전환/이상치 제거 없이 기존 저장 payload 호환과 새 분포/원천 정합성을 검증한다. FE는 4개 미만의 산포 표시를 숨긴다. DB0013/환경/AI·인구 계약 변경 없이 실제 Claude 검토·검증 후 정상 PR·공개 배포한다.
+
 2026-11-16 #194는 [점포 1개당 평균 추정매출 설계](docs/designs/feat194-per-store-sales-average.md)다. 기존 목록의 같은 분기·상권·업종 매출 합계/해당 전체 점포 수 합계로 계산하는 가중 참고평균을 설계한다. 자료행 중첩은 고유 점포 중복 제거로 승격하지 않고, 혼합 분기는 분리하며 기존 raw 목록/AI·인구·DB0013·환경을 유지한다. 실제 읽기 전용 비교와 Claude MD 검토·보완/재검토를 문서화하며 이번에는 앱/FE/DB/배포를 변경하지 않는다. 구현은 기존 GET의 새 점포 수·평균 필드/FE 표시로 별도 진행한다.
 
 2026-11-16 #190은 [행정동 생활인구 참고자료 실제 연결](docs/designs/feat190-admin-population-live.md)이다. #186 B/D/E/F에 따라 새4표/migration0013, 공식 행정동 내국인 2026-10-31 관측 자료,24시간 평균/주야간 비교와 FE #81의 기존3카드·보고서를 구현한다. 원본26표/인허가/Risk/기존격자/AI는 유지하고 새 참고값의 실제 날짜·지역·필터미적용을 표시한다. 운영은 전체백업·복원·용량·API reader 권한을 검증한 뒤 기대revision만0013으로 변경한다. 실제검수/시험/배포증거는 해당 설계 실행기록을 따른다.
