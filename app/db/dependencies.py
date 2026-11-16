@@ -1,10 +1,12 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 from threading import Lock
+from typing import Literal
 
 from fastapi import Request
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import TimeoutError as PoolTimeout
 from sqlalchemy.orm import Session
 
 from app.core.cache import CacheResources
@@ -40,12 +42,30 @@ class DatabaseResources:
                 self.engine = None
 
 
+def _connected_session(engine: Engine, pool_retries: Literal[0, 1]) -> Session:
+    """Retry checkout only, before any request statement or yielded application code."""
+    for attempt in range(pool_retries + 1):
+        session = Session(engine)
+        try:
+            session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+            return session
+        except PoolTimeout:
+            session.close()
+            if attempt == pool_retries:
+                raise
+        except BaseException:
+            session.close()
+            raise
+    raise RuntimeError("database_connection_unavailable")
+
+
 @contextmanager
-def read_only_session(resources: DatabaseResources) -> Iterator[Session]:
+def read_only_session(
+    resources: DatabaseResources, *, pool_retries: Literal[0, 1] = 0
+) -> Iterator[Session]:
     try:
         engine = resources.get_engine()
-        with Session(engine) as session:
-            session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+        with _connected_session(engine, pool_retries) as session:
             session.execute(text("SET TRANSACTION READ ONLY"))
             session.execute(
                 text("SELECT set_config('statement_timeout', :timeout, true)"),
