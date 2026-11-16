@@ -1,5 +1,7 @@
 # SpotON-BE 작업 기준
 
+2026-11-17 #209는 [동일 건물·층·자리의 폐업 이력 구조 설계](docs/designs/feat209-closed-location-history.md)다. 사용자 최신 요구는 과거 표에서 영업 중 제외 및 선택 위치 일치다. 기존 층호는 전달되지만 get_history는 key만 필터하며 공개 표본75건 중open28/closed47, 같은층closed2를 확인했다. 별도 closed-location API·층/호수 exact·건물 식별 근거·출력/AI 정책을 설계하고 실제 Claude MD 검토를 따른다. 폐업 이력은 현재 공실의 증거가 아니다. 이번에는 문서 분석만 하며 FE/앱/DB0013/원본/환경/운영을 변경하지 않는다.
+
 
 사용자 후속 승인 #202는 [주소 상세 구현·배포](docs/designs/feat202-address-implementation.md)다. POST /api/address-detail은 DB/외부API 없이 기존 파서로 정규화한다. v1/v2 이력에 독립 location_relation을 추가하고 기존 location_match·AI 집계·0013/원본/환경은 보존한다. FE 후보 확인·복원·검증과 함께 BE 선배포 후 FE 공개 release를 검증한다.
 
