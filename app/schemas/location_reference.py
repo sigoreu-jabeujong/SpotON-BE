@@ -2,7 +2,7 @@
 
 from datetime import date
 from decimal import ROUND_HALF_UP, Context, Decimal, localcontext
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -113,6 +113,9 @@ class SourceNumber(ReferenceModel):
 
 
 class SalesItem(ReferenceModel):
+    store_reference: dict[str, Any] | None = None
+    per_store_metric: dict[str, Any] | None = None
+    average_contribution: dict[str, Any] | None = None
     market_code: str = Field(pattern=r"^[0-9]{7}$")
     market_name: str
     market_type: Literal["alley", "developed", "traditional_market", "tourism_zone"]
@@ -142,6 +145,7 @@ class SalesItem(ReferenceModel):
 
 
 class SalesBlock(ReferenceModel):
+    per_store_average: dict[str, Any] | None = None
     status: Status
     reason: Reason | None = None
     items: tuple[SalesItem, ...] = ()
@@ -151,6 +155,50 @@ class SalesBlock(ReferenceModel):
 
     @model_validator(mode="after")
     def coherent(self) -> Self:
+        if self.per_store_average is not None:
+            from app.services.per_store_sales import metric
+
+            avg = self.per_store_average
+            if avg["listed_item_count"] != len(self.items) or (
+                avg["included_item_count"] + sum(avg["excluded_counts"].values()) != len(self.items)
+            ):
+                raise ValueError("invalid average coverage")
+            for group in avg["groups"]:
+                keys = group["included_item_keys"]
+                used = [
+                    i
+                    for i in self.items
+                    if any(
+                        (i.market_code, i.source_quarter, i.industry_code)
+                        == (k["market_code"], k["source_quarter"], k["industry_code"])
+                        for k in keys
+                    )
+                ]
+                if len(used) != len(keys) or len(used) != group["included_item_count"]:
+                    raise ValueError("invalid average membership")
+                if group["candidate_item_count"] != len(used) + sum(
+                    group["excluded_counts"].values()
+                ):
+                    raise ValueError("invalid group coverage")
+                if used:
+                    s = sum(int(i.metric.value) for i in used if i.metric)
+                    n = sum(
+                        int(i.store_reference["total_stores"]) for i in used if i.store_reference
+                    )
+                    if (group["total_sales"], group["total_store_count"], group["metric"]) != (
+                        str(s),
+                        str(n),
+                        metric(s, n),
+                    ):
+                        raise ValueError("invalid average value")
+                elif group["metric"] is not None:
+                    raise ValueError("invalid empty average")
+            primary = next(
+                (g for g in avg["groups"] if g["source_quarter"] == avg["primary_quarter"]), None
+            )
+            for key in ("metric", "total_sales", "total_store_count"):
+                if avg[key] != (primary[key] if primary else None):
+                    raise ValueError("invalid average projection")
         if (self.status == "ready") != (self.reason is None):
             raise ValueError("invalid sales block")
         if self.excluded_count != sum(self.excluded_counts.values()) or any(
