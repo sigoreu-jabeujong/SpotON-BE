@@ -2,14 +2,41 @@ name: Backend CI
 
 on:
   pull_request:
-    branches: [main, dev]
+    branches: [main, develop]
   push:
-    branches: [main, dev]
+    branches: [main, develop, 'feat#*']
+
+concurrency:
+  group: backend-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  windows-log-runner:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        run: python -m pip install uv==0.13.7
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+      - name: Test Windows log runner with isolated credentials and files
+        run: >-
+          uv run --locked --extra dev pytest -q
+          tests/ops/test_windows_operation_log_runner.py
+          tests/etl/test_operation_log_backup.py
+          tests/etl/test_operation_log_export.py
+          tests/etl/test_b2_preflight.py
+
   lint-and-test:
     runs-on: ubuntu-latest
     steps:
@@ -19,19 +46,102 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff pytest
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Install uv
+        run: python -m pip install uv==0.13.7
 
-      - name: Lint (ruff)
-        run: ruff check .
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Lint (ruff check)
+        run: uv run --locked --extra dev ruff check .
+
+      - name: Format (ruff format --check)
+        run: uv run --locked --extra dev ruff format --check .
+
+      - name: Type check (mypy)
+        run: uv run --locked --extra dev mypy app etl migrations
 
       - name: Test (pytest)
+        run: uv run --locked --extra dev pytest
+
+  postgis-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgis/postgis:17-3.7@sha256:1f0d64ef12bfb344d3569ab6419aca183258b146951daec83f0585d01e6c9cc9
+        env:
+          POSTGRES_USER: spoton_ci
+          POSTGRES_PASSWORD: spoton_ci_only
+          POSTGRES_DB: spoton_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U spoton_ci -d spoton_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://spoton_ci:spoton_ci_only@127.0.0.1:5432/spoton_ci
+      SPOTON_ALLOW_DB_INTEGRATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
         run: |
-          if [ -d tests ]; then
-            pytest -q || [ $? -eq 5 ]   # 5 = 테스트 없음 → 통과 처리
-          else
-            echo "tests 폴더 없음 - 건너뜀"
-          fi
+          python -m pip install uv==0.13.7
+          uv sync --locked --extra dev
+      - name: Test actual PostGIS and migrations
+        run: uv run --locked --extra dev pytest -m integration -rA --junitxml=integration.xml
+      - name: Require executed tests with no skips
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases = list(ET.parse('integration.xml').getroot().iter('testcase'))
+          assert cases, 'No integration tests executed'
+          assert not any(case.find(tag) is not None for case in cases for tag in ('skipped', 'failure', 'error'))
+          localdata = [
+              case for case in cases
+              if 'test_localdata_upsert' in case.attrib.get('classname', '')
+              or 'test_localdata_upsert' in case.attrib.get('file', '')
+          ]
+          assert len(localdata) >= 4, 'LocalData PostGIS integration tests were not executed'
+          building_key = [
+              case for case in cases
+              if 'test_building_key_upsert' in case.attrib.get('classname', '')
+              or 'test_building_key_upsert' in case.attrib.get('file', '')
+          ]
+          assert len(building_key) >= 2, 'building_key PostGIS integration tests were not executed'
+          floor_unit = [
+              case for case in cases
+              if 'test_floor_unit_upsert' in case.attrib.get('classname', '')
+              or 'test_floor_unit_upsert' in case.attrib.get('file', '')
+          ]
+          assert len(floor_unit) >= 2, 'floor_unit PostGIS integration tests were not executed'
+          flow = [
+              case for case in cases
+              if 'test_analysis_flow' in case.attrib.get('classname', '')
+              or 'test_analysis_flow' in case.attrib.get('file', '')
+          ]
+          flow_names = {case.attrib.get('name', '').split('[')[0] for case in flow}
+          required_flow = {
+              'test_geocode_etl_identity_and_history_scope',
+              'test_query_flow_counts_and_dates',
+              'test_past_month_end_and_changed_membership',
+              'test_reimport_changes_all_read_models_and_invalidates_ai',
+              'test_replay_new_batch_same_values_changes_versions',
+              'test_failed_import_rolls_back_and_keeps_read_models',
+              'test_source_unprepared_is_not_empty_success',
+              'test_invalid_conditions_do_not_invoke_provider',
+              'test_ai_failure_keeps_other_apis_available',
+              'test_geocode_errors_are_safe_and_process_is_healthy',
+          }
+          assert required_flow <= flow_names, 'Required BE API flow scenarios were not executed'
+          print(f'PostGIS integration: {len(cases)} passed, no skips')
+          print(f'LocalData upsert integration: {len(localdata)} passed, no skips')
+          print(f'building_key upsert integration: {len(building_key)} passed, no skips')
+          print(f'floor_unit upsert integration: {len(floor_unit)} passed, no skips')
+          print(f'BE API flow integration: {len(flow)} passed, {len(flow_names)} scenarios, no skips')
+          PY

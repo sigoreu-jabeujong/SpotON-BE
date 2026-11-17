@@ -1,0 +1,17 @@
+**
+!Dockerfile
+!.dockerignore
+!pyproject.toml
+!uv.lock
+!README.md
+!app/
+!app/**
+!etl/
+!etl/**
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.env
+**/.env.*
+**/*.dump
+**/*.backup

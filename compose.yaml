@@ -1,0 +1,25 @@
+name: spoton-dev
+
+services:
+  db:
+    image: postgis/postgis:17-3.7@sha256:1f0d64ef12bfb344d3569ab6419aca183258b146951daec83f0585d01e6c9cc9
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: spoton_dev
+      POSTGRES_USER: spoton_admin
+      POSTGRES_PASSWORD: ${SPOTON_DB_ADMIN_PASSWORD:?Set SPOTON_DB_ADMIN_PASSWORD in .env}
+      SPOTON_DB_PASSWORD: ${SPOTON_DB_PASSWORD:?Set SPOTON_DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${SPOTON_DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/20-app-role.sh:/docker-entrypoint-initdb.d/20-app-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spoton_admin -d spoton_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  postgres_data:
