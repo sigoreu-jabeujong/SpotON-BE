@@ -195,7 +195,7 @@ def test_concurrency_gate_and_waiter_cancellation(monkeypatch, prepared):
         release.set()
         result = await first
         assert result.data.verification.passed and provider.calls == 1
-        assert not resources.gate.locked()
+        assert resources.gate.available == resources.database.settings.interpret_max_concurrent
 
     asyncio.run(scenario())
 
