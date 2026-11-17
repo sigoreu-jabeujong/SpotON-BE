@@ -1,782 +1,414 @@
-# SpotON-BE
+<div align="center">
 
-## 브랜드·프랜차이즈 기능 제거 (2026-11-17)
+# Spot:ON Backend
 
-일반 v1/v2/v3 분석 경로는 유지하고 브랜드 상태 API·소속 판정·가맹/체인 필터 및 전용 ETL 명령은 제거했습니다. API는 업종·반경·기준월·면적으로 조회하며 제거된 필터는422, `/api/v2/brands/status`는404입니다. 점포 응답의 brand/operation/franchise와 판정 메타는 없습니다. DB의 과거 테이블/원본 필드와 migration은 보존하며 새 API 실행 시 판정 테이블을 조회하지 않습니다. [설계·검토·검증](docs/designs/feat226-remove-brand-feature.md)을 따릅니다.
+**Is your spot on? — 내 자리, 딱 맞는 자리일까요?**
 
-## 위치 참고 매출 API·행정동 원천 검사 (#188)
+서울 카페·음식점 예비창업자를 위한 **공공데이터 기반 창업 입지 진단 웹서비스**의 백엔드 API 서버<br>
+인허가·상권·생활인구 공공데이터를 공간 조회하고, 출처·기준일과 함께 검증된 지표와 AI 해석을 제공해요.
 
-새 `GET /api/v2/location-reference`는 검색 위치를 포함하거나 반경과 교차하는 상권의 원자료 매출 금액·분기·공간 관계·출처를 반환합니다. 기본 `latest_reference`와 엄격한 `analysis_period`를 구분하며 금액은 정확한 문자열입니다. 기존 역사 분석/AI 계약을 유지하고 인구·주야간은 아직 별도 연결 전입니다. [구현·실제 검사](docs/designs/feat188-location-reference-implementation.md), [FE 계약](docs/fe-location-reference-api.md)을 확인하세요. 운영 적용 여부는 실행 기록과 구분합니다.
+[🌐 서비스 바로가기](https://spot-on-fe-two.vercel.app) · [📖 API 문서(Swagger)](https://spoton-be-free.onrender.com/docs) · [💻 프론트엔드 저장소](https://github.com/sigoreu-jabeujong/SpotON-FE) · [⚙️ 백엔드 저장소](https://github.com/sigoreu-jabeujong/SpotON-BE)
 
-이미 내려받은 행정동 내국인 인구·경계 ZIP은 다음 명령으로 키/DB/네트워크 없이 검사할 수 있습니다. 파일 SHA256과 실제 코드 교집합·차집합, 날짜·24시간 공개 여부를 확인하며 DB 적재는 수행하지 않습니다. 원천 파일은 저장소 밖에 보관하세요.
+![Python](https://img.shields.io/badge/Python_3.11-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL_17-4169E1?logo=postgresql&logoColor=white)
+![PostGIS](https://img.shields.io/badge/PostGIS-5CAE58)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Render](https://img.shields.io/badge/Render-000000?logo=render&logoColor=white)
 
-```powershell
-uv run --locked --extra dev python -m etl.admin_population --population-zip <local.zip> --population-sha256 <sha256> --boundary-zip <boundary.zip> --boundary-sha256 <sha256>
+</div>
+
+---
+
+## 목차
+
+1. [접속 주소](#1-접속-주소)
+2. [프로젝트 소개](#2-프로젝트-소개)
+3. [주요 기능](#3-주요-기능)
+4. [작동 방법](#4-작동-방법)
+5. [실행 파일 · URL](#5-실행-파일--url)
+6. [실행 방법](#6-실행-방법)
+7. [시스템 구성 · 기술 스택](#7-시스템-구성--기술-스택)
+8. [폴더 구조](#8-폴더-구조)
+9. [사용한 공공데이터](#9-사용한-공공데이터)
+10. [팀 소개 · 협업 규칙](#10-팀-소개--협업-규칙)
+11. [유의사항](#11-유의사항)
+
+### 🎬 시연 영상
+
+> 시연 영상(YouTube) 링크는 준비되는 대로 추가할 예정이에요.
+
+---
+
+## 1. 접속 주소
+
+| 구분 | 주소 |
+|---|---|
+| ⚙️ **백엔드 API** | **[https://spoton-be-free.onrender.com](https://spoton-be-free.onrender.com)** |
+| 📖 API 문서 (Swagger) | [https://spoton-be-free.onrender.com/docs](https://spoton-be-free.onrender.com/docs) |
+| 💚 서버 상태 | [health](https://spoton-be-free.onrender.com/api/health) (프로세스) · [ready](https://spoton-be-free.onrender.com/api/ready) (DB·스키마 준비) |
+| 🌐 서비스(FE) | [https://spot-on-fe-two.vercel.app](https://spot-on-fe-two.vercel.app) |
+| 🗄️ BE 저장소 | [github.com/sigoreu-jabeujong/SpotON-BE](https://github.com/sigoreu-jabeujong/SpotON-BE) |
+| 💻 FE 저장소 | [github.com/sigoreu-jabeujong/SpotON-FE](https://github.com/sigoreu-jabeujong/SpotON-FE) |
+
+> ⏳ Render 무료 서버라 한동안 요청이 없으면 잠들어요. **첫 요청은 30초~1분** 정도 걸릴 수 있어요. 웹 화면은 FE 주소에서 이용하고, 이 서버는 API만 제공해요.
+
+## 2. 프로젝트 소개
+
+| 항목 | 내용 |
+|---|---|
+| 서비스 | **Spot:ON(스팟온)** — 창업 입지(자리) 진단 공공서비스 |
+| 대상 | 서울특별시에서 **카페·음식점**(한식·중식·일식·양식) 창업을 준비하는 **만 18세 이상 예비창업자** |
+| BE 역할 | 공공데이터를 수집·정제·적재하고, 주소 하나로 **점포 이력 · 주변 동일 업종 · 상권 활동 · 참고지표 · 위치 참고자료 · AI 해석**을 API로 제공 |
+| 원칙 | 자체 점수·등급 없이, 모든 수치를 **출처·기준일·공간 단위와 함께** 응답. 지표 계산은 모두 서버에서 하고 FE는 표시만 해요 |
+| 소속 | 2026 청년 공공AX 서포터즈 · 팀 **시고르자브종** |
+
+## 3. 주요 기능
+
+| ID | 기능 | API | 설명 |
+|---|---|---|---|
+| F-01 | 서울 주소 검색 | `GET /api/geocode` · `POST /api/address-detail` · `POST /api/v3/address-context` | 주소를 좌표·건물 키로 변환, 서울 밖 주소 차단, 층·호 상세주소 정규화 |
+| F-02 | 과거 점포 이력 | `GET /api/v3/stores/location-history` | 도로명·지번을 함께 확인해 같은 건물·층·호의 점포 이력(영업 중 포함)과 상태별 건수 |
+| F-03 | 주변 동일 업종 | `GET /api/v2/stores/nearby` | 기준 시점·반경(300/500/1,000m) 안 같은 업종 점포와 영업 상태 (PostGIS 공간 조회) |
+| F-04 | 세부 조건 | 각 분석 API 인자 | 음식점 세부 업종, 시설 규모(면적), 면적 정보 없음 포함 여부 |
+| F-05 | 과거 시점 조회 | `GET /api/v2/stores/snapshot` · `GET /api/meta/data-range` | 과거 시점에 있던 점포의 현재 상태 분해, 업종별 조회 가능 기간 |
+| F-06 | 상권 활동 | `GET /api/v2/market/activity` | 최근 12개월 개업·폐업, 통합 평균 영업 기간, 연도별 추이 |
+| F-07 | 참고지표 | `GET /api/v2/risk` | 참고 폐업률·개업 1·3주년 생존율·동종업체 수와 서울 평균, 표본 부족 시 판단 보류 |
+| F-08 | AI 해석 | `POST /api/v2/risk/interpret/sections` | 서버 지표만으로 **이점 · 유의점 · 수치 해석 · 계약 전 확인사항** 생성 후 수치·근거 검증 |
+| F-10 | 상담 연결 | `GET /api/support-links` | 관할 지역센터 연락처, 공공 창업상담·소상공인 지원기관 링크 |
+| + | 위치 참고자료 | `GET /api/v2/location-reference` · `GET /api/v2/population-reference` | 점포 수 상위 3개 상권의 점포당 추정매출, 행정동 생활인구 주간·야간 비교 |
+
+> F-09(PDF 진단서 저장)는 FE에서 처리해요. 전체 요청·응답 형식은 [Swagger](https://spoton-be-free.onrender.com/docs)에서 확인할 수 있어요.
+
+## 4. 작동 방법
+
+### 4-1. 서비스 흐름 — FE 화면과 API
+
+사용자가 FE에서 진단을 진행하면 BE API가 아래 순서로 호출돼요.
+
+```mermaid
+sequenceDiagram
+    participant U as 사용자(FE)
+    participant BE as SpotON-BE
+    participant DB as PostgreSQL+PostGIS
+    participant AI as LLM
+    U->>BE: STEP 01 주소 검색 (geocode → address-context)
+    BE->>DB: 서울 여부·건물 키·좌표 확인
+    U->>BE: STEP 02 이력·주변·상권 활동 (location-history, nearby, market/activity, location-reference)
+    BE->>DB: 공간 조회·집계 (반경·기준 시점·업종)
+    U->>BE: STEP 03 참고지표 (risk)
+    U->>BE: AI 해석 보기 클릭 시에만 (interpret/sections)
+    BE->>AI: 검증된 지표 ID·수치만 전달
+    AI-->>BE: 이점·유의점·수치 해석
+    BE-->>U: 수치·근거 검증을 통과한 문장만 응답
+    U->>BE: STEP 04 상담 연결 (support-links)
 ```
 
-## 검색 위치의 참고자료 표시 설계 (#186)
+| 단계 | FE 화면 | 호출 API | BE가 하는 일 |
+|---|---|---|---|
+| STEP 01 | 주소·업종 입력 | `geocode`, `address-detail`, `address-context` | 주소 검색(카카오 로컬·도로명주소), 서울 밖 차단, 층·호 정규화, 이력 조회용 서명 컨텍스트 발급 |
+| STEP 02 | 입지 정보 분석 | `location-history`, `nearby`, `snapshot`, `market/activity`, `location-reference`, `population-reference` | 인허가 점포를 건물·반경·시점으로 공간 조회, 개업·폐업 집계, 상권 추정매출·생활인구 참고값 계산 |
+| STEP 03 | 종합 진단 결과 | `risk`, `interpret/sections` | 참고지표와 서울 평균 계산, 버튼 클릭 시 AI 해석 생성·검증 |
+| STEP 04 | 저장·상담 | `support-links` | 관할 지역센터·지원기관 안내 |
 
-검색 점을 포함하거나 반경과 실제로 교차하는 구역의 매출·생활인구·주야간 값을 표시하도록 [현재 시스템 비교와 후속 설계](docs/designs/feat186-location-reference-display.md)를 작성합니다. 매출은 상권별 원자료 금액, 인구와 주야간은 공식 행정동 내국인 집계를 우선 연결하고 실제 구역·관측일을 표시합니다. 이번 단계는 설계와 실제 Claude 검토이며 새 API 구현·자료 적재·화면 변경·배포 완료를 의미하지 않습니다. 기존 역사 분석과 AI 계약은 유지합니다.
+### 4-2. 모든 응답은 같은 형식
 
-## 공개 부분자료 AI 연결 (#184)
+```json
+{
+  "data": { "...": "성공 시 결과" },
+  "meta": { "source": ["R5", "R6"], "as_of": "2026-11-08", "space": "radius_500m" },
+  "error": null
+}
+```
 
-기존 POST `/api/v2/risk/interpret`에서 같은 읽기 전용 RR의 공개 인구 비교를 재계산하고, 내국인 비중·원천별 상태·관측일·부분자료 한계를 별도로 설명합니다. 전체 생활인구나 Risk fact로 대체하지 않습니다. [구현·검수·배포 기록](docs/designs/feat184-population-ai-implementation.md)을 따르며 호환 FE가 먼저 배포돼야 합니다. v1 AI·DB0012·환경/원천은 보존합니다.
+- `data`와 `error` 중 하나만 값이 있어요. 실패하면 `data: null`과 `error: { code, message }`를 돌려줘요.
+- `meta`에 **출처(R번호)·기준일·공간 단위**가 담겨서 FE가 수치 옆에 그대로 표시해요.
+- 내부 오류는 `500 INTERNAL_ERROR`와 고정 문구로만 응답하고, 요청값·예외 원문은 응답에 넣지 않아요.
 
-## 공개 부분자료의 AI 연결 후속 설계 (#182)
+### 4-3. AI 해석은 이렇게 만들어져요
 
-공개 인구 API·FE 카드의 운영 반영은 #180/FE #73에서 완료했습니다. 다음 구현을 위한 [AI 연결 설계·Claude 검토](docs/designs/feat182-population-ai-integration.md)는 서버 동일 RR 재조회, 부분자료의 독립 설명, v2 프롬프트/캐시·FE 안내와 검증 기준을 정합니다. 이번에는 문서만 변경하며 AI에 인구를 연결하거나 재배포한 상태가 아닙니다. 기존 전체 생활인구는 공식 근거 확인 전까지 유지합니다.
+1. FE에서 **AI 해석 보기**를 누를 때만 요청해요. 자동 요청이나 자동 재시도는 없어요.
+2. 서버는 화면과 같은 기준으로 지표를 다시 조회한 뒤, **검증된 지표 ID와 수치만** 모델에 보내요.
+3. 모델이 만든 문장의 수치와 근거를 서버 지표와 하나씩 대조해요. **검증을 통과한 문장만** 응답하고, 실패하면 문장 대신 안내를 돌려줘요.
+4. 같은 조건의 결과는 서버 캐시를 재사용해서 PDF 저장 때 다시 생성하지 않아요.
 
-## Render 무료 검증 배포
+### 4-4. 직접 호출해 보기
 
-현재 [API 문서](https://spoton-be-free.onrender.com/docs)와 [DB 준비 상태](https://spoton-be-free.onrender.com/api/ready)를 사용할 수 있다. Free 웹1/DB1, SQL10초·풀1/overflow0/대기15초·워커1·연결 예산8을 사용한다. Docker 시작 시 migration/ETL은 실행하지 않고, 자동 배포는 꺼 둔다.
+[Swagger](https://spoton-be-free.onrender.com/docs)에서 각 API의 **Try it out**을 누르면 브라우저로 바로 호출할 수 있어요. 터미널에서는 이렇게 확인해요.
 
-구성·환경변수·권한·운영 인덱스·복원 절차와2026-12-13 DB 만료는 [현재 Render 안내](docs/render-free-validation.md), FE URL·목업 해제·CORS·절전 후 대기는 [FE 연결 안내](docs/fe-render-validation-api-request.md)를 따른다. 로컬 .env와 코드 기본 설정은 별도로 유지한다.
+```bash
+# 1) 서버 상태
+curl "https://spoton-be-free.onrender.com/api/health"
 
-서울의 카페·음식점 입지 분석을 위한 Spot:ON 백엔드입니다. 개발 기준과 다음 작업은 [통합 작업계획서](docs/be-work-plan.md)에서 관리합니다.
+# 2) 주소 검색 → 좌표·건물 키
+curl -G "https://spoton-be-free.onrender.com/api/geocode" --data-urlencode "query=서울 마포구 양화로 45" -d "category=cafe"
 
-현재는 health·서울 주소 검색·점포 이력·주변 조회·조회 가능 월 범위·과거 점포 상태 분해·기본 상권 활동·Risk 참고지표·검증 후보 기반 AI 해석·상담/지원기관 공통 링크 API와 인허가/상권/생활인구 원천 적재, 공급자 분리 LLM client를 제공합니다. 개발 DB에는 점포 689,440건·상권 경계 1,650건·2025년 점포 통계 24,810행·추정매출 14,391행·공식 상권변화 유형 6,600행과 2026-11-07 생활인구 531,922행·공식 250m 격자 10,125개를 적재했습니다. migration `0012`가 현재 head입니다. 원천별 시점을 혼합하지 않으며 브랜드명 기반 프랜차이즈 추정·필터를 제공하며, 공식 지표 연결·조건부 매출/인구 수치와 FE 반영은 후속 작업입니다.
+# 3) 그 좌표 기준 반경 500m 카페
+curl "https://spoton-be-free.onrender.com/api/v2/stores/nearby?lat=37.5515&lng=126.9140&category=cafe&radius=500"
 
-## 로컬 실행
+# 4) 참고지표
+curl "https://spoton-be-free.onrender.com/api/v2/risk?lat=37.5515&lng=126.9140&category=cafe&radius=500"
+```
 
-Python 3.11을 설치한 뒤 저장소 루트에서 실행합니다. `uv.lock`을 커밋해 로컬·CI가 같은 의존성을 설치합니다.
+주소 검색 응답 예시 (일부):
+
+```json
+{
+  "data": {
+    "address_road": "서울 마포구 양화로 45",
+    "address_jibun": "서울 마포구 서교동 490",
+    "lat": 37.5515008030203,
+    "lng": 126.91395024016,
+    "is_seoul": true,
+    "sigungu": "마포구",
+    "building_key": "마포구-서교동-490-0"
+  },
+  "meta": { "...": "..." },
+  "error": null
+}
+```
+
+<details>
+<summary><b>전체 API 목록</b></summary>
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/health` | 서버 프로세스 상태 |
+| GET | `/api/ready` | DB 연결·스키마·배포 계정 준비 상태 |
+| GET | `/api/geocode` | 서울 주소 → 좌표·건물 키 |
+| POST | `/api/address-detail` | 층·호 상세주소 정규화 |
+| POST | `/api/v3/address-context` | 도로명·지번 통합 이력 조회용 서명 컨텍스트 |
+| GET | `/api/v3/stores/location-history` | 같은 위치 점포 이력 (영업 중 포함) |
+| GET | `/api/v2/stores/nearby` | 기준 시점 반경 내 점포 |
+| GET | `/api/v2/stores/snapshot` | 과거 시점 점포의 최신 상태 분해 |
+| GET | `/api/meta/data-range` | 업종별 조회 가능 월 범위 |
+| GET | `/api/v2/market/activity` | 개업·폐업·평균 영업 기간·연도별 추이 |
+| GET | `/api/v2/risk` | 참고지표와 서울 평균 |
+| POST | `/api/v2/risk/interpret/sections` | AI 해석 (이점·유의점·수치 해석·확인사항) |
+| GET | `/api/v2/location-reference` | 상위 3개 상권 점포당 추정매출 등 위치 참고값 |
+| GET | `/api/v2/population-reference` | 생활인구 주간·야간 공개자료 비교 |
+| GET | `/api/support-links` | 상담·지원기관 링크와 관할 센터 |
+
+`/api/stores/*`, `/api/market/activity`, `/api/risk`, `/api/risk/interpret` 등 v1 경로와 `/api/v2/stores/history`, `/api/v2/risk/interpret`는 이전 버전 호환용으로 유지해요.
+
+</details>
+
+## 5. 실행 파일 · URL
+
+설치 파일(`.exe`)이 아니라 서버 프로그램이에요. **실행에 필요한 소스·설정 파일과 접속 URL을 저장소에 함께 등록**했어요.
+
+### 등록된 실행 파일
+
+| 구분 | 파일 | 역할 |
+|---|---|---|
+| 서버 진입점 | [app/main.py](app/main.py) · [app/runtime.py](app/runtime.py) | FastAPI 앱 생성·라우터 등록 / 배포 실행 진입점 |
+| 의존성 | [pyproject.toml](pyproject.toml) · [uv.lock](uv.lock) | Python 3.11 패키지와 버전 고정 |
+| 환경 설정 | [.env.example](.env.example) | 환경변수 이름·예시 (실제 `.env`는 커밋하지 않음) |
+| 로컬 DB | [compose.yaml](compose.yaml) · [docker/](docker/) | PostgreSQL 17 + PostGIS 컨테이너와 초기화 스크립트 |
+| DB 구조 | [alembic.ini](alembic.ini) · [migrations/](migrations/) | 테이블·인덱스 생성(migration) |
+| 데이터 적재 | [etl/](etl/) | 인허가·상권·추정매출·생활인구 원천 검증·적재 |
+| 배포 | [Dockerfile](Dockerfile) | Render 배포 이미지 |
+| CI | [.github/workflows/ci.yml](.github/workflows/ci.yml) | 코드·타입 검사, 테스트 자동 실행 |
+
+### 등록된 URL
+
+| 구분 | URL | 등록 위치 |
+|---|---|---|
+| 백엔드 API | https://spoton-be-free.onrender.com | 이 README, FE Vercel 환경변수 `VITE_API_BASE_URL` |
+| API 문서 | https://spoton-be-free.onrender.com/docs | 이 README, FE README |
+| 서비스(FE) | https://spot-on-fe-two.vercel.app | 이 README, 운영 서버 `CORS_ORIGINS`(허용 origin) |
+| FE · BE 저장소 | https://github.com/sigoreu-jabeujong/SpotON-FE · https://github.com/sigoreu-jabeujong/SpotON-BE | 이 README, 서비스 하단 푸터 |
+
+> 실제 `.env`, API 키, DB 비밀번호, 원천 데이터 파일은 저장소에 올리지 않아요. 가상환경(`.venv`)은 아래 명령으로 만들어요.
+
+## 6. 실행 방법
+
+| 방법 | 필요한 것 | 언제 쓰나요 |
+|---|---|---|
+| **A. 운영 API 바로 이용** | 웹 브라우저 | [Swagger](https://spoton-be-free.onrender.com/docs)로 API 확인 |
+| **B. 서버만 로컬 실행** | Python **3.11**, uv **0.13.7**, Git | DB 없이 서버 기동·health·문서 확인 |
+| **C. 서버 + 로컬 DB** | B + Docker Desktop (Linux engine) | 공간 조회·분석 API까지 로컬에서 확인 |
+
+### 6-1. 서버 실행 (B)
+
+Windows PowerShell 기준이에요.
 
 ```powershell
+# 1. 저장소 받기
+git clone https://github.com/sigoreu-jabeujong/SpotON-BE.git
+Set-Location SpotON-BE
+
+# 2. 의존성 설치
 py -3.11 -m pip install uv==0.13.7
-# Windows 한글 경로에서 Python 3.11의 editable 설치 인코딩 오류 방지
-$env:UV_NO_EDITABLE = "1"
+$env:UV_NO_EDITABLE = "1"          # 한글 경로 인코딩 오류 방지 (새 창마다 설정)
 uv sync --locked --extra dev
-# 환경변수가 필요하면 .env.example을 .env로 복사하고 로컬에서 값을 설정합니다.
-# 기존 .env는 덮어쓰지 않습니다. health 실행에는 API 키나 DB가 필요하지 않습니다.
+
+# 3. 환경변수 파일 (처음 한 번만, 기존 .env는 덮어쓰지 않기)
+Copy-Item .env.example .env
+
+# 4. 서버 실행 → http://localhost:8000/docs
 uv run --locked --extra dev uvicorn app.main:app --reload --no-access-log
 ```
 
-- 상태 확인: `http://localhost:8000/api/health`
-- Swagger: `http://localhost:8000/docs`
-- `APP_ENV`: local/test/staging/production. 기본값 local
-- `CORS_ORIGINS`: 쉼표로 구분한 허용 origin. 기본값 `http://localhost:5173`, 빈 값이면 교차 출처 접근 미허용
-- DB·외부 API·LLM 설정 이름은 `.env.example`을 참고합니다. 비밀값은 실제 `.env` 또는 서버 시크릿에만 둡니다.
+[http://localhost:8000/api/health](http://localhost:8000/api/health)가 아래처럼 나오면 성공이에요. health는 DB 없이도 동작해요.
 
 ```json
 {"data": {"status": "ok"}, "meta": {}, "error": null}
 ```
 
-health는 프로세스 상태 확인용이며 DB·공공데이터 준비 상태를 보장하지 않습니다. FE의 기본 서버 주소는 `http://localhost:8000`이고 `/api`는 클라이언트가 붙입니다. `Content-Type: application/json` 요청의 CORS preflight도 허용된 origin에 한해 처리합니다.
+### 6-2. 로컬 DB 준비 (C)
 
-## 서울 주소 지오코딩
+`.env`에서 아래 값을 설정한 뒤 실행해요.
 
-`GET /api/geocode?query={주소}&category={cafe|restaurant}`는 카카오 로컬 API에서 검증한 서울 주소 후보를 반환합니다. 결과는 도로명·지번 주소, WGS84 좌표, `building_key`, 입력에서 명시적으로 읽은 `floor_unit`을 포함합니다. 복수 후보는 최대 5개를 `candidates`에 반환하며, 서울 외는 `OUT_OF_SEOUL`, 검색 실패는 `ADDRESS_NOT_FOUND`로 응답합니다.
-
-실행에는 서버 전용 `KAKAO_REST_API_KEY`가 필요합니다. 키·주소·좌표는 로그에 남기지 않으며, 응답은 `Cache-Control: no-store`로 전송합니다. 키 없이 실행하면 이 경로는 `UPSTREAM_ERROR`를 반환합니다.
-
-## 점포 이력 조회
-
-`GET /api/stores/history?building_key={건물 키}&floor_unit={선택 상세 위치}&category={선택 진단 업종}`은 같은 건물의 지원 업종 이력을 반환합니다. 키는 `/api/geocode` 결과를 사용합니다. category를 지정해도 다른 지원 업종은 제거하지 않습니다. 삭제·검토 대기·미지원 업종은 제외하고, 개업일 오름차순·날짜 미확인 마지막으로 정렬합니다. 0건은 안내 메시지가 있는 정상 응답입니다.
-
-- 실행 전 `alembic upgrade head`와 검증 snapshot 적재가 필요합니다. 기존 `0002` 데이터는 재적재하기 전 배치 출처가 없을 수 있어 영업 중 점포의 기간이 미산정됩니다.
-- 식별자는 `source + license_no`입니다. 날짜·상호·기간은 null을 허용하며 기간은 `operating_period_status`·`operating_period_reason`을 함께 확인합니다. 실제 0개월과 결측을 구분합니다.
-- 기간은 달력상 완료 개월 수입니다. 폐업은 확인된 폐업일, 영업 중은 DB에 연결된 검증 배치의 DAT_UPDT_PNT 최대 날짜를 종료점으로 사용합니다. 오늘·DB 적재일로 대체하지 않습니다. 동일한 층만 확인되면 같은 자리라고 표시하지 않습니다.
-- `meta.collected_at`은 실제 수집 완료일이 확인되지 않으면 null입니다. CSV 검증 시각과 원천 갱신일·적재일을 구분합니다.
-- health·geocode는 DB 없이 동작합니다. 이력 요청은 지연 생성한 DB 엔진과 요청별 읽기 전용 트랜잭션을 사용하고 종료 시 정리합니다. `DATABASE_STATEMENT_TIMEOUT_MS`는 SQL 문장별 제한이며 전체 요청 SLA가 아닙니다. DB 실패·timeout은 원문 없는 500 INTERNAL_ERROR입니다.
-- FE의 nullable 기간·복합 식별자 호환은 [FE 수정 요청 보고서](docs/fe-store-history-api-request.md)를 통해 담당자에게 요청하며 아직 반영되지 않았습니다. 후속 API 개발 중에는 FE의 기존 `VITE_USE_MOCK=true`, `VITE_REAL_API_PATHS=/geocode,/stores/history`로 두 API만 실제 연결할 수 있습니다.
-
-설계·원본 계약 차이·검증 기록은 [이슈 36 설계](docs/designs/feat36-store-history-api.md)를 확인합니다. 원본 v1.2 전체 계약의 일괄 동기화 완료를 뜻하지 않습니다.
-
-## 주변 점포 조회
-
-`GET /api/stores/nearby?lat={위도}&lng={경도}&category={cafe|restaurant}`는 선택 시점의 반경 내 지원 점포를 반환합니다. 좌표는 geocode 결과를 사용하고 radius는 300/500/1000m(기본 500), as_of는 선택 YYYY-MM입니다. 과거 월은 월말, 최신 월은 검증 배치의 전역 원천 갱신일을 적용합니다.
-
-- `sub_category`는 음식점 4종 또는 cafe를 쉼표로 전달합니다. `include_unknown_area`는 면적 미확인 기록 포함 여부이며 기본 true입니다. 기존 `include_unknown`은 면적 조건의 별칭입니다. 두 플래그를 혼합하면 거절합니다.
-- 0㎡와 null은 정보 없음입니다. 0㎡ 원본을 수정하지 않으며 응답 `area_m2=null`, 알려진 면적 필터에서는 제외합니다. 가맹 미확인을 개인 매장으로 바꾸지 않습니다.
-- 원본 날짜가 유효한 점포에 `open_date<=T AND (close_date IS NULL OR close_date>T)`를 적용합니다. 날짜 미확인·오류, 폐업일 없는 폐업, 한시 영업 true는 제외합니다. 현재 상태와 전체 운영기간은 최신 데이터 기준이며 과거 시점 상태나 T까지의 기간으로 바꾸지 않습니다.
-- geography 미터 거리로 반경 경계를 포함합니다. 반올림 전 거리 순서를 유지하며 표시값만 소수 첫째 자리로 반환합니다. 식별자는 `source+license_no`, 상호·기간·면적은 nullable입니다.
-- `excluded_no_coord`는 **서울 전체에서 같은 비공간 조건을 만족하는 좌표 미확보 수**이며 반경 내 누락 수가 아닙니다. `meta.excluded_no_coord_scope=seoul_nonspatial_cohort`를 함께 확인합니다.
-- 검증된 배치·기준일이 없거나 DB가 실패하면 500입니다. 준비 실패를 정상 0건으로 바꾸지 않습니다. 입력 오류는 422이며 모든 응답은 no-store입니다. 개발 실행은 좌표 query가 access log에 남지 않도록 `--no-access-log`를 유지합니다.
-
-실행 전 migration `0004`까지 적용합니다. [구현·검증 기록](docs/designs/feat41-nearby-api.md), [FE 수정 요청 보고서](docs/fe-nearby-api-request.md)를 확인합니다. FE 화면·CLAUDE.md 반영은 담당자 대기이며 data-range·snapshot API는 이번 범위에 없습니다.
-
-## 조회 가능 월 범위
-
-`GET /api/meta/data-range?category={cafe|restaurant}&sub_category={선택 세부 업종}`은 시점 선택에 필요한 `min_month`, `max_month`, `max_date`, `data_updated_at`, `collected_at`을 반환합니다. 지원 세부 업종은 nearby와 같고 쉼표로 구분합니다. 좌표·반경·면적·가맹 등의 인자는 받지 않습니다.
-
-- nearby와 같은 검증된 인허가 날짜 후보에서 가장 이른 개업 월을 계산합니다. 과거 폐업 점포와 좌표 미확보·속성 미확인도 날짜가 신뢰할 수 있으면 최소 월에 기여합니다. 특정 반경의 결과 존재 범위나 과거 현황 전체 관측을 뜻하지 않습니다.
-- 최신 월은 전역 원천 갱신일의 월이며 실제 최신 기준일은 `max_date`입니다. 현재 자료는 `max_month=2026-11`, `max_date=2026-11-08`이고 오늘이나 11월 말일로 바꾸지 않습니다.
-- 검증된 D가 있지만 해당 업종의 유효 후보가 없으면 `min_month=null`입니다. FE에는 과거 월·빠른 선택을 비활성화하도록 요청합니다. 출처·기준일 미준비는 500으로 구분하며 최소 월을 임의로 채우지 않습니다.
-- 현재 `collected_at=null`을 유지합니다. 모든 응답은 no-store이고 기존 읽기 전용 일관된 세션·안전한 오류 처리를 사용합니다.
-
-[설계·검증](docs/designs/feat43-data-range-api.md), [FE 수정 요청 보고서](docs/fe-data-range-api-request.md)를 확인합니다. 과거 시점 점포 상태 분해는 아래 snapshot API를 사용합니다.
-
-## 과거 시점 점포 상태 분해
-
-`GET /api/stores/snapshot`은 nearby와 같은 파라미터를 받으며 `as_of=YYYY-MM`은 필수입니다. 같은 시점·조건·배치의 nearby 점포 목록을 그대로 사용하고 최신 기록 상태에 따라 `still_open`, `closed_since`, `other`로 나눕니다. `total_at_as_of = still_open + closed_since + other = stores.length`를 보장하고 요약 문장도 서버에서 만듭니다.
-
-- stores는 source+license_no로 식별하며 상호·기간은 nullable입니다. 기간은 최신 데이터 기준 전체 기간이고 과거 T까지로 자르지 않습니다. 상태도 D의 기록이며 실시간 확인값은 아닙니다.
-- 최신 월은 D, 과거 월은 월말을 적용합니다. 폐업 당일은 제외하고 유효한 open/closed/other의 날짜 구간으로 과거 집합을 재구성합니다. 빈 결과는 200과 0 집계·빈 목록·요약입니다.
-- `excluded_no_coord`는 서울 동일 비공간 조건의 좌표 미확보 수이며 전체 N과 합산하지 않습니다. 날짜 결측·원천 수집 전 누락으로 과거 자료는 불완전할 수 있습니다.
-- 동일 목록의 서버 집계와 응답 모델로 합계·상태 분류·식별자 중복을 검사합니다. 위반 시 부분 응답 없이 500·no-store를 반환합니다. 기존 read-only 세션·문장 timeout·안전한 오류 처리를 사용합니다.
-
-[설계·검증](docs/designs/feat45-store-snapshot-api.md), [FE 연동 요청 보고서](docs/fe-store-snapshot-api-request.md)를 확인합니다. FE 타입·표·진단서·CLAUDE.md 반영은 담당자 대기입니다.
-
-## 기본 상권 활동 분석
-
-`GET /api/market/activity?lat={위도}&lng={경도}&category={cafe|restaurant}`는 nearby와 같은 공간·업종·면적·가맹·시점 조건으로 인허가 기반 활동을 집계합니다. 선택 `include=sales,living_pop`은 해당 지표의 준비 상태를 요청합니다. 중복·빈 값·미지원 인자는 422이며 DB/원천 준비 실패는 500입니다.
-
-- 최근 12개월은 `(T의 전년 같은 월일, T]`이며 존재하지 않는 2월 29일만 28일로 제한합니다. 폐업 기록도 보존해 구간 내 개업·폐업을 각각 셉니다. 연도별 추이는 **2010년부터** 각 연도 1월 1일~T와 같은 월일까지의 YTD 비교이고 실제 사건이 없는 연도를 임의로 만들지 않습니다. 2010년 이전 개업 기록도 현재 점포 수·평균 개월·최근 개폐업 집계에는 유지하며, 그 기록의 2010년 이후 폐업은 추이에 포함합니다. 기준일이 2010년 이전이면 연도별 추이와 기간 메타데이터만 비어 있습니다.
-- 세부 업종별 점포 수와 평균은 T에 영업 중인 인허가 기록 기준입니다. 평균은 T까지 경과한 달력 완료 개월의 평균을 버린 정수이며, 점포 수 0이면 null입니다. 최신 데이터 기준 전체 영업기간·폐업 점포의 수명·생존율과 구분합니다.
-- 매출·생활인구 수치는 이번 릴리스에서 항상 null입니다. 요청한 항목만 `flags.missing`과 `meta.optional_data`에 pending 및 사유를 반환합니다. 적재된 원천이 있어도 집계 기간·경계/격자 적용 시점 검증 전에는 수치를 활성화하지 않습니다.
-- `meta.as_of`는 실제 적용일 T, `data_updated_at`은 전역 인허가 갱신일 D, `collected_at`은 현재 null입니다. `denominator=null`, `cohort_size`는 폐업을 포함한 집계 대상 수이며 좌표 미확보 수는 서울 전체 동일 비공간 조건 기준입니다. no-store·읽기 전용 일관된 트랜잭션을 사용합니다.
-
-[설계·검증](docs/designs/feat60-market-activity-api.md), [FE 변경 요청](docs/fe-market-activity-api-request.md)을 확인합니다. FE 연결과 조건부 수치 결합 완료를 뜻하지 않습니다.
-
-## Risk 선행 상권 판정
-
-내부 `judge_market(session, BoundaryQuery)`는 명시한 경계 UUID에서 상권 포함·밖·중첩을 구분합니다. 외곽선과 hole 경계를 포함하고 세부 상권 우선·관광특구 병기·동순위 후보 보존을 적용합니다. 상권 밖일 때만 반경과 교차하는 폴리곤 목록을 반환합니다. 호출자는 읽기 전용 일관된 세션을 제공해야 합니다.
-
-현재 경계의 적용일은 미확인이므로 결과의 `applicability=unverified`를 유지합니다. 공식 통계 연결이나 현재/과거 상권 확정 근거가 아닙니다. 공개 Risk에서의 후보 제공은 아래 규칙을 따릅니다. [설계·Claude 검토·검증](docs/designs/feat62-market-judgement.md)을 확인합니다.
-
-## Risk 참고지표 조회
-
-`GET /api/risk?lat={위도}&lng={경도}&category={cafe|restaurant}`는 nearby와 같은 시점·필터로 동종업체 수·최근12개월 참고 폐업률·개업1주년/3주년 생존율과 동일 조건 서울 비교값을 반환합니다. include=market_change,day_night_ratio는 선택 항목 상태를 요청합니다.
-
-- 폐업률 분모는 기간 중 영업한 인허가 기록이며 최소10건입니다. 생존율은 `(T-(n+1)년,T-n년]` 개업 코호트의 각 점포가 n주년에 영업 중이었는지 계산하며 최소5건입니다. 주년 후 T전에 폐업해도 고정 n년 생존에는 포함됩니다. 현재 잔존율·성공확률과 다릅니다. 이는 원본의 모호한 구간을 보완한 BE 계약안이며 FE/원본 합의는 대기입니다.
-- 비율은 소수1자리 HALF_UP, 소표본/0분모는 value/numerator=null·실제 denominator를 보존하고 실제0%와 구분합니다. 서울도 같은 필터의 좌표 확보 인허가 기록 기준이며 공식 서울 수치가 아닙니다.
-- 공식 폐업률·공식 창업위험도와 안내 링크는 사용자 요청으로 제거했습니다. 필수 지표는 참고 폐업률·1년/3년 생존율·동종업체 수의 4개이며 기본 `flags.missing=[]`입니다. 선택 상권변화 유형·주야간 인구비는 미확인 사유와 pending을 유지합니다. 가맹 미확인을 개인 매장으로 바꾸지 않습니다. FE 계약 변경은 [요청 보고서](docs/fe-risk-reference-api-request.md)를 따릅니다.
-- 선택 서버 설정 `RISK_BOUNDARY_VERSION_ID`는 UUID이며 기본 미선택입니다. 지정해도 공간 후보만 표시하고 market.status=unverified를 유지합니다. 현재·과거 상권 확정/공식 통계 연결로 승격하지 않습니다. 실제 .env를 자동 수정하지 않습니다.
-- D/T/수집일null·지표별 분모·서울 범위의 좌표 미확보 수·인허가/지위승계/과거 재구성 한계를 함께 확인합니다. 입력 오류422·DB/준비 실패500·no-store·읽기 전용 일관된 트랜잭션을 사용합니다.
-
-[설계·검증](docs/designs/feat64-risk-reference-api.md), [FE 변경 요청](docs/fe-risk-reference-api-request.md)을 확인합니다. FE 구현·계산 문구 합의·CLAUDE.md 반영은 담당자 대기입니다.
-
-## 상담·지원기관 링크
-
-`GET /api/support-links`는 서울시 자영업지원센터·소상공인아카데미·서울시 소상공인 지원사업 안내·소상공인24의 공식 시작 주소를 반환합니다. DB나 인증키 없이 동작하며 요청 중 외부 사이트를 호출하지 않습니다. 선택 sigungu는 서울25개 구의 정확한 구명, category는 cafe/restaurant입니다. 생략은 허용하며 빈 값·중복·미지원 인자는422 INVALID_PARAM입니다.
-
-- 구 생략(category만 지정 포함)은 기존 공통4개·순서와 `prioritization={status:not_applied,reason:general_links_only}`를 유지합니다. 구를 지정하면 공식 공고의 관할 센터 연락처1개를 맨 앞에 추가해5개를 반환하며 `prioritization={status:applied,reason:district_contact_first,category_applied:false}`입니다. 업종/자격/모집 추천은 하지 않습니다.
-- 지역 연락처는 중기부 제2026-576호(2026-10-01) 첨부 PDF25쪽 별표2의8센터/25구 기준입니다. 예를 들어 마포구는 서울서대문센터입니다. 연결은 개별 지점/예약이 아닌 공식 공고 페이지이며 전화·관할·표 위치는 description에서 확인합니다. 카탈로그 버전은 구 생략/지정 모두support-links-v2입니다.
-- 항목은 id/org_name/title/description/url/type/region/last_checked입니다. last_checked는 KST 수동 확인일(현재2026-11-12)이며 요청 날짜로 바꾸지 않습니다. data_updated_at도 목록 확인일 기준이며 개별 공고 공표일·마감일이 아닙니다.
-- 서버 설정 목록은 분기1회 수동 점검하며 후속 공고의 관할 변경도 확인합니다. 구 지정의 district_contact_source는 공식 URL·공고일·확인일·표 위치이며 공고일과 카탈로그 확인일을 구분합니다. 요청 시 페이지를 호출하지 않으며 이후 접속/신청 성공을 보장하지 않습니다.
-- 출처는 R17, is_demo=false이며 정상/422/서버500은 공통 외피·no-store입니다. 기존4호스트 외에는 검토한 중기부 공고 URL1개만 정확히 허용하며 사용자 입력을 URL에 붙이지 않습니다. [지역 안내 설계·Claude 검토·검증](docs/designs/feat88-district-support-contacts.md), [FE 연결 요청](docs/fe-support-links-api-request.md)을 확인합니다. FE 코드/CLAUDE.md 반영은 담당자 대기입니다.
-
-## AI LLM client
-
-`app/ai/`는 공급자 분리 LLM client입니다. 기본 `LLM_PROVIDER=openai`이면 OpenAI Responses 어댑터를 사용합니다. `google`은 Gemini 호환용이며 지원하지 않는 값은 호출 시 실패해 지표 API 시작을 막지 않습니다.
-
-- 키 `LLM_API_KEY`는 서버 전용이며 OpenAI에는 Authorization Bearer 헤더로 보냅니다. 기본 모델은 `LLM_MODEL=gpt-6.1-sol`/`LLM_REASONING_EFFORT=low`이며 Responses API/store=false로 직접 해석을 작성하고 수치·단위·근거를 검사합니다. [직접 해석 전환](docs/gpt-generated-interpretation.md)을 참고합니다.
-- `LLM_REQUEST_TIMEOUT`(요청 1회)과 `LLM_TIME_BUDGET`(재시도 대기 포함 전체) 안에서 429·500·503·504·네트워크 오류·timeout만 `LLM_MAX_RETRIES`회까지 지터를 준 지수 백오프로 재시도합니다.
-- `LLM_REQUESTS_PER_MINUTE`·`LLM_REQUESTS_PER_DAY`는 프로세스 내 한도이며 비우면 제한하지 않습니다. 일일 한도는 태평양 시간 자정에 초기화합니다. 프로젝트 계정의 실제 한도를 확인해 설정합니다.
-- 모든 실패는 기존 `AI_UNAVAILABLE`(503)로 매핑합니다. 프롬프트·생성 결과·키·공급자 오류 본문은 로그와 예외에 남기지 않습니다.
-- 한도 카운터가 client 인스턴스에 있으므로 호출하는 쪽은 앱 수명 동안 하나를 재사용해야 합니다.
-
-자동 검증은 mock transport를 사용합니다. #68에서는 실제 Gemini를 연결한 AI API 2건의 200 응답도 확인했습니다. 공급자 client 자체의 계약은 [작업 25 설계서](docs/designs/feat25-llm-client.md)에서 확인합니다.
-
-### 프롬프트 버전 관리
-
-AI 해석 프롬프트는 `app/ai/prompts/risk_interpret/`의 `system.md`(시스템 지침)와 `user.md`(`$context_json` 하나만 쓰는 입력 템플릿)로 관리합니다. `build_interpret_request(context)`가 서버 집계를 키 정렬 JSON으로 넣어 `LlmRequest`를 만듭니다.
-
-- 프롬프트 파일을 바꾸면 `app/ai/prompts/version.py`의 `PROMPT_VERSION`을 올리고 `PROMPT_HISTORY` 끝에 새 지문을 추가해야 합니다. 테스트가 현재 파일의 SHA-256 지문과 대조해 누락을 막습니다. 새 지문은 실패한 테스트 메시지에 표시됩니다.
-- 주소·좌표·`building_key`·`floor_unit`·상호(`name`)·`license_no` 등 `FORBIDDEN_CONTEXT_KEYS`에 있는 키가 집계에 있으면 조립을 거절합니다. 값 내용은 검사하지 않으므로 허용 필드 추출은 BE-28에서 해야 합니다.
-- 시스템 지침은 공식/참고 구분·pending/no_data·금지 표현·참고용 안내를 유지하며, 현재 API에서는 문장 생성 대신 요청별 서버 후보 ID의 정렬/선택만 허용합니다. 원본/FE 계약 합의 완료와는 구분합니다.
-
-상세 내용은 [작업 27 설계서](docs/designs/feat27-prompt-version.md)에서 확인합니다.
-
-### AI 입력 집계 준비
-
-내부 `prepare_risk_interpretation(session,query,settings)`가 서버 Risk를 재계산하고 업종·필터·반경·기준일·지표/분모/출처/상태만 추출합니다. 주소·좌표·점포 식별값·상권 후보·URL·원본 메타/UUID는 프롬프트에 넣지 않습니다. 사유 코드와 숫자/기간도 검증하며, 입력은 중첩 구조까지 불변으로 만들고 context hash와 내부 데이터/프롬프트 버전을 구분합니다.
-
-현재 프롬프트 `risk-interpret-v4`는 안내 전용/미확인 상태·고정 주년 관측·서울 비교 한계를 유지하고, 요청별 허용 후보 ID만 선택하도록 제한합니다. 준비 함수 호출자는 기존 읽기 전용 세션을 제공해야 합니다. [집계 준비 설계·검증](docs/designs/feat66-ai-risk-context.md)을 확인합니다.
-
-### AI 해석 API
-
-`POST /api/risk/interpret`는 JSON `{ "query": { "lat": 37.5, "lng": 127.0, "category": "cafe", "radius": 500, "as_of": "2026-11" } }`처럼 원래 Risk 조회 조건만 받습니다. 이 예시는 합성 좌표입니다. Risk 전체 응답·클라이언트 수치·주소·building_key/floor_unit·중복 키·URL query는 422로 거절합니다. 선택 필드 `history: {"building_key": "...", "floor_unit": "1층 101호" | null}`(geocode 결과 그대로)를 보내면 서버가 같은 건물 이력을 재계산해 건수·같은 자리 영업 기간 범위만 AI 입력과 참고 계산 문장(`building_history`·`same_spot_history`)에 추가합니다(#98, prompt risk-interpret-v7). 건물키·층호수·상호는 AI 입력·응답·로그·캐시에 넣지 않으며, 형식 오류나 요청 좌표 300m 밖 건물은 422입니다. 최상위 building_key/floor_unit은 계속 422입니다. 서버는 같은 조건으로 상권 활동 집계(최근 구간 개폐업 수·세부 업종별 영업 수와 평균 경과 개월)를 재계산해 Risk와 교차 검증한 뒤 AI 입력과 `official_values` 참고 계산 문장에 추가합니다(#96, prompt risk-interpret-v6). 활동 문장의 `indicator_ids`는 `recent_open_close`·`avg_operating_months`이며 여러 항목에 반복될 수 있습니다.
-
-- 서버가 Risk를 재계산하고 식별정보 없는 허용 집계와 문장 후보만 모델에 전송합니다. 모델은 모든 유리/불리 비교의 순서와 현장 질문 1~3개를 고릅니다. 숫자·비교 방향·최종 문장은 서버가 만들며, `method=server_sentences_model_ordering`으로 이 역할을 표시합니다. 자유로운 AI 서술이나 성공 가능성 판정이 아닙니다.
-- `official_values`에는 참고 계산도 포함됩니다. 필수 사실·미확인/자료 한계는 전부 보존하고, 소표본·공식/조건부 지표 pending·수집일 null을 임의로 채우지 않습니다. `verification.checked_numbers`는 표시 문장의 숫자 출현 횟수이며 정확도 점수가 아닙니다.
-- 프로세스별 기본 한도는 `INTERPRET_REQUESTS_PER_MINUTE=5`, `INTERPRET_REQUESTS_PER_DAY=50`, `INTERPRET_MAX_CONCURRENT=2`입니다. 공급자 client 한도와 별개이며 다중 worker 전역 한도·프로젝트 quota를 보장하지 않습니다. 캐시 적중도 앱 요청 한도를 소비하고 공급자 한도는 실제 호출에만 적용합니다.
-- 대기·DB 준비·생성/검증 후 최대 1회 재생성·조립을 `LLM_TIME_BUDGET`(기본 20초)에 포함합니다. 읽기 전용 DB 세션은 모델 호출 전에 닫습니다. 취소 시 실행 중 동기 SQL은 문장 제한 이후 정리되므로 즉시 강제 중단이나 네트워크 전체 SLA를 보장하지 않습니다.
-- 입력 오류 422, DB/서버 결함 500, 한도·공급자·시간 초과 503 `AI_UNAVAILABLE`, 두 번의 선택 검증 실패 503 `AI_VERIFY_FAILED`입니다. 실패를 기본 문장으로 대체하지 않습니다. 모든 응답은 no-store입니다.
-
-[설계·Claude 검토·실제 검증](docs/designs/feat68-risk-interpret-api.md), [FE 변경 요청](docs/fe-risk-interpret-api-request.md)을 확인합니다. FE 구현·CLAUDE.md 반영은 담당자 대기이며 추가 문맥·전체 BE-32 통합 완료를 뜻하지 않습니다.
-
-### Risk·AI 서버 캐시
-
-앱마다 별도 메모리 LRU/TTL 캐시를 사용합니다. 환경 설정 기본값은 `CACHE_ENABLED=true`, `RISK_CACHE_TTL_SECONDS=300`, `AI_CACHE_TTL_SECONDS=300`, `CACHE_MAX_ENTRIES=256`, `CACHE_MAX_BYTES=4194304`입니다. TTL은 1~604800초(최대7일), 각 캐시의 항목 상한은 1~4096, payload bytes 상한은 1024~67108864입니다. 기본 Risk/AI payload 합계는 최대8MiB이며 Python 객체·키·인덱스 등의 비용은 별도입니다. worker마다 메모리와 캐시가 독립적이고 재시작/종료 시 폐기합니다.
-
-- 원문 좌표·조회조건을 key에 저장하지 않고 앱 수명의 난수 salt로 HMAC합니다. 좌표6자리와 정확한 float guard를 함께 사용해 반경 경계가 다른 요청을 합치지 않습니다. Risk 값에는 query echo가 없고 현재 요청으로 복원합니다. 업종집합/필터·요청 월·경계/계산 규칙도 구분합니다.
-- 같은 primary의 READ ONLY REPEATABLE READ 가시성 지문을 확인합니다. 일반 MVCC INSERT/UPDATE/DELETE는 배치ID·updated_at이 같아도 새 namespace가 되며 옛 트랜잭션은 별도로 유지됩니다. 관련 없는 쓰기/rollback에도 보수적으로 miss가 발생합니다. 적중에도 DB 접속이 필요하며 DB/원천 오류를 과거 성공으로 대체하지 않습니다.
-- AI는 현재 허용 후보와 재대조한 선택 ID·모델명만 저장합니다. 데이터/컨텍스트·프롬프트·공급자/모델·후보/Schema·검증 규칙이 달라지면 재사용하지 않습니다. 같은 key의 동시 생성은 합치며 대기 중에는 실행 슬롯을 점유하지 않습니다. 실패/미설정 키는 저장하거나 이전 성공으로 숨기지 않습니다.
-- `generated_at`은 **현재 응답의 서버 문장 조립 시각**입니다. 새 공급자 호출 시각이 아니며, `verification.regenerated`는 **현재 요청**의 검증 재생성 여부(적중 시 false)입니다. 선택 결과는 TTL 동안 재사용될 수 있고 과거 사용자의 생성시각/재생성 이력은 저장하지 않습니다. HTTP 응답은 계속 `no-store`이고 적중 여부를 응답/로그로 공개하지 않습니다. 공유 캐시의 응답시간·반복 선택 차이로 최근 동일 조건 조회를 추론할 수 있는 한계가 있어 완전 익명성을 보장하지 않습니다.
-- 동시 TRUNCATE·테이블 rewrite·DB 복구는 지원 갱신 범위 밖입니다. 이런 유지보수는 **요청 drain → 캐시 종료 → 변경 → 앱 재시작** 순서로 수행합니다. 일반 MVCC 갱신에 따른 옛 항목은 더 이상 조회되지 않습니다. 만료 후 다음 요청이 없어도 1초 간격 sweep으로 참조를 정리하고, 종료 시 정리 task를 취소·회수하고 늦은 저장을 막습니다. TTL 경계부터 재사용하지 않지만 OS 정지/이벤트 루프 지연·시계 오류 중의 정확한 물리 삭제 시한이나 메모리 덤프/스왑의 secure erase는 보장하지 않습니다. 분산 캐시·오프라인 응답·운영 hit율/SLA도 미검증입니다.
-
-[설계·Claude 검토·검증](docs/designs/feat74-risk-ai-cache.md)에 선택 근거와 지원 범위를 기록합니다.
-
-### AI 결과 검증
-
-`app/ai/verifier.py`의 `verify_output()`은 LLM 응답이 JSON 객체인지 확인한 뒤 다음을 검사합니다. 결과에는 실패 종류만 담고 응답 원문은 담지 않습니다.
-
-- 입력 집계(값·문자열·키)에 없는 숫자. 쉼표·`%`·소수 반올림은 허용하고 정수 반올림과 비율↔백분율 환산은 허용하지 않습니다.
-- 금지 표현(성공률·성공 확률, 추천/비추천, 위험점수·위험등급, LQ, 단정적 예측). 범용 verifier는 공식 명칭 자체를 금지어로 취급하지 않지만, 삭제된 창업위험도 지표/공식 서비스 안내는 현재 AI 문맥과 본문 후보에 넣지 않습니다.
-- pending·no_data 지표에 값을 붙인 경우, 입력에 없는 출처(지표 객체의 `id`·`value`·`status`, `source`/`sources` 관례를 따른 응답에 적용)
-- 전화번호·이메일·도로명/지번 번호·층호·좌표·building_key 패턴과 식별정보 키
-- 분량 상한(기본 2000자)과 같은 문장 반복
-
-`app/ai/verified.py`의 `generate_verified()`는 검증에 실패하면 같은 요청으로 1회 다시 생성하고, 또 실패하면 `AiVerifyFailedError`(→ `AI_VERIFY_FAILED` 503)를 냅니다. 공급자 오류 `LlmError`는 그대로 전달되어 `AI_UNAVAILABLE`과 섞이지 않습니다. 호출자의 Pydantic 모델과 선택적 의미 검증/남은 예산 검사를 지원하며, AI API는 요청별 enum·전체 비교 후보 포함·중복 검사를 추가합니다. 상세 내용은 [작업 29 설계서](docs/designs/feat29-ai-verifier.md)와 #68 설계를 확인합니다.
-
-## 조건부 통계 연결 기반
-
-내부 `app.analysis.market_reference`는 명시한 검증 기간 목록에서 현재/과거 분기를 고르고 매출 원천값·상권변화 유형을 별도 typed 결과로 투영합니다. 실제0/null/행 부재를 구분하며 통계에 인허가·브랜드 필터를 적용하지 않습니다. `app.analysis.population_totals`는 독립적으로 입증된 기대 구성과 같은 관측일/버전/격자 집합의 원천을 대조해 완전한 시간만 합산하고 기존 주야간 계산기로 전달합니다. 비공개/누락/부재는0으로 대체하지 않습니다.
-
-두 모듈은 DB/HTTP/공개 API·AI에 연결되지 않은 기반입니다. `source_validation_performed=false`, `public_activation_ready=false`이며 입력의 공식 정당성을 검증하는 기능이 아닙니다. 매출 기간·분기별 도형 적용과 생활인구 구성의 공식 근거가 확보될 때까지 기존 공개 pending을 유지합니다. [설계·실제 검수·검증과 필요한 자료](docs/designs/feat174-analysis-foundations.md)를 따릅니다.
-
-## 개인정보 없는 운영 로그
-
-API·ETL·LLM의 추가 운영 이벤트는 한 줄 JSON으로 **stderr**에 기록합니다. 기존 ETL stdout 결과와 API 본문·헤더는 유지합니다. 원문을 마스킹해 저장하는 방식 대신 고정 필드·허용 건수만 선택하며 주소·좌표·건물/층호·헤더/IP·원자료·프롬프트/출력·키를 기록하지 않습니다.
-
-| event | 의미 |
+| 변수 | 설정 |
 |---|---|
-| api_request | UTC 시각·고정 경로·실제 전송 상태·처리시간·서버 UUID·ASGI 응답 완료 여부 |
-| etl_run / etl_stage | 7개 실행기의 독립 run_id·단계 시작/완료/실패·시간, 완료 결과의 허용 건수/품질 집계·실제 batch/version UUID |
-| etl_quality | 생활인구 입력 읽기 후 원천일 전체의 비공개·빈 셀·실제0·미좌표 행 수와 복수행정동 그룹/행 수. 인구값·코드 없음 |
-| llm_http_attempt | 애플리케이션의 client.post 시도1건과 HTTP200 관측 여부. 파싱/최종 AI 검증 성공률과 다름 |
-
-- 모르는 경로는 `unmatched`이며 원문 URL/query를 복사하지 않습니다. 헤더 관측 전 실패/취소는 status_code=null, 전송 중 중단은 response_complete=false입니다. 완료는 ASGI 전송 기준이며 사용자의 다운로드 완료 보장이 아닙니다. request_id는 입력 헤더를 무시하고 새로 만들며 응답 헤더에 추가하지 않습니다.
-- ETL은 실제 commit context 종료 후 persist 완료를 기록하고 원래 오류·취소를 전파합니다. run_id와 DB batch_id/version_id를 구분하며 없는 건수를0으로 채우지 않습니다. quality_flags는 겹칠 수 있으므로 합산해 최종 제외 수로 표시하지 않습니다. 인허가 CLI의 잘못된 인자는 입력을 echo하지 않는 고정 메시지·exit2입니다.
-- 생활인구 `etl_quality`의 completed는 입력 요약 성공이며 적재 완료·원천 완전성·공간 검증 성공이 아닙니다. DB 준비 전에 기록하므로 이후 import failed가 올 수 있습니다. 6개 카운터 중 하나라도 유효하지 않거나 계산에 실패하면 counts 없이 failed/quality_summary_unavailable을 기록합니다. 로그 실패는 적재 성공 조건이 아니며 원래 실행 결과를 바꾸지 않습니다.
-- 쓰기/직렬화/ID 생성 실패는 주 작업을 바꾸지 않으며 로그 오류를 다시 출력하지 않습니다. 한 줄은 최대4096 UTF-8 bytes이고 프로세스 내 thread 쓰기를 묶습니다. 느린 stderr의 지연이나 여러 프로세스 간 원자성은 보장하지 않습니다. 기존 서버 시작/오류 메시지는 같은 stderr에 있을 수 있으므로 수집기는 event가 있는 JSON을 구분합니다.
-- 기본 앱에서 uvicorn.access를 비활성화하고 기존 `--no-access-log` 실행 안내도 유지합니다. 별도 로그 재설정·reload/gunicorn·프록시/제3자 DEBUG 전체의 개인정보 처리를 대신하지 않습니다.
-- **운영 환경의30일 보관·삭제 요구는 아직 미충족**입니다. 앱의 stderr 출력은 유지하며 아래 별도 수집·만료 삭제 CLI를 추가했습니다. 실제 영구 저장소·Render 전달 어댑터·주기 실행·백업 만료/누락률 검증은 후속입니다. [기존 출력 설계](docs/designs/feat72-private-operation-logs.md), [수집기 설계·검수·검증](docs/designs/feat158-operation-log-retention.md)을 확인합니다. FE 응답 계약은 바뀌지 않습니다.
-
-### 별도 운영 로그 보관·만료 삭제
-
-`python -m etl.operation_logs`는 기존 운영 JSON 이벤트6종의 **완료된 유한 배치**를 stdin으로 받아 전용 SQLite 파일에 저장합니다. EOF까지 읽고 나서 기준 UTC 시각을 한 번 정하므로 배치를 읽는 동안 발생한 이벤트를 시작 시각 기준의 미래로 오판하지 않습니다. 실시간 무한 스트림 수신기가 아닙니다. 앱이나 인허가/통계 DB에 로그 저장을 연결하지 않으며 Render wrapper/syslog/일반 콘솔 로그의 전달 어댑터는 별도로 필요합니다.
-
-운영자만 쓸 수 있는 **저장소 밖의 이미 존재하는 로컬 디렉터리**를 지정합니다. 절대 경로·`.sqlite3` 파일만 허용하고 링크/junction/UNC/장치명/ADS·Git 저장소 안·다른 SQLite·추가 schema 객체를 거절합니다. POSIX 새 파일은0600, Windows는 상위 ACL을 상속하므로 디렉터리 접근 권한은 운영자가 설정합니다. 경로 검사만으로 공격자가 쓸 수 있는 디렉터리의 파일 교체 경쟁까지 막는 것은 아닙니다.
+| `SPOTON_DB_ADMIN_PASSWORD` · `SPOTON_DB_PASSWORD` | 초기화 계정·앱 계정 비밀번호 (서로 다른 값) |
+| `DATABASE_URL` | `postgresql+psycopg://spoton_app:<앱 비밀번호>@127.0.0.1:5432/spoton_dev` (특수문자는 URL 인코딩) |
+| `CORS_ORIGINS` | FE 주소. 기본 `http://localhost:5173`, 여러 개는 쉼표로 구분 |
+| `KAKAO_REST_API_KEY` | 서울 주소 검색 (서버 전용 키) |
+| `HISTORY_CONTEXT_SIGNING_KEY` | 주소 이력 컨텍스트 서명 |
+| `LLM_PROVIDER` · `LLM_MODEL` · `LLM_API_KEY` | AI 해석 사용 시 |
+| `DATA_GO_KR_SERVICE_KEY` · `JUSO_SEARCH_KEY` · `JUSO_COORD_KEY` | 원천 수집·도로명주소 기능 사용 시 |
 
 ```powershell
-# 기본 실행은 변경하지 않습니다. 예시 디렉터리는 미리 준비해야 합니다.
-python -m etl.operation_logs init --db 'C:\SpotON-logs\events.sqlite3'
-python -m etl.operation_logs init --db 'C:\SpotON-logs\events.sqlite3' --execute
-
-# 완료된 JSON 배치를 stdin에 연결하고 EOF로 끝냅니다. 단독 실행하면 입력을 기다립니다.
-python -m etl.operation_logs ingest --db 'C:\SpotON-logs\events.sqlite3'
-python -m etl.operation_logs ingest --db 'C:\SpotON-logs\events.sqlite3' --execute
-python -m etl.operation_logs status --db 'C:\SpotON-logs\events.sqlite3'
-python -m etl.operation_logs prune --db 'C:\SpotON-logs\events.sqlite3'
-python -m etl.operation_logs prune --db 'C:\SpotON-logs\events.sqlite3' --execute
-```
-
-init은 새 파일만 배타 생성하며 기존 파일을 덮어쓰지 않습니다. status/ingest/prune은 없는 파일을 만들지 않습니다. SQLite를 열기 전에100바이트 헤더의 형식·rollback 모드·application_id/user_version을 확인해 다른 WAL DB의 부속 파일 생성을 막습니다. ingest/prune의 기본 dry-run은 읽기 전용 snapshot의 예상 건수이며 이후 실제 실행 결과와 달라질 수 있습니다. 쓰기는 짧은 트랜잭션과1초 SQLite 잠금 대기로 직렬화하고, 오류·중단 시 이번 변경은 rollback합니다. 기존 journal은 database_busy, WAL/SHM은 ownership으로 열기 전에 거절하므로 다른 writer가 끝난 뒤 확인합니다. journal이 남은 장애 파일은 운영자가 별도로 점검해야 합니다. 자동 복구는 하지 않습니다. Windows 원격 드라이브도 거절하며 POSIX 마운트의 로컬 여부는 운영자가 확인합니다.
-
-수집은 줄당4096 bytes·10,000행·총10MiB 상한입니다. 알 수 없는 필드/원문·중복 JSON 키·유효하지 않은 수치/UTC 시각은 rejected, 미래는 future, 정확히30일 이상 지난 행은 expired로 분류합니다. 개별 거절 행은 저장하지 않고 나머지를 처리하며 전체 입력 상한 초과는 이번 수집 전체 실패입니다. 같은 canonical 이벤트는 기존/동일 입력에서 duplicate로 계산합니다. 식별자가 없는 LLM/readiness의 동일 시각·동일 값 이벤트는 합쳐질 수 있어 보관 행 수를 정확한 실제 호출 수로 해석하지 않습니다.
-
-결과는 원문·경로 없는 stdout JSON 한 줄입니다. lines는 rejected+future+expired+duplicate+would_insert와 같습니다. inserted는 실제 쓰기 건수로 dry-run에서는0입니다. 종료0은 처리가 완료됐다는 뜻이며 거절/전달 누락이0임을 보장하지 않습니다. 실행 실패1, 사용법 오류2, 중단130, 도움말0입니다. 실패의 상세 원문이나 SQLite 메시지는 내보내지 않습니다.
-
-만료 기준은 수집 시각 대신 이벤트 UTC 기록 시각에서30×24시간입니다. **30일 후 자동 삭제가 아니라 다음 성공한 prune에서 삭제**되므로 최대 잔류는30일+prune 간격입니다. 별도 스케줄러·영구 저장소·중단 감시가 필요합니다. secure_delete로 주 SQLite 파일의 만료 행/해시를 제거하지만 상위 Render 로그·파일시스템 snapshot·백업·SSD 블록까지 소거하지 않습니다. 운영 연속 보관/삭제 완료로 표시하려면 전달 누락과 백업을 포함해 실제 저장소에서 검증해야 합니다.
-
-### Render API에서 명시한 구간 수집
-
-`python -m etl.operation_logs.render`는 Render application 로그의 유한 구간을 GET으로 읽어 위 보관기에 전달합니다. 별도 init/prune/배포나 환경 변경은 하지 않습니다. `RENDER_API_KEY`는 프로세스 비밀 환경으로 주입합니다. 키 인자·자동 `.env`/Render CLI 파일 읽기는 지원하지 않으며 키를 저장소/문서에 쓰지 않습니다.
-
-```powershell
-# owner/service는 실제 ID, start/end는 지난 UTC 구간으로 바꿉니다(최대1시간).
-# 전용 보관기는 앞 절의 init으로 먼저 준비해야 합니다.
-python -m etl.operation_logs.render --db 'C:\SpotON-logs\events.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>' --start '2026-11-15T09:00:00Z' --end '2026-11-15T09:10:00Z'
-# 같은 인자에 --execute를 추가하면 검증된 이벤트만 저장합니다.
-```
-
-기본 dry-run에서도 Render GET은 수행하지만 보관기는 읽기 전용입니다. 대상 서비스의 owner/type와 각 로그의 resource/app 라벨을 확인합니다. wrapper·일반 콘솔 행·CR/LF/NUL 포함 메시지는 저장하지 않고, 기존 허용 스키마를 통과한 canonical 이벤트만 전달합니다. `api_rows=rejected_messages+forwarded`이며 보관기의 미래/만료/중복/삽입 건수는 별도 archive 객체에 있습니다.
-
-나노초 커서를 그대로 사용하고 모든 페이지가 끝난 후 한 번에 보관기로 넘깁니다. 중간 오류·정체/건너뛰는 커서·범위/라벨 위반·상한 초과에는 저장하지 않습니다. 페이지당100행·1MiB, 최대20페이지/2,000행·총10MiB, 서비스 응답256KiB를 제한합니다. 고정 API URL·TLS·환경 프록시 무시·리다이렉트/자동 재시도 없음이며 예상 밖 압축은 읽기 전에 거절합니다. 네트워크 예산은30초·요청 단계별 최대5초로 검사하지만 DNS/OS와 여러 단계를 포함한 엄격한 전체35초 상한은 보장하지 않습니다.
-
-`api_window_complete=true`는 API 페이지 종료만 뜻합니다. `coverage_verified=false`, `provenance=schema_match_only`는 공급자 누락·지연·보관 기간 이전 소실·앱 발행 인증까지 확인한 것이 아님을 나타냅니다. end가 현재보다5분 미만 전이면 recent_window=true입니다. 빈 결과도 실제 로그 발생0을 입증하지 않습니다. 같은 구간 재수집은 중복 방지되지만 늦은 행이 추가될 수 있으므로 운영 자동화에는 중첩 구간/재처리·누락 감시가 필요합니다. 영구 저장소·스케줄러·30일 운영 검증은 후속입니다. [설계·실제 조회·검수](docs/designs/feat160-render-log-adapter.md)를 따릅니다.
-
-관측한 Render 커서는 마지막 행 시각+1ns에서 다음 페이지를 시작합니다. 동일한1ns 시각에100행 이상이 몰려 페이지 경계에서 잘리면 API가 같은 시각의 나머지를 건너뛰어도 이 어댑터는 확인할 수 없습니다. API 페이지 종료를 누락 없음으로 해석하지 않으며 같은 구간 재조회만으로 이 누락의 복구도 보장하지 않습니다. 저장 수는 고유 canonical 이벤트 수이며 동일 시각·동일 내용의 정상 이벤트도 합쳐질 수 있습니다.
-
-### 재개 가능한 단발 로그 작업
-
-`python -m etl.operation_logs.job`은 보관기와 Render 어댑터를 함께 실행합니다. 이미 초기화한 archive와 별도 제어 SQLite가 필요합니다. 두 파일은 저장소 밖의 다른 로컬 일반 파일이어야 하며 제어 파일에는 대상 binding 해시와 시작/확정 시각만 저장합니다. 기존 파일을 덮어쓰거나 자동 초기화하지 않습니다.
-
-```powershell
-# 초기화 미리보기. start는 현재보다5분 이상 전, 정확히30일보다 최근의 UTC 시각입니다.
-python -m etl.operation_logs.job init --db 'C:\SpotON-logs\events.sqlite3' --state 'C:\SpotON-logs\job.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>' --start '<UTC-start>'
-# 위 명령에 --execute를 추가하면 제어 파일을 생성합니다.
-
-# 로컬 계획만 확인: 키/Render GET/파일 변경 없음
-python -m etl.operation_logs.job run --db 'C:\SpotON-logs\events.sqlite3' --state 'C:\SpotON-logs\job.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>'
-# 비밀 프로세스 환경 RENDER_API_KEY 주입 후 위 run에 --execute를 추가하면 실행합니다.
-```
-
-job의 dry-run은 로컬 계획만 확인하므로 GET을 수행하는 render CLI의 dry-run과 다릅니다. 실행은 먼저 만료 삭제를 완료한 뒤 최대6개 구간을 수집합니다. 현재보다5분 지연하고5분 경계로 내린 끝점까지,5분씩 전진하며2분을 겹칩니다. 새 구간이 없으면 마지막2분만 재조회합니다. `lag_seconds_after`와 `remaining_windows`로 남은 지연을 확인합니다. 이 중첩은 더 늦게 도착한 이벤트의 복구를 보장하지 않습니다.
-
-dry-run의 `prune_completed=true`는 만료 예정 수의 계산 완료이며 삭제가 아닙니다(`prune_deleted=0`). 동시 dry-run의 짧은 읽기 잠금도 실제 checkpoint commit을 지연시켜 `state_busy`로 실패시킬 수 있으며 다음 실행에서 재조회합니다. 수집 중 시계 변화로 구간 검사가 실패하면 `collector_window`로 보고하고 부분 효과를 보존한 채 제어를 rollback합니다.
-
-한 archive를 여러 작업이 공유하지 않도록 구성합니다. 구간 전후의 파일 재검증에서 경합하면 성공 prefix도 확정하지 않고 재조회할 수 있습니다. 만료 삭제는 시스템 시각을 신뢰하므로 실행 환경의 시계 동기화가 필요합니다. 주기는 최대 전진30분보다 충분히 짧게 정하고 지연 증가를 감시해야 합니다. commit 직후 프로세스 중단으로 결과 보고가 끊겼다면 다음 dry-run의 `cursor_before`로 실제 확정 위치를 확인합니다.
-
-저장은 archive commit 후 제어 checkpoint 순서입니다. 원격/네트워크/확인 가능한 archive 잠금 오류에는 연속 성공 구간까지 확정하고 실패 종료할 수 있습니다. `last_confirmed_until`, `proposed_until`, `checkpoint_committed`를 함께 확인합니다. 중단·binding 불일치·제어 commit 실패에는 제어를 rollback하며 다음 호출에서 중복 방지로 재개합니다. 실패해도 앞서 완료한 만료 삭제나 일부 저장이 남을 수 있습니다. 동일 state의 동시 실행은1초 잠금 대기 후 실패합니다.
-
-`checkpoint_expired`는30일 만료 cursor를 자동으로 건너뛰지 않습니다. `state_journal_present`도 자동 복구/삭제하지 않습니다. 정상 commit의 일시적 journal일 수 있으므로 먼저 다른 실행이 끝난 뒤 재시도하고, 계속 남을 때 작업 중지 확인과 두 파일 백업 후 수동 점검합니다. 이전 확정 cursor가 보존 범위 안이라면 그 이하의 명시 start로 새 state를 준비합니다. 이미 만료됐다면 보존 범위 안의 새 start와 복구할 수 없는 과거 공백을 명시적으로 정해야 합니다. archive 복원/교체·디렉터리 이동도 기존 binding을 재사용할 수 없습니다. 영구 저장소·24시간 실행 환경·OS 스케줄 등록·비밀 주입·백업 만료·실제30일 연속 운영 검증은 아직 필요합니다. [설계·검수·실제 검증](docs/designs/feat162-operation-log-job.md)을 따릅니다.
-
-### Windows 로그 수집 시범 운영
-
-`ops/windows/run-operation-log-job.ps1`은 전용 로컬 폴더와 DPAPI CurrentUser 인증을 사용하는 Windows wrapper입니다. 제한 폴더에 검증된 복사본을 `run.ps1`로 두고, 동일 폴더의 `config.json`에 root/runtime/Python/git 경로·source commit·lock/runner SHA256·owner/service를 지정합니다. archive와 제어 파일은 먼저 각각 초기화해야 합니다. 키는 `render-key.dpapi` 암호문에만 저장하며 명령행·Task XML·영구 환경변수에 넣지 않습니다. 이 PC의 실제 구성/등록/실행 기록은 [#164 문서](docs/designs/feat164-windows-log-pilot.md)를 따릅니다.
-
-```powershell
-# 기본 preview: 키 복호화/Render GET/결과 파일 변경 없음
-powershell.exe -NoProfile -NonInteractive -File 'C:\Users\horim\SpotON-operation-logs\run.ps1' -ConfigPath 'C:\Users\horim\SpotON-operation-logs\config.json'
-# 실제 수집은 위 명령에 -Execute 추가
-# 예약 작업 중지(파일과 키는 삭제하지 않음)
-Disable-ScheduledTask -TaskName 'SpotON-OperationLogs-Pilot'
-```
-
-실행 전 경로·파일별 ACL·고정 소스/해시·Git 변경 및 assume-unchanged/skip-worktree 표식을 검사합니다. 자식 환경은 allowlist로 구성해 부모의 키를 상속하지 않으며, stderr·임의 출력·잘못된 결과는 공개하지 않습니다. 자식 호출 이후 wrapper가 실패했다면 이미 삭제/저장했을 수 있으므로 `effects_may_be_partial`과 다음 preview의 확정 위치를 확인합니다. 키를 복호화할 수 없어도 검증된 대상은 빈 키로 실행해 만료 삭제를 먼저 수행하고 `credential_unavailable`로 실패합니다.
-
-execute 결과는 전용 폴더의 `latest-result.json` 한 개에 원문 없이 갱신됩니다. `LastTaskResult`, 마지막 실행/완료 시각, `job.last_confirmed_until`, `lag_seconds_after`, `retention_risk`를 함께 확인합니다. 설정/소스 검증에 실패하면 결과 파일도 갱신하지 않으므로 이전 성공 결과만 보고 정상으로 판단하지 않습니다. 공유 가상환경 변경도 실행 실패를 만들 수 있습니다.
-
-마지막 완료가15분 이상 오래됐거나 결과 코드가0이 아니면 점검합니다. 현재 PC에서는 CIM 실행 시각의 초값이 native Task Scheduler COM과 달라 COM 및 wrapper 완료시각을 대조합니다. latest 파일은 짧게 읽고 닫아 다음 atomic 교체를 막지 않습니다. 이 PC의 실제 작업은 활성화됐고 수정 후 시간 트리거의 체크포인트 전진·결과 갱신·종료0을 확인했습니다. 상세 시각과 미검증 범위는 위 실행 기록을 따릅니다.
-
-작업은 현재 사용자 Interactive/Limited·5분 반복·로그온 시 실행·중복 실행 금지·숨김·최대15분으로 구성합니다. PC 종료/로그아웃/네트워크 단절/절전 중에는 수집하지 않으며 절전을 깨우지 않습니다. 로컬 디스크 지속 보관은 장비 장애를 견디는 원격 저장소나24시간 운영을 보장하지 않습니다. 키 암호화도 같은 사용자로 실행되는 프로그램의 복호화를 막지는 못합니다. 오프호스트 백업/복원·복사본 만료·실제30일 운영 검증은 후속입니다.
-
-### 두 세대 로컬 백업·만료·새 파일 복원
-
-원격 전송 준비용 새 파일은 아래의 [논리 내보내기](#원격-전송-준비용-논리-내보내기)를 사용합니다. 실행 중인 SQLite 파일을 단순 복사하지 않습니다.
-
-`python -m etl.operation_logs.backup`은 전용 SPBK SQLite에 최근 두 세대를 보관합니다. 각 세대는 허용 이벤트와 재개 메타데이터만 포함하며 키·DPAPI·config·.env·provider 원문은 복사하지 않습니다. 모든 세대의 만료는 **원래 로그 발생 시각부터30일** 기준입니다. 생성일 기준으로 보관 기간을 연장하지 않습니다.
-
-```powershell
-# init/capture/prune/restore는 기본 preview. 실제 쓰기는 --execute 추가
-python -m etl.operation_logs.backup init --backup 'C:\SpotON-logs\backup.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>'
-python -m etl.operation_logs.backup capture --db 'C:\SpotON-logs\events.sqlite3' --state 'C:\SpotON-logs\job.sqlite3' --backup 'C:\SpotON-logs\backup.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>'
-python -m etl.operation_logs.backup status --backup 'C:\SpotON-logs\backup.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>'
-python -m etl.operation_logs.backup prune --backup 'C:\SpotON-logs\backup.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>'
-# 두 대상은 모두 새 파일이어야 합니다. previous는 첫 세대만 있을 때 실패합니다.
-python -m etl.operation_logs.backup restore --backup 'C:\SpotON-logs\backup.sqlite3' --db 'C:\SpotON-logs\restore.sqlite3' --state 'C:\SpotON-logs\restore-state.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>' --generation previous
-```
-
-수집의 control 잠금과 archive 읽기 snapshot으로 일관성을 확보한 후 반대 slot을 한 transaction으로 교체합니다. 세대별 canonical/hash/count/digest와 대상·원본 binding을 검증하며 잘못된 파일을 자동 수리/덮어쓰지 않습니다. capture는 백업 만료를 먼저 commit하므로 source 없음/잠금/손상 때문에 이전 세대 만료가 생략되지 않습니다. 원본에는 DML을 하지 않습니다. preview도 SHARED 읽기 잠금은 사용하므로 수집 commit과 겹치면 짧은 경합이 가능합니다.
-
-`source_integrity`는 원본 점검/복원 대상이고, `clock_before_backup`은 시계 문제이며, `target_mismatch`는 설정 확인 대상입니다. 이 사유로 정상 백업을 지우지 않습니다. `backup_integrity`/저널 잔존은 수동 점검이 필요하며 자동 복구·삭제하지 않습니다. `effects_may_be_partial`, `backup_prune_committed`, `prune_deleted`, `generation_committed`, `commit_outcome_unknown`을 함께 확인합니다.
-
-복원은 만료 행을 제외하고 새 archive 저장 후 새 state의 binding을 새 경로/inode로 다시 만듭니다. 기존 initial/cursor는 유지하고 만료 cursor를 자동 건너뛰지 않습니다. 실패하면 이번에 만든 파일만 identity를 확인해 제거하며 `created_files_removed`/`orphan_files`로 남은 상태를 보고합니다. 복원 사본도 로그 사본이므로 검증 후 정리하거나 prune 관리에 넣어야 합니다. 운영 수집 경로·인증·Task는 자동 전환하지 않습니다.
-
-정기 capture는 정확한5필드(`db`, `state`, `backup`, `owner_id`, `service_id`)의 비공개 JSON을 `capture --config <path>`로 받습니다. 개별 경로/ID와 함께 사용할 수 없습니다. 키는 필요 없습니다. 실제 PC 연결은 [#166 설계·실행 기록](docs/designs/feat166-operation-log-backup.md)을 따릅니다. 별도 작업 중지는 `Disable-ScheduledTask -TaskName 'SpotON-OperationLogs-Backup'`이며, 이 작업을 중지하면 백업 만료 처리도 멈춥니다.
-
-status의 `captured_at` 신선도·native COM 작업 결과를 함께 확인합니다. `latest_rows`/`latest_bytes`/`near_capture_limit`는 최신 남은 snapshot의 상한 대비 지표이며 현재 source 실제 크기가 아닙니다. 세대당100,000행/64MiB·파일256MiB·연산30초 예산을 넘으면 일부만 보관하지 않고 실패합니다. source 행 수는 수동 capture preview에서도 확인할 수 있습니다. 같은 PC/디스크의 두 최근 세대이며 장비 손실·오프호스트 백업·상시/실제30일 운영 검증은 후속입니다.
-
-현재 PC는 기존 수집과 별도로5분 주기 백업을 활성화했고 실제 새 파일 복원/정리와 시간 트리거의 seq/capture 갱신·종료0을 확인했습니다. Task는 콘솔 없는 `pythonw.exe`로 실행해 stdout 파일을 쌓지 않습니다. preview capture의 `sequence`는 다음 세대 계획이며 실제 최신 세대는 status로 확인합니다. 구현 검토 후 추가 Claude 재검수의 계정 한도 중단과 Codex 보완·실검증 근거는 위 설계6.5~6.6을 따릅니다.
-
-### 원격 전송 준비용 논리 내보내기
-
-`backup_export`는 SPBK를 단일 읽기 snapshot에서 검증하고 **새 SPBK 파일**로 재생성합니다. 모든 세대에서 `snapshot_as_of` 기준 정확히30일 지난 이벤트를 제외하고 digest를 다시 계산합니다. 원본 백업은 prune하거나 갱신하지 않습니다. 기존 slot/sequence/capture/initial/cursor를 보존하며 복원 불가능한 오래된 checkpoint는 거부합니다.
-
-```powershell
-# 기본 preview: source 읽기 검증·만료 계산만 수행, output/sidecar 생성 없음
-python -m etl.operation_logs.backup_export --backup 'C:\SpotON-logs\backup.sqlite3' --output 'C:\SpotON-logs\export-new.sqlite3' --owner-id '<workspace-id>' --service-id '<service-id>'
-# 실제 새 파일 생성: 같은 명령에 --execute 추가
-```
-
-출력은 부모가 존재하는 Git 밖의 로컬 절대 경로이며 기존 파일/link/sidecar를 덮지 않습니다. 생성 후 닫힌 파일의 schema·canonical/digest·전체 내용과 SHA256을 검증합니다. `output_verified=true`, `output_sha256`, `output_bytes`를 함께 확인합니다. preview의 출력 해시/크기는 null입니다. 행 수는 두 세대 합계로 중복 이벤트가 포함될 수 있습니다. 기존 `backup restore`에 새 SPBK를 전달해 새 archive/state로 복원할 수 있습니다. 출력 SPBK의 origin은 원본 binding을 유지하므로 복원한 새 archive의 이후 정기 capture에는 별도의 새 SPBK를 init합니다.
-
-출력 파일에는 대상/원본 binding hash와 평문 이벤트가 포함됩니다. SHA256은 인증이나 암호화가 아니며 외부 전송 시 접근 통제/암호화는 별도입니다. HTTP·키·B2 업로드·기존 Task에는 연결하지 않습니다. 파일 생성 자체의 원자적 게시를 보장하지 않으므로 파일명 등장만으로 준비 완료를 판단하지 않습니다. 실패 시 `commit_outcome_unknown`, `created_files_removed`, `orphan_files`, `effects_may_be_partial`을 확인합니다. `orphan_files`는 교체 파일과 검사 실패를 포함한 출력 경로/sidecar의 점유·미확인 수로 소유 증명이 아닙니다. 계수가 중단되면 미확인 경로1개를 보수적으로 가산하며 전체 수가 확정된 것은 아닙니다. CLI 최외곽 오류의 기본 카운터0도 `effects_may_be_partial=true`일 때 생성/잔존 없음의 증거가 아닙니다. 교체 파일·link·형식 미확인 파일·sidecar는 자동 삭제하지 않으며 강제 종료 잔존물은 수동 점검 대상입니다.
-
-`next_expiry_at`은 모든 세대에서 남은 이벤트의 첫 만료 시각이며 **복원 가능 기한이 아닙니다**. 0행이라 null이어도 cursor가30일을 넘으면 복원이 거부됩니다. 파일을 나중에 전송하려면 현재 시각으로 모든 세대 cursor까지 다시 검증/재생성해야 하고 출력/복원 검증 사본도 정리해야 합니다. 이 CLI는 외부 저장소의 만료 스케줄이나30일 상시 보관 보장을 제공하지 않습니다. #168은 Codex 선진행으로 구현했으며 실제 Claude 사후 검토와 보완은 [설계12절 이후](docs/designs/feat168-operation-log-export.md)를 따릅니다.
-
-### B2 연결 사전 점검
-
-`b2_preflight`는 B2 연결 대상 metadata와 단발 인증/비공개 버킷 범위를 점검합니다. 업로드·삭제·버킷/키 변경·자동 실행은 하지 않습니다. 실제 계정/버킷이 준비되기 전에도 기본 preview를 사용할 수 있습니다.
-
-Git 밖의 로컬 UTF-8 JSON 파일에 다음 세 필드만 둡니다(아래는 가상 예시). 키를 설정 파일에 넣지 않습니다.
-
-```json
-{"bucket_name":"spoton-example-logs","region":"us-west-001","prefix":"spoton-operation-logs/"}
-```
-
-```powershell
-# 기본: metadata만 검증, credential 환경 조회·HTTP0
-python -m etl.operation_logs.b2_preflight --config 'C:\SpotON-logs\b2-target.json'
-# process에 B2_APPLICATION_KEY_ID / B2_APPLICATION_KEY가 안전하게 주입된 경우만
-python -m etl.operation_logs.b2_preflight --config 'C:\SpotON-logs\b2-target.json' --execute
-```
-
-앱 `.env`를 로드하지 않습니다. execute만 고정 Native v4 authorize GET과 지정 버킷 list_buckets POST를 최대2번 호출합니다. API host/TLS·단일 버킷·정확한 prefix·리전·권한 상한·allPrivate를 확인하고 redirect/retry/환경 proxy를 차단합니다. 결과에 경로·키·토큰·계정/버킷명·URL·원문을 넣지 않습니다.
-
-정상0·인자/설정2·일반실패1·중단130입니다. preview의 connection_verified는 false이고 실제 키도 조회하지 않습니다. execute의 connection_verified=true도 보고된 범위와 단발 조회만 확인한 결과입니다. backup_capabilities_complete는 향후 파일 작업에 필요한 보고된 grant 집합의 포함 여부이며 실제 write/delete 시험이 아닙니다. billing_verified/retention_verified/remote_backup_verified와 객체·버킷 변경 값은 false입니다. 연결 성공을 비용0·원격 보관/복구·전송 준비 완료로 해석하지 않습니다. 실제 B2 연결은 사용자 계정/전용 버킷/키가 준비된 뒤 별도 검증합니다. [설계·검수와 검증](docs/designs/feat172-b2-preflight.md)을 따릅니다.
-
-## 공통 오류 응답
-
-요청 검증 실패는 422, 없는 경로는 404, 허용되지 않은 메서드는 405 상태를 유지하면서 공통 외피로 반환합니다. 404/405에는 새 코드를 추가하지 않고 기존 `INVALID_PARAM`을 사용합니다. 주소 조회 실패용 `ADDRESS_NOT_FOUND`와는 구분합니다. 405의 `Allow` 및 HTTP 예외의 인증·재시도 프로토콜 헤더는 유지하고 임의 디버그 헤더는 제거합니다.
-
-```json
-{
-  "data": null,
-  "meta": {},
-  "error": {"code": "INVALID_PARAM", "message": "요청 값을 확인해 주세요"}
-}
-```
-
-내부 예외는 500 `INTERNAL_ERROR`와 고정 문구로 응답합니다. 응답 시작 전 애플리케이션 예외는 CORS 안쪽에서 처리해 허용된 origin의 FE도 오류 본문을 읽을 수 있습니다. 요청값·예외 원문·traceback을 응답에 넣지 않고 애플리케이션 로그에는 예외 클래스 이름만 남깁니다. 실행 안내의 `--no-access-log`는 쿼리 등 요청 정보가 Uvicorn 접근 로그에 남는 것을 막습니다.
-
-CORS preflight·문서·리다이렉트·204/304는 프로토콜 응답으로 유지합니다. 응답 시작 후 스트리밍·background task 오류와 서버/인프라 자체 로그 정책은 후속 BE-35 범위입니다. 점포 이력은 배치 출처와 데이터 버전을 제공하며, 전체 API 공통 meta·DataVersion의 원본 v1.2 일괄 동기화는 별도 작업입니다.
-
-## 검증
-
-```powershell
-uv run --locked --extra dev ruff check .
-uv run --locked --extra dev ruff format --check .
-uv run --locked --extra dev mypy app etl migrations
-uv run --locked --extra dev pytest
-```
-
-테스트는 DB·외부 API 없이 health, 공통 응답·오류·OpenAPI·CORS·정보 비노출·환경 설정, DB 설정·세션 제어와 인허가 수집·정제, LLM client의 재시도·한도·응답 분류·비노출, 프롬프트 지문·조립과 AI 결과 검증·재생성을 검증합니다. 실제 SQL·공간 함수·권한·stores upsert는 아래 PostGIS 통합 job에서 수행합니다. 작업별 설계·Claude 검토·검증 결과는 `docs/designs/`에 기록합니다.
-
-2026-11-12 [전체 시스템 점검·수정 기록](docs/designs/feat58-system-audit-cleanup.md): 일반893개·격리 PostGIS92개 통과. 실제 DB head0009·모델차이0·조회 API5개와 카카오 주소 검색/이력 연결을 확인했습니다. LLM 전체/요청별 시간 예산·비정상 Retry-After·과도한 지번 숫자·CSV 수집시각 이후 분기 검증을 보완했습니다. FE lint/build/format은 통과했지만 nullable/복합 식별자 등 실제 화면 연동은 기존 FE 요청 보고서 반영 대기입니다. 유료 LLM 실제 호출·미구현 분석 API·브라우저 전체 시연을 검증한 것은 아닙니다.
-
-## 인허가 원천 단발 응답 진단
-
-전체 수집 없이 첫 페이지를 1회만 요청해 원천 API 지연을 확인할 수 있습니다.
-기존 `DATA_GO_KR_SERVICE_KEY`를 `.env`에서 읽으며 키를 명령 인자로 받지 않습니다.
-
-```powershell
-uv run --locked --extra dev --no-editable python -m etl.localdata.probe --source general_restaurant --authority-code 3130000 --rows 100 --read-timeout 20
-uv run --locked --extra dev --no-editable python -m etl.localdata.probe --source general_restaurant --authority-code 3130000 --rows 1 --read-timeout 30
-uv run --locked --extra dev --no-editable python -m etl.localdata.probe --source rest_cafe --authority-code 3130000 --rows 100 --read-timeout 20
-```
-
-`--source`는 두 공식 원천, `--authority-code`는 서울 25개 관청 코드이며 둘 다 필수입니다.
-위 `3130000`은 공개된 마포구 코드입니다. `--rows`는 1 또는 100(기본 100),
-`--read-timeout`은 유한한 0.1~30초(기본 20)만 허용합니다. 각 명령은 GET 1회이며
-자동 재시도·리다이렉트·추가 인증 요청·여러 페이지 조회를 하지 않습니다.
-
-stdout은 상태·시간·HTTP 코드·건수·고정 오류 사유를 담은 JSON 한 줄입니다.
-키·URL·관청 코드·원문 행·예외 메시지는 출력하지 않습니다. 성공은 종료코드 0,
-인자/설정 실패는 2, 통신/HTTP/계약/크기/정리 실패는 1, 처리 중 중단은 130입니다.
-`--help`는 일반 도움말과 종료코드 0을 제공합니다.
-기존 Settings 검증이나 환경 proxy/인증서 구성 실패도 설정 실패로 처리합니다.
-
-성공은 해당 페이지 응답의 계약 확인이며 전체 수집·데이터 품질·업종 정답 검증이 아닙니다.
-관청 코드가 누락된 행은 기존 parser처럼 허용하되 `authority_check`가
-`matched`/`partial_missing`/`unverified`/`empty`를 구분합니다.
-선언된 Content-Length나 디코딩된 누적 본문이 2MiB를 넘으면 parser 전에 중단합니다.
-이는 압축 해제 순간을 포함한 엄격한 메모리 상한은 아닙니다.
-read timeout도 소켓 수신 대기 제한이며 전체 HTTP 완료 시간의 상한이 아닙니다.
-Windows의 차단된 소켓은 read 대기가 끝난 뒤 중단이 반영될 수 있습니다.
-
-DB·snapshot·CSV·적재·파일 저장을 사용하지 않으며 기존 수집기나 공개 API 설정도 바꾸지 않습니다.
-출력 단계 이전의 실패/중단을 요약하며 출력 중 중단이나 SIGTERM까지 JSON을 보장하지는 않습니다.
-[설계·실제 검토·검증](docs/designs/feat137-source-probe.md)에 근거와 한계를 기록합니다.
-
-## 지방행정 인허가 ETL
-
-기존 수집·정제 모듈을 연결하는 개발용 실행기를 제공합니다. 아래 명령은 저장소 루트에서
-Python 3.11 환경으로 실행합니다. `DATA_GO_KR_SERVICE_KEY`는 로컬 `.env`에 디코딩한 값을
-설정하며, 키·URL 전체·원문 행은 출력하지 않습니다.
-
-```powershell
-# 기본값은 dry-run: 실제 API를 읽지만 DB에 쓰지 않습니다.
-uv run --locked --extra dev --no-editable python -m etl.localdata --source general_restaurant --save-snapshot
-uv run --locked --extra dev --no-editable python -m etl.localdata --source rest_cafe --save-snapshot
-
-# 기존 API 필드명 CSV와 동봉 검증 보고서를 사용하는 경우 (네트워크·DB 미사용)
-uv run --locked --extra dev --no-editable python -m etl.localdata --source general_restaurant --from-csv C:\data\restaurant_seoul.csv --validation C:\data\restaurant_validation.json --save-snapshot
-
-# 수집이 완료된 datasets/localdata/*.json 파일 경로를 지정합니다.
-uv run --locked --extra dev --no-editable python -m etl.localdata --source general_restaurant --from-snapshot datasets/localdata/<snapshot>.json --write
-```
-
-- source는 `general_restaurant` 또는 `rest_cafe`이며 한 번에 하나씩 처리합니다.
-- 서울 25개 관청의 전체 수집·페이지 검증이 성공해야 정제·snapshot 보관으로 넘어갑니다.
-  결과 수 변화·잘린 페이지·관청 불일치·호출 실패 시 부분 자료를 적재하지 않습니다.
-- `--workers`는 1~4, 기본 1입니다. 실제 요청 시도는 재시도를 포함해 실행당 최대 9,500회로
-  제한합니다. 첫 페이지들로 계산한 예상 수집량이 한도를 넘으면 중단합니다. 이미 소비한
-  일일 할당량은 별도이므로 이 제한이 제공처의 잔여 한도를 보장하지 않습니다.
-- snapshot은 허용 DTO 필드와 관청별 건수·행 해시를 담으며 Git에서 제외됩니다. 실제 자료와
-  키를 이슈·PR에 첨부하지 않습니다. API 입력은 수집 시작 KST 날짜로 판정하고, CSV 입력은
-  동봉 보고서의 검증시각을 KST로 바꿔 판정합니다. 재생도 같은 날짜를 사용합니다.
-- CSV 입력은 UTF-8(API 필드명 헤더)과 PASS/complete 검증 JSON이 필요합니다. 파일 해시,
-  실제 행 수·25개 구 분포·관리번호 중복을 다시 검증하며 불필요한 필드는 버립니다.
-  검증 보고서는 서명된 원천 증명서가 아니며, 검증시각도 실제 원천 기준일을 증명하지 않습니다.
-  `input_kind`·입력/보고서 해시·`as_of_basis`를 snapshot v2에 보관해 이 한계를 구분합니다.
-- `--from-csv --write`는 허용하지 않습니다. CSV dry-run으로 만든 snapshot을 확인한 뒤
-  같은 파일을 `--from-snapshot --write`로 적재합니다. 원본 CSV·보고서는 수정하지 않습니다.
-- `--write`는 localhost의 `spoton_dev`·`spoton_app`만 허용합니다. 연결 후 계정·권한·revision
-  `0010`·PostGIS·유일 제약을 다시 검사하고 원천별 한 트랜잭션으로 점포와 배치 출처를 적재합니다.
-- 같은 snapshot으로 다시 실행하면 기존 `(source, license_no)`를 갱신합니다. `affected`는
-  성공적으로 처리한 입력 수이고, 값이 실제로 변경된 행 수를 뜻하지 않습니다.
-- 실제 원천은 성공 코드 `0`, 날짜 `YYYY-MM-DD`, 갱신시각 `YYYY-MM-DD hh:mm:ss`를 사용합니다.
-  기존 `00`·compact 날짜/시각도 허용하며 잘못된 형식은 정상값으로 추정하지 않습니다.
-
-현재 실행·실제 적재 검증 상태는 [작업 34 설계와 검증 기록](docs/designs/feat34-localdata-import.md)을
-확인합니다. 실행기 추가만으로 원천 전체 적재나 점포 이력 API 구현이 완료된 것은 아닙니다.
-
-일반음식점·휴게음식점 공식 API의 페이지 수집, 서울 25개 관청 코드 검증, 중복 제거, 날짜·상태·업종·면적 정제, EPSG:5174 원 좌표 보존과 EPSG:4326 변환, stores 멱등 upsert를 모듈로 제공합니다.
-
-- `DATA_GO_KR_SERVICE_KEY`는 디코딩된 서비스 키를 로컬 `.env` 또는 서버 시크릿에만 설정합니다.
-- 전화번호·홈페이지·대표자와 원천 JSON 전체는 DTO·DB·로그·리포트에 저장하지 않습니다.
-- 실행기의 실제 전체 적재 완료 여부는 작업 34 검증 기록을 따릅니다. repository는 호출자가
-  명시적으로 전달한 PostgreSQL 연결만 사용합니다.
-- `building_key`·`floor_unit` 정규화는 구현돼 있습니다. 주소·좌표 보완과 삭제 동기화는
-  후속 작업입니다.
-
-상세 계약과 검증 근거는 [작업 5 설계서](docs/designs/feat5-license-etl.md)에서 확인합니다.
-
-## 상권 경계 적재 (BE-16)
-
-출처는 서울특별시·서울신용보증재단의 [서울시 상권분석서비스(영역-상권), OA-15560](https://data.seoul.go.kr/dataList/OA-15560/S/1/datasetView.do)입니다. 공공누리 1유형(출처표시, 상업적 이용·변경 가능)이며 갱신은 비정기입니다. SHP/SHX/DBF/PRJ/CPG가 포함된 공식 ZIP과 기대 SHA256·첨부파일 수정일을 사용합니다. 원본은 저장소 밖에 보관합니다.
-
-```powershell
-# 기존 DATABASE_URL로 로컬 개발 DB identity를 확인한 후 현재 head 적용
-uv run --locked --extra dev alembic upgrade head
-
-# 기본 dry-run: 읽기 전용 DB 공간 검사, insert 없음
-uv run --locked --extra dev python -m etl.market_areas `
-  --zip "<공식 ZIP 경로>" `
-  --expected-sha256 "<ZIP SHA256>" `
-  --source-file-date 2023-10-23
-# 검증 결과를 확인한 뒤 같은 명령에 --write를 추가해 적재
-```
-
-- 현재 검증 ZIP은 2,123,078 bytes, SHA256 `38bb8fab4e45a1171af4989cd7fa1275f68e5d644aa770f5431ce7ccc38384dd`입니다. UTF-8·EPSG:5181의 1,650개 고유 상권·25개 구·4유형을 확인했습니다. 이 해시/날짜는 해당 파일에만 사용하며 새 파일의 값을 임의로 같게 두지 않습니다.
-- `source_file_date=2023-10-23`은 공식 첨부 수정일입니다. 내부 파일 날짜 2023-10-20·포털 갱신일 2026-09-11·DB loaded_at과 구분합니다. 실제 경계 적용일은 확인되지 않아 `boundary_as_of=null`입니다. 최신/과거 분기에 자동 적용하지 않으며 BE-17/23에서 코드·경계 호환을 검증합니다.
-- market_area_versions는 원본 해시/규칙별 불변 버전, market_areas는 `(version_id, market_code)`별 MULTIPOLYGON 4326·GIST를 저장합니다. 기존 상권 간 겹침·빈 공간·hole·분리 영역은 보존하고 대표 상권을 선택하거나 합치지 않습니다.
-- 원본의 RELM_AR을 area_m2로 보존합니다. 기하 면적은 덮어쓰지 않습니다. 무효 도형만 linework로 보정하며 차원 붕괴/빈 면/변환 후 무효/서울권 bbox 밖/원본 면적 대비 1% 초과 차이는 전체 실패입니다. 현재 파일은 6개 보정 후 모두 유효합니다.
-- ZIP hash/CRC·해제 크기·경로·sidecar·CRS·필드·중복·25개 구 완전성을 검사합니다. 32MiB ZIP·64MiB 해제·20,000행·500,000점 상한이 있으며 모호한 winding/고아 hole을 거절합니다. 원문 geometry·경계명·코드·접속 정보는 출력하지 않습니다.
-- 기본 dry-run은 READ ONLY입니다. 쓰기는 localhost의 spoton_dev·spoton_app·일반 권한·PostGIS·head 0005에서만 허용하며 advisory transaction lock 후 버전과 전체 행을 한 트랜잭션으로 적재합니다. 중간 실패는 모두 rollback하고 부분 성공하지 않습니다.
-- 같은 원본/규칙은 DB 속성·NDR EWKB 기반 digest를 다시 읽어 확인한 뒤 `reused=true, inserted=0`입니다. 원래 loaded_at/행을 바꾸지 않으며 훼손 버전은 자동 수리하지 않습니다. 새 원본/규칙은 새 버전으로 공존하고 자동 active/최신 승격·삭제 경로는 없습니다.
-- source gu_code는 5자리 SIGNGU_CD입니다. 점포의 7자리 관청 코드와 바로 조인하지 않습니다. 공개 API·FE 응답은 변경하지 않았습니다.
-
-실제 적재·재실행·원자료 표본·데이터 보존 검증은 [이슈 47 기록](docs/designs/feat47-market-areas-import.md)을 확인합니다. 소진공 상가정보(R7)는 현재 필수 ETL에서 사용하지 않습니다.
-
-## 공식 점포·개폐업 통계 적재 (BE-17)
-
-출처는 서울특별시·서울신용보증재단 [상권분석서비스(점포-상권), OA-15577](https://data.seoul.go.kr/dataList/OA-15577/S/1/datasetView.do), 공공누리 1유형 출처표시입니다. 공식 연간 ZIP을 저장소 밖에 두고 첨부 수정일·기대 SHA256·완료된 연도·대조 경계 UUID를 명시합니다. 명령 자체는 네트워크 다운로드를 하지 않습니다.
-
-```powershell
-uv run --locked --extra dev python -m etl.market_stores `
-  --zip "<저장소 밖 공식 연간 ZIP 경로>" `
-  --expected-sha256 "<ZIP SHA256>" `
-  --source-year 2025 --source-file-date 2026-05-21 `
-  --code-check-boundary-version "<대조할 market_area_versions UUID>"
-# 기본은 READ ONLY dry-run입니다. 확인 후 같은 명령에 --write를 추가합니다.
-```
-
-- 현재 검증 파일은 2,119,809 bytes, SHA256 `133bfc6ce79e13ee5b289490e4667dfba46a0af5d0d71df360a0d324e030a4e6`, 내부 CP949 CSV 31,051,537 bytes입니다. 첨부 수정일 2026-05-21과 통계 분기 20251~20254를 구분하며 최신 API 분기를 보장하지 않습니다.
-- 원본 304,775행 전체를 검증하고 CS100001/2/3/4/10 지원 업종 24,810행만 저장합니다. 분기별 6,219/6,215/6,191/6,185행, 나머지 279,965행은 미지원 업종 제외입니다. 없는 조합을 점포 0으로 채우지 않습니다.
-- `SIMILR_INDUTY_STOR_CO`가 **전체**, `STOR_CO`가 **일반**, `FRC_STOR_CO`가 **가맹** 점포 수입니다. 전체=일반+가맹을 검사하고 개폐업 수·공식 원천 비율을 그대로 보존합니다. 100% 초과 비율을 자르거나 다시 계산하지 않으며 빈 비율(null)과 실제 0을 구분합니다.
-- market_store_versions는 ZIP/CSV hash·내부 파일 시각·인코딩·규칙·집계·코드 대조 결과를 저장합니다. market_stores는 `(version_id, market_code, quarter, induty_cd)`로 구분하며 같은 원본/규칙/대조 경계의 재실행은 UUID·loaded_at·내용을 유지하고 삽입 0건입니다. 전체 연도를 한 트랜잭션으로 적재하며 실패 시 버전과 행을 모두 롤백합니다.
-- 대조 경계의 실제 내용 hash를 확인하고 분기별 양방향 코드·유형·명칭 차이를 건수로 남깁니다. 현재 코드/유형은 일치하고 명칭 차이는 분기별 1개입니다. `code_check_boundary_version_id`는 대조 근거이며 적용 경계 확정이 아닙니다. `boundary_compatibility=unverified`와 기존 `boundary_as_of=null`을 유지합니다.
-- 공식 통계와 인허가 점포의 모집단 동일성·분기별 유효 경계는 미확인입니다. 공식 비율을 반경 지표로 합산/평균하거나 참고 폐업률로 바꾸지 않습니다. 공개 API·FE 변경은 없습니다. 적재된 공식 통계가 있으면 migration downgrade는 실패하며 기존 버전 수정·삭제나 최신 자동 선택을 하지 않습니다.
-
-설계·Claude 검토·실제 검증은 [이슈 49 기록](docs/designs/feat49-market-stores-import.md)을 확인합니다.
-
-## 상권별 추정매출 원천 적재 (BE-18)
-
-출처는 서울특별시·서울신용보증재단 [상권분석서비스(추정매출-상권), OA-15572](https://data.seoul.go.kr/dataList/OA-15572/S/1/datasetView.do), 공공누리 1유형 출처표시입니다. 금액 단위는 원입니다. 원천 `당월_매출_금액`을 분기 합계나 월평균으로 확정하지 않고 그대로 저장합니다. 월·분기 환산, 반경 매출·점포당 매출 계산과 공개 매출 API 활성화는 하지 않습니다.
-
-```powershell
-uv run --locked --extra dev python -m etl.market_sales `
-  --zip "<저장소 밖 공식 연간 ZIP 경로>" `
-  --expected-sha256 "<ZIP SHA256>" `
-  --source-year 2025 --source-file-date 2026-05-18 `
-  --code-check-boundary-version "<대조 경계 버전 UUID>" `
-  --code-check-store-version "<대조 점포 통계 버전 UUID>"
-# 기본 REPEATABLE READ READ ONLY dry-run. 확인 후 같은 명령에 --write 추가.
-```
-
-- 검증한 2025년 ZIP은 14,035,292 bytes, SHA256 `c907f3d386d62b89f45781e6e6172328ee91b1b8dd2c621e4171e437bee1c6b2`, CP949 CSV 39,698,674 bytes입니다. 첨부 수정일은 2026-05-18이며 통계 분기·포털 갱신일·loaded_at과 구분합니다. 현재 최신 API 분기를 보장하지 않습니다.
-- 55개 원천 헤더와 전체 85,732행의 48개 수치 필드를 검증하고 지원 5종 **14,391행**(분기별 3,617/3,596/3,597/3,581)을 적재 대상으로 선택합니다. 미지원 71,341행은 제외합니다. 원천 시간대 건수 헤더의 특이 표기도 허용 목록 그대로 검사합니다.
-- `est_sales`는 원천 금액, `source_sales_count`는 원천 건수이며 BIGINT nullable입니다. 32bit 초과·최대 BIGINT를 float 변환 없이 다룹니다. 빈 셀은 null, 실제 0은 0, 없는 조합은 행 없음으로 보존합니다. 55개 허용 필드의 원문 hash를 남기되 나머지 세부 수치를 재합산하지 않습니다.
-- 두 대조 버전을 명시하며 점포 통계와 같은 연도·같은 대조 경계인지 검사합니다. 두 기준의 실제 DB hash·행 수를 확인하고 코드/유형/명칭 및 지원 조합 차이를 기록합니다. 차이는 건수로 보고하고 없는 매출 행을 0으로 생성하지 않습니다.
-- `market_sale_versions`·`market_sales`는 원본/규칙/두 기준 버전별 불변 버전입니다. dry-run은 같은 키의 기존 버전 재사용 여부도 검사하며, --write는 한 연도의 버전·행을 한 트랜잭션으로 저장합니다. advisory lock·저장 내용 재조회 hash 검사·실패 전체 rollback을 적용하고 replay는 UUID/loaded_at/hash를 유지합니다. 적재된 매출이 있으면 downgrade는 실패합니다.
-- `currency=KRW`, `amount_basis=source_reported`, **`amount_period_status=unverified`**, **`boundary_compatibility=unverified`**를 유지합니다. 집계 기간·경계 적용일·통계/인허가 모집단 동일성은 추가 확인 대상입니다. BE-17 공통화 전후 hash·실행 결과 회귀와 실제 원본 replay를 검증하며 FE·API·Docker·환경설정은 변경하지 않습니다.
-
-상세 설계·검증·미확인 사항은 [이슈 51 기록](docs/designs/feat51-market-sales-import.md)을 확인합니다.
-
-## 250m 생활인구 원천 적재 (BE-19)
-
-서울특별시·KT 추계 [생활인구 공식 안내](https://data.seoul.go.kr/dataVisual/seoul/seoulLivingPopulation.do), [내국인 OA-22784](https://data.seoul.go.kr/dataList/OA-22784/S/1/datasetView.do)·[장기외국인 OA-22785](https://data.seoul.go.kr/dataList/OA-22785/S/1/datasetView.do)·[단기외국인 OA-22786](https://data.seoul.go.kr/dataList/OA-22786/S/1/datasetView.do)를 사용합니다. 일별 원천은 공공누리 1유형 출처표시입니다. 실제 방문객 수·하루 고유 인구가 아닌 시각별 추계이며 원천별 행정동 차원을 보존합니다.
-
-세 일별 ZIP과 공식 격자 SHP ZIP은 저장소 밖에 두고, 아래 구조의 로컬 manifest를 만듭니다. hash는 파일별 실제 SHA256, file_date는 확인한 원천 첨부 수정일입니다. 실제 `.env`나 인증키는 넣지 않습니다.
-
-```json
-{
-  "observation_date": "2026-11-07",
-  "grid": {"path": "<공식 격자 ZIP 경로>", "sha256": "<SHA256>"},
-  "sources": {
-    "local": {"path": "<내국인 ZIP 경로>", "sha256": "<SHA256>", "file_date": "2026-11-11"},
-    "long": {"path": "<장기외국인 ZIP 경로>", "sha256": "<SHA256>", "file_date": "2026-11-11"},
-    "short": {"path": "<단기외국인 ZIP 경로>", "sha256": "<SHA256>", "file_date": "2026-11-11"}
-  }
-}
-```
-
-```powershell
-uv run --locked --extra dev python -m etl.living_pop --manifest "<로컬 manifest JSON 경로>"
-# 기본은 REPEATABLE READ READ ONLY dry-run입니다. 확인 후 같은 명령에 --write 추가.
-```
-
-- manifest의 상대 경로는 manifest 파일 위치 기준입니다. 날짜와 세 원천을 모두 명시하며 자동 백필·기간 전체 다운로드는 하지 않습니다. 현재 검증 범위는 **2026-11-07 하루**입니다.
-- 격자는 EPSG:5179의 원본 250m 사각형을 검증해 MULTIPOLYGON4326·GIST로 저장합니다. 원본 hash와 변환 저장 hash를 구분하며 내부 파일 시각을 적용일로 바꾸지 않습니다. `grid_as_of=null`, `spatial_compatibility=unverified`입니다.
-- 내국인 253,400·장기 137,137·단기 141,385, 합계 **531,922행**입니다. 관측은 `(version_id,source,hour,admin_code,grid_id)`로 구분하며 같은 격자·시각의 복수 행정동 행을 제거하거나 합산하지 않습니다. 전체 geometry는 셀 도형이며 행정동별 부분 도형/면적 배분을 만들지 않습니다.
-- `population`은 Numeric(20,5) 원천 총계, `value_status`는 observed/suppressed/missing입니다. `*`는 suppressed/null, 빈 값은 missing/null, 실제0은 observed/0이며 행 없음과 구분합니다. 후행 소수점 정수 표기를 포함한 명시적 ASCII 십진수만 받으며 원문 표기는 hash와 집계로 추적합니다. 세부 성별/연령/국적 숫자는 검사·hash만 하고 별도 적재하거나 총계를 복원하지 않습니다.
-- 사용자가 확정한 기준대로 공식 격자에 없는 내국인 1개 격자의 **24개 비식별 행**을 원문 코드·unlocated/null 참조로 보존합니다. 가짜 좌표·격자 행을 생성하지 않습니다. located 행은 복합 FK로 공식 격자와 연결하고 공간 inner join은 unlocated를 제외합니다. 전역 source/date 범위 미확인 수를 반경 내 missing_grid_count로 표시하지 않습니다.
-- 원본/규칙별 불변 버전과 실제 저장 hash를 검증하며 --write는 격자 및 세 원천 전체를 한 트랜잭션으로 처리합니다. replay는 기존 UUID·loaded_at·내용을 유지하며, 실패 시 이번 신규 버전/행을 모두 rollback합니다. 자료가 있으면 downgrade는 실패합니다.
-- 사용자 운영 규칙상 복수 행정동 행은 공식 답변 전 임의 합산하지 않고 원천 파일·행정동별 불변 관측·원문 행 hash로 보존합니다. 행이 없는 조합은 no_data이며 0으로 보정하거나 임의 행을 만들지 않습니다. 이 정책은 공급기관의 합산 가능성 확인을 대신하지 않습니다. 현재 SHP와2026-11-07 관측의 공식 버전 대응 자료 전에는 공간 집계 API와 주야간 인구비를 계속 보류합니다. 원천 수집·정제·적재는 가능합니다.
-- 별도 `etl_quality` 이벤트의 `suppressed_rows`는 비공개, `missing_value_rows`는 **실제 행의 빈 합계 셀(행 부재 미포함)**, `observed_zero_rows`는 실제 관측0, `unlocated_rows`는 좌표 미확인 행 수입니다. `multi_admin_groups`는 같은 원천·시각·원천 격자의 서로 다른 행정동2개 이상 그룹 수, `multi_admin_rows`는 그 그룹의 전체 행 수입니다. 미좌표 그룹도 포함할 수 있습니다. 플래그는 겹치므로 합산 제외 수·인구·완전성/제공률로 해석하지 않습니다. 없는 조합의 공식 기준이 없어 행 부재 수는 만들지 않습니다. scope=source_day_all_sources·spatial_compatibility=unverified·aggregation_status=pending을 유지합니다. [설계·Claude 검토·검증](docs/designs/feat90-population-quality-logs.md)을 따릅니다.
-
-실행·검증·원천 특이사항과 선택 근거는 [이슈 53 설계](docs/designs/feat53-living-population-import.md)를 확인합니다. 생활인구/반경 API·주야간 비율·FE 연동과 다일 누적·파티셔닝은 후속 범위입니다.
-
-## 공식 상권변화 유형 적재 (BE-20)
-
-서울신용보증재단 제공·서울특별시 저작권의 [공식 OA-15576](https://data.seoul.go.kr/dataList/OA-15576/S/1/datasetView.do) 자료를 사용합니다. 공공누리1유형 출처표시 대상입니다. 포털의 **내려받기(CSV)**에서 전체 파일을 받아 저장소 밖에 보관합니다. 미리보기 1,000행을 전체로 사용하거나 ZIP으로 다시 포장하지 않습니다.
-
-```powershell
-# 기본: 파일 전체 검증 + 로컬 DB 읽기 전용 dry-run
-uv run --locked --extra dev python -m etl.market_changes `
-  --csv "<전체 CSV 경로>" --expected-sha256 "<실제 SHA256>" `
-  --source-year 2025 --retrieved-at "<다운로드 완료 ISO 시각, timezone 포함>" `
-  --code-check-boundary-version "<검증된 market_area_versions UUID>"
-# 위 명령에 --write를 추가하면 선택 연도를 한 트랜잭션으로 저장합니다.
-```
-
-- 실제 전체36,300행(2021년1분기~2026년2분기)을 검사하고 **2025년6,600행**, 분기별1,650행을 적재했습니다. 나머지29,700행은 선택 연도 밖입니다. 업종 제외 수가 아니며 출력의 `excluded_scope=outside_selected_year`로 구분합니다. 자동 최신 선택·전체 기간 백필은 하지 않습니다.
-- `market_change_versions`/`market_changes`에 LL=다이나믹·LH=상권확장·HL=상권축소·HH=정체와 원천 평균 영업 개월4개를 보존합니다. 평균 빈 셀은null·실제0은0·행 없음은누락이며 0으로 채우지 않습니다. 평균으로 유형을 재계산하거나 자체 점수/좋음·나쁨 판정을 만들지 않습니다.
-- 원천에는 업종 필드가 없습니다. 카페/음식점으로 복제하거나 업종 필터를 적용하지 않습니다. 평균의 모집단·산정 기간을 자체 점포 이력과 같다고 가정하지 않습니다.
-- `retrieved_at`은 다운로드 완료시각을 재실행 때도 그대로 전달합니다. 파일 자체 수정일은 미확인 `source_file_date=null`이며 포털 갱신일로 채우지 않습니다. 같은 bytes/연도/규칙/경계는 같은 UUID를 재사용하고, 다른 provenance나 저장 내용 훼손은 실패합니다. 다른 bytes는 같은 내용이어도 별도 버전이며 `same_content_versions_before`는 참고 건수입니다.
-- 경계 코드·유형 차이는0개, 명칭 차이는 분기별3개입니다. 실제 적용시점 일치는 미확인이므로 `boundary_compatibility=unverified`를 유지합니다. 실제 조회 API·FE 변경은 없습니다.
-
-원천·Claude 검토·실제 검증과 한계는 [이슈55 설계](docs/designs/feat55-market-change-import.md)를 따릅니다.
-
-## PostgreSQL·PostGIS 설정과 마이그레이션
-
-### Docker 로컬 개발 DB
-
-Docker Desktop의 Linux engine이 실행 중이어야 합니다. Windows에서는 WSL 2 설치·활성화 후 재부팅이 필요할 수 있습니다.
-
-`.env.example`을 `.env`로 복사하고 `SPOTON_DB_ADMIN_PASSWORD`와 `SPOTON_DB_PASSWORD`에 서로 다른 임의 비밀번호를 설정합니다. 기존 `.env`는 덮어쓰지 않습니다. `DATABASE_URL`은 `postgresql+psycopg://spoton_app:<앱 비밀번호>@127.0.0.1:5432/spoton_dev`로 설정합니다. URL의 특수문자는 percent-encoding하고, 포트를 바꾸면 `SPOTON_DB_PORT`와 URL 포트를 함께 수정합니다.
-
-```powershell
-# 저장소 루트에서 실행. config --quiet는 비밀번호를 출력하지 않습니다.
-$env:UV_NO_EDITABLE = "1"
-docker compose config --quiet
-docker compose up -d --wait db
-docker compose ps
-
-# 로컬 개발 DB 접속 설정을 확인한 뒤 기존 migration 적용
+# Docker Desktop 실행 후 저장소 루트에서
+docker compose config --quiet          # 설정 확인 (비밀번호는 출력하지 않음)
+docker compose up -d --wait db         # PostgreSQL 17 + PostGIS 시작
+
+# 테이블·인덱스 생성
 uv run --locked --extra dev alembic upgrade head
 uv run --locked --extra dev alembic current
 
-# 데이터는 유지하고 컨테이너만 중단
+# 서버 실행
+uv run --locked --extra dev uvicorn app.main:app --reload --no-access-log
+
+# 끝낼 때: 데이터는 그대로 두고 DB 컨테이너만 중단
 docker compose stop db
 ```
 
-CI와 동일한 digest의 PostGIS 이미지를 사용하며 포트는 `127.0.0.1`에만 엽니다. `spoton_admin`은 초기화 계정이고, 백엔드는 superuser 권한이 없는 `spoton_app`으로 연결합니다. 앱 계정에는 자체 테이블·migration 생성을 위한 public 스키마 권한을 부여합니다.
+- **DB를 만든 것만으로는 분석 데이터가 채워지지 않아요.** 인허가·상권·추정매출·생활인구 원천을 [etl/](etl/) 명령으로 검증·적재해야 해요. 적재 순서와 명령은 [상세 운영·개발 기록](docs/operations.md)에 있어요.
+- `docker compose down -v`는 DB 데이터를 삭제하니 일반 종료에 쓰지 않아요.
+- DB가 준비되면 [http://localhost:8000/api/ready](http://localhost:8000/api/ready)로 연결·스키마 상태를 확인해요.
 
-데이터는 Compose의 `postgres_data` named volume에 보존합니다. `down -v`는 데이터를 삭제하므로 일반 중단에 사용하지 않습니다. 초기화 스크립트와 암호 설정은 **빈 볼륨의 최초 실행에만** 적용됩니다. 기존 볼륨에서 `.env`만 바꾸면 DB 계정 암호는 바뀌지 않습니다.
+### 6-3. FE와 연결
 
-Windows의 한글 경로에서는 Python 3.11이 editable 설치의 `.pth` 파일을 시스템 인코딩으로 읽다가 시작에 실패할 수 있습니다. 위 `UV_NO_EDITABLE`은 현재 PowerShell 창에 적용되므로 새 창에서는 다시 설정합니다. 또는 `uv sync`·`uv run`에 `--no-editable`을 붙입니다. 일반 설치 후에도 저장소 루트에서 실행하면 현재 작업 중인 `app` 코드를 사용합니다.
+FE 저장소의 `.env`를 `VITE_USE_MOCK=false`, `VITE_API_BASE_URL=http://localhost:8000`으로 바꾸고 FE를 실행해요. 자세한 내용은 [FE README](https://github.com/sigoreu-jabeujong/SpotON-FE#6-실행-방법)를 참고해 주세요.
 
-`alembic check`는 모델에 없는 PostGIS 내부 테이블(`spatial_ref_sys`·topology 테이블)을 삭제 대상으로 보고할 수 있습니다. 자동 생성된 삭제 변경을 적용하지 말고 앱이 관리하는 테이블만 비교합니다. 로컬 DB 구성 검증 결과는 [연동 기록](docs/designs/local-postgis-setup.md)에 있습니다.
-
-아래 기존 설정 안내는 Docker 외 PostgreSQL에도 적용됩니다.
-
-개발 DB의 접속 URL은 실제 `.env` 또는 서버 시크릿의 `DATABASE_URL`에 설정합니다. 형식은 `postgresql+psycopg://<user>:<password>@<host>:5432/<database>`이며 기본 `postgresql://`·`postgres://`도 psycopg로 정규화합니다. `DATABASE_CONNECT_TIMEOUT`은 1~60초(기본 5초)입니다. 값은 출력·커밋하지 않습니다.
-
-명시 포트는 1~65535를 사용합니다. URL query는 `sslmode`, `sslrootcert`, `sslcert`, `sslkey`, `sslcrl`, `application_name`만 허용하고 중복·빈 값·접속 대상/계정 재정의 옵션은 거부합니다. 접속 시간 제한은 URL query 대신 설정값으로 관리합니다. URL fragment는 허용하지 않으므로 암호 등의 특수 문자는 percent-encoding합니다.
-
-PostGIS 서버 패키지는 관리자가 설치해야 합니다. 실제 운영에서는 DBA가 대상 DB의 PostGIS 확장을 먼저 활성화하고, 앱 계정에는 관리자 권한을 주지 않습니다. 미설치 DB에서 권한이 부족하면 migration은 안전한 오류로 중단됩니다.
+### 6-4. 검사
 
 ```powershell
-# 실제 DB에는 접속 설정·대상·설치 권한을 확인한 후 실행합니다.
-uv run --locked --extra dev alembic upgrade head
-uv run --locked --extra dev alembic current
-
-# DB 설정·연결 없이 SQL만 확인합니다.
-uv run --locked --extra dev alembic upgrade head --sql
+uv run --locked --extra dev ruff check .            # 코드 검사
+uv run --locked --extra dev ruff format --check .   # 형식 검사
+uv run --locked --extra dev mypy app etl migrations # 타입 검사
+uv run --locked --extra dev pytest                  # 단위 테스트 (DB·외부 API 없이)
 ```
 
-초기 revision `0001`은 `CREATE EXTENSION IF NOT EXISTS postgis`만 실행합니다. stores 등 사용자 테이블은 만들지 않으며 downgrade도 공유 데이터 보호를 위해 확장을 삭제하지 않습니다. 엔진은 호출 시 생성하고 접속은 지연하며, 호출자가 dispose합니다. `session_scope(create_session_factory(engine))`는 정상 종료 시 commit, 실패 시 rollback·close를 수행합니다. health는 계속 DB 설정 없이 동작합니다.
+실제 SQL·공간 함수·권한은 PostGIS 통합 테스트(`tests/integration/`)에서 확인해요. 작업별 설계·검증 기록은 [docs/designs/](docs/designs/)에 있어요.
 
-## 실제 DB 통합 검증
+### 문제 해결
 
-기본 pytest는 DB 없는 단위 검사를 실행하고 `integration`은 제외합니다. PR 생성 전에는 작업 브랜치 push로 CI의 `lint-and-test`와 `postgis-integration`을 모두 통과해야 합니다. 통합 job은 고정 digest의 PostGIS 이미지와 CI 전용 계정을 사용하고 skip·xfail·0건 실행을 실패로 처리합니다.
+| 증상 | 확인할 것 |
+|---|---|
+| 첫 요청이 느려요 | Render 무료 서버가 깨어나는 중이에요. 30초~1분 뒤 다시 확인 |
+| health는 되는데 분석이 실패해요 | `/api/ready`, DB 연결·migration·원천 데이터 적재 여부 |
+| FE에서 CORS 오류 | `CORS_ORIGINS`에 FE 주소·포트가 정확히 들어 있는지 |
+| 주소 검색 실패 | `KAKAO_REST_API_KEY`, 서울 주소인지 |
+| AI 해석 실패 | `LLM_*` 설정·한도, 응답의 `AI_UNAVAILABLE`/`AI_VERIFY_FAILED` 코드 |
+| 시작 시 인코딩 오류 (Windows) | `$env:UV_NO_EDITABLE = "1"` 설정 후 다시 실행 |
 
-명시 실행 명령은 다음과 같습니다. `TEST_DATABASE_URL`과 `SPOTON_ALLOW_DB_INTEGRATION=1`이 필요하며 localhost의 테스트 DB만 허용합니다. 일반 `DATABASE_URL`과 같은 대상을 테스트하지 않습니다. 테스트가 만든 `spoton_it_` 임시 DB·role만 정리하므로 운영·일반 개발 DB를 대상으로 설정하지 않습니다.
+## 7. 시스템 구성 · 기술 스택
 
-```powershell
-uv run --locked --extra dev pytest -m integration -rA --junitxml=integration.xml
+```mermaid
+flowchart LR
+    U["👤 사용자<br/>(브라우저)"] --> FE["SpotON-FE<br/>React · Vercel"]
+    FE -- "REST /api, /api/v2, /api/v3" --> BE["SpotON-BE<br/>FastAPI · Render"]
+    BE --> DB[("PostgreSQL 17<br/>+ PostGIS")]
+    BE --> K["카카오 로컬 ·<br/>도로명주소 API"]
+    BE --> AI["LLM<br/>(AI 해석)"]
+    ETL["ETL<br/>원천 검증·적재"] --> DB
+    P["공공데이터<br/>인허가·상권·생활인구"] --> ETL
 ```
 
-통합 검사는 PostGIS 미설치 임시 DB에서 upgrade·공간 함수·세션 commit/rollback·권한 부족·관리자 사전 설치 후 일반 계정 migration·downgrade/재upgrade와 인허가 stores upsert의 멱등성·geometry·source 분리·전체 rollback을 검증합니다. 로컬 DB가 없으면 CI 결과로 실제 검증 여부를 확인하며, CI도 실행할 수 없으면 PR과 다음 작업을 중단합니다.
+| 구분 | 사용 기술 |
+|---|---|
+| 언어 · 프레임워크 | Python 3.11, FastAPI, Uvicorn, Pydantic, pydantic-settings |
+| DB · 공간 조회 | PostgreSQL 17, PostGIS, SQLAlchemy 2, GeoAlchemy2, psycopg 3 |
+| DB 변경 · 적재 | Alembic, Python ETL |
+| 외부 연동 | httpx, 카카오 로컬 API, 도로명주소 API |
+| AI | LLM 공급자를 서버 설정으로 선택 (현재 OpenAI Responses API, Google Gemini 호환 유지) |
+| 품질 | pytest, Ruff, mypy, GitHub Actions |
+| 의존성 · 배포 | uv · uv.lock, Docker, Render |
 
-주소검색 결과부터 이력·월범위·주변/과거·활동/Risk·AI·지원링크까지 연결하는 검사는 `tests/integration/test_analysis_flow.py`입니다. 합성 snapshot을 실제 ETL 실행기로 임시 DB에 적재하고, 외부 지오코딩/모델만 모의 처리합니다. CI는 고유 시나리오10종·총22개 연결 검사의 실행을 확인하며 필수 시나리오가 빠지면 실패합니다. 실제 카카오+개발 DB 읽기 결과·API별 모집단 차이·FE 대기는 [BE API 검증 보고서](docs/be-api-verification.md)를 확인합니다. FE 화면이나 전체 프로젝트 완료를 뜻하지 않습니다.
+## 8. 폴더 구조
 
-현재 기능별 실원천 dry-run·실제 모델·FE 브라우저 결과는 [전체 시스템 감사](docs/be-system-audit.md)를 확인합니다. FE결함5종·일반음식점 원천 API지연이 남아 전체 정상 판정은 보류했습니다. 지도 기본 연결과 아래 출처 조회 인덱스의 적용 범위는 각각의 최신 검증 결과를 확인합니다. FE 변경은 [수정 요청 보고서](docs/fe-system-audit-request.md)로 전달하며 BE에서 FE를 직접 수정하지 않습니다.
-
-## 출처 조회 인덱스와 대량 인허가 적재 후 관리
-
-현재 migration head는 `0010`입니다. `ix_stores_provenance`는 `(batch_id, source, category, sub_category)`의 partial B-tree이며 삭제·검토대기 행을 제외합니다. 기존 출처 검증 SQL과 API 계약을 유지하면서 전역 출처 조회의 heap 읽기를 줄입니다. ETL의 DB 준비 검사는 `0010`을 요구합니다.
-
-일반 CREATE INDEX는 생성 중 쓰기를 대기시킬 수 있습니다. downgrade의 DROP INDEX는 읽기도 대기시킬 수 있으므로 migration·롤백은 트래픽을 정리한 시점에 실행합니다. 두 방향 모두 트랜잭션의 `lock_timeout=5s`를 사용하며, 잠금 실패 시 전체 트랜잭션 롤백을 확인한 뒤 재실행합니다. 이 값은 인덱스 생성 시간이나 API SQL3초 제한을 늘리는 설정이 아닙니다.
-
-**대량 인허가 재적재 시에는 분석 조회를 중지하고**, ETL 커밋 후 테이블 소유자 또는 적절한 유지관리 권한을 가진 계정의 **별도 autocommit 세션**에서 다음을 실행한 뒤 API 정상 응답을 확인하고 조회를 재개합니다.
-
-```sql
-VACUUM (ANALYZE) public.stores;
+```text
+SpotON-BE/
+├── app/
+│   ├── main.py            # FastAPI 앱·라우터 등록
+│   ├── runtime.py         # 배포 실행 진입점
+│   ├── routers/           # API 경로 (geocode, stores, nearby, risk, interpret, support 등)
+│   ├── services/          # 조회·집계 로직 (이력, 반경, 상권 활동, 참고지표, 추정매출 등)
+│   ├── analysis/          # 분석 계산
+│   ├── ai/                # LLM 클라이언트, 프롬프트, AI 결과 검증
+│   ├── schemas/           # 요청·응답 형식 ({data, meta, error})
+│   ├── models/            # DB 모델
+│   ├── db/                # DB 연결·세션
+│   └── core/              # 설정, 오류 처리, 공통 기능
+├── etl/                   # 공공데이터 원천 검증·적재 (인허가, 상권, 추정매출, 생활인구 등)
+├── migrations/            # Alembic DB migration
+├── tests/                 # 단위 테스트 (integration/: PostGIS 통합)
+├── docker/                # 로컬 DB 초기화 스크립트
+├── docs/                  # 작업계획서, API 요청서, 설계·검증 기록, 운영 문서
+├── ops/                   # 운영 보조 스크립트
+├── compose.yaml           # 로컬 PostgreSQL+PostGIS
+├── Dockerfile             # 배포 이미지
+└── pyproject.toml         # 의존성·도구 설정
 ```
 
-VACUUM은 ETL·migration의 트랜잭션 블록 안에서 실행할 수 없습니다. ETL 커밋과 원자적이지 않으며, 실패해도 이미 적재한 데이터가 롤백되지는 않습니다. 완료 전에는 조회500이 발생할 수 있어 조회 중지를 유지하고 원인을 확인합니다. migration과 동시에 실행하지 않습니다. 자동 VACUUM이나 자동 조회 차단 기능을 추가한 것은 아니며 운영자가 수행하는 절차입니다.
+| 문서 | 내용 |
+|---|---|
+| [상세 운영·개발 기록](docs/operations.md) | API별 상세 설명, ETL 적재 명령, 운영 로그·백업, DB 설정 (기존 README 전체) |
+| [통합 작업계획서](docs/be-work-plan.md) | BE 개발 기준과 작업 목록 |
+| [Render 운영 안내](docs/render-free-validation.md) | 운영 구성·환경변수·복원 절차 |
+| [설계·검증 기록](docs/designs/) | 작업별 설계와 검증 결과 |
+| [개발 규칙](CLAUDE.md) | 코딩·Git 규칙 |
 
-합성 전체 재적재 직후에는 이 인덱스에서도 배치조회가3초를 초과했습니다. 현재 정적 데이터의 읽기 개선과 이 제한을 구분하며, 비용·회귀·실제 검증은 [설계 및 Claude 검토](docs/designs/feat82-store-provenance-index.md)를 확인합니다.
+## 9. 사용한 공공데이터
 
-로컬 개발 DB는 다음 전용 명령으로 대상·소유권 점검과 유지보수를 실행할 수 있습니다. **읽기·대량 writer·migration 중지와 ETL 커밋을 먼저 확인합니다.** 실행기는 트래픽을 자동 중지하거나 ETL을 실행하지 않습니다.
+FE 화면에 표시되는 출처 번호(R번호)와 같아요.
 
-```powershell
-# 기본: 읽기 전용 대상·head·소유권 확인만
-uv run --locked --extra dev python -m etl.localdata.maintenance
+| 번호 | 데이터 | 제공 |
+|---|---|---|
+| R5 · R6 | [일반음식점](https://www.data.go.kr/data/15154916/openapi.do) · [휴게음식점](https://www.data.go.kr/data/15154921/openapi.do) 인허가 | 행정안전부 |
+| R1 · R11 | [서울시 상권분석서비스](https://golmok.seoul.go.kr/stateDistrict.do) · [창업위험도 산정 방식](https://golmok.seoul.go.kr/images/seoul_info.pdf) | 서울신용보증재단 |
+| R2 · R15 | [점포-상권](https://data.seoul.go.kr/dataList/OA-15577/F/1/datasetView.do) · [영역-상권](https://data.seoul.go.kr/dataList/OA-15560/S/1/datasetView.do) | 서울 열린데이터광장 |
+| R3 · R4 · R16 | [추정매출-상권](https://data.seoul.go.kr/dataList/OA-15572/S/1/datasetView.do) · [생활인구 250m 격자](https://data.seoul.go.kr/dataList/OA-22784/S/1/datasetView.do) · [상권변화지표](https://data.seoul.go.kr/dataList/OA-15576/S/1/datasetView.do) | 서울 열린데이터광장 |
+| R19 | [주소](https://www.data.go.kr/data/15057017/openapi.do) · [좌표](https://www.data.go.kr/data/15056663/openapi.do) API | 행정안전부 |
+| R8 | [카카오 로컬](https://developers.kakao.com/docs/latest/ko/local/dev-guide) | 카카오 |
+| R17 | 창업상담·소상공인 지원기관 링크 | 서울시 자영업지원센터 외 |
+| R18 | AI 해석 문장 구성 | LLM API (서버 설정으로 선택) |
 
-# 명시적 실행: 별도 autocommit VACUUM → 새 읽기 전용 출처 검증
-uv run --locked --extra dev python -m etl.localdata.maintenance --execute
-```
+## 10. 팀 소개 · 협업 규칙
 
-loopback의 `spoton_dev`·비슈퍼유저 `spoton_app`·head0012과 정확한 `public.stores` 소유자만 허용합니다. 실행 SQL은 `VACUUM (ANALYZE, TRUNCATE FALSE) public.stores`로 고정하며 FULL·테이블명/URL 옵션은 제공하지 않습니다. 잠금 대기5초·명령60초를 적용하고, 후속 출처 검증은 기존 SQL별 제한(기본3초)을 사용합니다.
+| 이름 | 역할 | 담당 |
+|---|---|---|
+| 권민수 | 팀장 · PM | 기획 총괄, 일정 관리 |
+| 윤희은 | UI/UX | 화면 디자인 |
+| 류민지 | Frontend | 웹 화면 전체 개발·배포 |
+| 최호림 | Backend | 서버·DB·API, 배포 |
+| 김승은 | Backend | AI 해석·데이터 |
 
-결과는 stdout JSON 한 건입니다. 정상0·실패1·Ctrl+C130이며 `--help`는 도움말/0입니다. 오류는 `localdata_maintenance:` 뒤 고정 코드만 반환합니다. `vacuum_completed=true`는 명령이 정상 반환했다는 뜻이고 `provenance_checked=true`는 그 뒤 출처 검사가 통과했다는 뜻입니다. 기본 dry-run은 두 값이 false입니다. VACUUM 후 검증이 실패하면 첫 값은 true인 채 실패로 종료합니다. 실패/중단 시 일부 물리 정리가 반영됐을 수 있으며 앞선 ETL 커밋을 되돌리지 않습니다.
+| 항목 | 규칙 |
+|---|---|
+| 브랜치 | `main`(배포) ← `develop`(통합) ← `feat/` `fix/` `docs/` `chore/` |
+| 커밋 | `타입: 내용` — `feat` `fix` `refactor` `perf` `docs` `style` `chore` |
+| 비밀값 | `.env`·API 키·DB 비밀번호는 커밋하지 않고 실제 `.env` 또는 서버 시크릿에만 저장 |
+| 개발 규칙 | [CLAUDE.md](CLAUDE.md) |
 
-오래된 snapshot이 있으면 VACUUM이 반환해도 회수가 제한될 수 있습니다. 성공 결과가 모든 API·부하/SLA 검증을 대신하지 않으므로 **실제 API 정상 응답까지 확인한 뒤 조회를 재개합니다.** DB 설정·사용법과 검증 범위는 [유지보수 설계·Claude 검토](docs/designs/feat86-localdata-maintenance.md)를 따릅니다.
+## 11. 유의사항
 
-## 생활인구 원자료 상태 진단
-
-내부 진단 CLI는 명시한 관측 버전의 원천별·시간별 **행과 격자 개수**를 확인합니다. 먼저 읽기 전용 조회로 사용할 버전 UUID와 관측일을 확인합니다. 자동 최신 버전 선택이나 다른 날짜 대체는 하지 않습니다.
-
-```sql
-SELECT version_id, observation_date, grid_version_id
-FROM living_population_versions
-ORDER BY observation_date, version_id;
-```
-
-저장소 루트에서 `.env`의 로컬 개발 DB 설정을 사용해 실행합니다. 아래 UUID는 실제 조회한 값으로 바꿉니다. `--radius`는300/500/1000m이며 기본500m입니다.
-
-```powershell
-uv run --locked --extra dev python -m etl.living_pop.quality --population-version <UUID> --lat 37.5665 --lng 126.9780 --radius 500
-```
-
-기존 로컬 `spoton_dev`·앱 계정·head0012 검사를 통과한 DB만 READ ONLY REPEATABLE READ로 조회합니다. SQL별3초 제한을 유지하며 데이터나 결과 파일을 쓰지 않습니다. 성공은 stdout JSON 한 건/종료코드0, 실패는 `living_pop_quality:arguments|version|counts|configuration|database|operation_failed` 중 고정 오류 코드/종료코드1입니다. 입력 좌표·격자/행정동 코드·인구 값·DB URL은 출력하지 않습니다.
-
-원천 중심점 속성(EPSG5179)을 기준으로 타원체 거리≤반경인 격자를 선택합니다. 72개 원천·시각 칸에서 `observed_zero`, `observed_nonzero`, `suppressed`, `missing` 행과 행이 있는/없는 격자를 구분합니다. 미좌표 행은 버전 전체 통계로만 별도 표시합니다. 저장 건수와 metadata를 대조하지만 content hash를 재검증하는 도구는 아닙니다.
-
-**행 없음은0명이 아닙니다.** 복수행정동 행의 합산 의미·행정동 구성 완전성·격자의 관측일 적용 여부가 미확인이므로 인구 합계·완전성·제공률로 해석하지 않습니다. 공개 activity/Risk의 인구 pending 상태도 유지합니다. [설계·Claude 검토·실행 결과](docs/designs/feat84-population-quality-diagnostic.md)를 확인합니다.
-
-## 생활인구 원천 검증과 주야간 계산 기반
-
-[생활인구 API·부분 공개자료 후속 설계](docs/designs/feat178-population-api-partial.md)는 원천별 같은 공개 구성24시간 비교와 새 GET `/api/v2/population-reference`를 제안합니다. [FE 전달안](docs/fe-population-reference-api-request.md)을 포함한 문서 작업이며 아직 endpoint/FE/DB/배포는 변경하지 않았습니다. 전체 인구 승인과 부분 공개자료 산술을 구분하고 비공개/행 부재를0으로 처리하지 않습니다. 아래 strict 계산/공식 근거 미확정은 전체 인구 경로의 현재 상태입니다.
-
-2026-11-14 공식 정의서·두 매뉴얼·SHP를 재확인했지만 행정동 행의 합산·행 부재·관측일별 격자 적용의 공식 근거는 미확정입니다. [검증 보고서와 제공기관 문의 초안](docs/population-source-verification.md)을 확인합니다. 문의는 아직 제출하지 않았으며 #115는 후속 추적용으로 열어 둡니다.
-
-`app.analysis.day_night.calculate_day_night`는 같은 날짜·공간·모집단의 검증된 시간별 총계24개를 향후 입력받는 내부 순수 계산 기반입니다. 주간06~17·야간나머지의 비중/평균/배수를 Decimal로 구분하고 결측이면 부분합을 반환하지 않습니다. 실제 원천 합산·DB 조회·activity/Risk/AI에는 미연결이며 **현재 공개 인구 pending을 유지**합니다. 산술 성공은 원천 검증이나 하루 고유 방문자 수가 아닙니다. [설계·Claude 검토](docs/designs/feat115-population-time-basis.md)를 따릅니다.
-
-후속 직접 검증에서는 원자료/DB531,922행과격자10,125개를 전수 대조했고, 공식 행정동 Sheet의 비교 가능894집계가 원자료 합과 정확히 일치했습니다. 당일 관측 쌍을 기준으로 행이 없는 시간 조합34,046개와 미매칭 비공개24행도 확인했습니다. 행정동별 소계와 현재 코드/도형 정합을 확인한 것이며, 한 격자 안 행정동 간 가산성·개인 비중복·전체 행 부재 의미·공식 관측일 적용은 확정하지 않습니다. 최신 판단과 제한은 [원천 검증 보고서7절](docs/population-source-verification.md), [실증 설계·검토](docs/designs/feat115-population-empirical-validation.md)를 따릅니다. DB/provenance·공개pending·Render 배포는 그대로 유지합니다.
-
-
-## 생활인구 공개자료 주야간 비교 API
-
-`GET /api/v2/population-reference?lat={위도}&lng={경도}&category=cafe`는 원천별로 24시간 모두 공개된 동일 구성을 비교합니다. radius(300/500/1000, 기본500), sub_category, as_of(YYYY-MM)는 선택입니다. 브랜드·면적·legacy 가맹·include 인자는 받지 않습니다. 분석월 범위 검증은 기존 인허가 기준을 쓰며 관측일은 그 달 안에서 선택합니다.
-
-내국인·장기외국인·단기외국인의 결과를 분리하고 비공개·누락·없는 행은0으로 바꾸지 않습니다. 결과는 전체 인구나 방문객 수가 아닌 부분 공개자료의 참고 산술이며 실제0·반올림0·미산정을 구분합니다. 숫자는 서버 decimal 문자열/display로 제공하고 합/평균에는 인원 단위를 붙이지 않습니다. 기존 activity/Risk/AI는 유지합니다.
-
-[구현·검토·검증/배포 기록](docs/designs/feat180-population-implementation.md), [FE 계약](docs/fe-population-reference-api-request.md)을 따릅니다. 공개 서버 반영 여부는 #180 및 연결 PR의 실제 실행 기록을 확인합니다.
+- Spot:ON의 결과는 공공데이터 기반 **참고 정보**예요. 창업의 **성공·실패를 판정하지 않으며**, 사업주의 역량은 반영하지 않아요.
+- **폐업은 행정상 신고 기록 기준**이라 실제 영업 종료 시점과 다를 수 있어요.
+- 추정매출은 상권 단위 **추정치**이며 실제 매출이 아니에요. 생활인구는 공개자료 기준 참고값이에요.
+- AI 해석은 서버가 계산·검증한 지표만으로 만든 참고 문장이며, 전문적인 조언을 대신하지 않아요.
+- 회원가입 없이 이용하며 개인정보를 저장하지 않아요.
