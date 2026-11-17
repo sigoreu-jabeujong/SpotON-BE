@@ -1,11 +1,11 @@
 <div align="center">
 
-<img src="docs/images/banner.webp" alt="Spot:ON Frontend — Is your spot on? 내 자리, 딱 맞는 자리일까요? 창업 전, 그 자리의 과거를 확인하세요" width="100%">
+<img src="https://raw.githubusercontent.com/sigoreu-jabeujong/SpotON-FE/main/docs/images/banner.webp" alt="Spot:ON Frontend — Is your spot on? 내 자리, 딱 맞는 자리일까요? 창업 전, 그 자리의 과거를 확인하세요" width="100%">
 
 계약하려는 주소 하나로 그 자리를 거쳐 간 점포의 이력과 주변 같은 업종의 생존 기록을 근거와 함께 보여주는<br>
 **공공데이터 기반 창업 입지 진단 웹서비스**
 
-[🌐 서비스 바로가기](https://spot-on-fe-two.vercel.app) · [💻 프론트엔드 저장소](https://github.com/sigoreu-jabeujong/SpotON-FE) · [⚙️ 백엔드 저장소](https://github.com/sigoreu-jabeujong/SpotON-BE) · [📚 문서 모음](docs/README.md)
+[🌐 서비스 바로가기](https://spot-on-fe-two.vercel.app) · [💻 프론트엔드 저장소](https://github.com/sigoreu-jabeujong/SpotON-FE) · [⚙️ 백엔드 저장소](https://github.com/sigoreu-jabeujong/SpotON-BE) · [📚 문서 모음](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/docs/README.md)
 
 ![React](https://img.shields.io/badge/React_19-20232A?logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
@@ -86,7 +86,7 @@
 
 ### ① 랜딩 — 진단 시작
 
-<img src="docs/images/landing.webp" alt="랜딩 화면" width="100%">
+<img src="https://raw.githubusercontent.com/sigoreu-jabeujong/SpotON-FE/main/docs/images/landing.webp" alt="랜딩 화면" width="100%">
 
 1. [서비스 주소](https://spot-on-fe-two.vercel.app)에 접속해요.
 2. **서비스 소개 보기**로 Spot:ON이 무엇을 보여주는지 확인할 수 있어요.
@@ -94,7 +94,7 @@
 
 ### ② STEP 01 — 주소·업종 입력
 
-<img src="docs/images/input.webp" alt="STEP 01 주소·업종 입력" width="100%">
+<img src="https://raw.githubusercontent.com/sigoreu-jabeujong/SpotON-FE/main/docs/images/input.webp" alt="STEP 01 주소·업종 입력" width="100%">
 
 1. 창업을 고민하는 **서울 주소**를 입력해요. 예: `서울 마포구 양화로 45 2층`
    - 도로명·건물번호가 정확히 맞는 후보가 하나면 **자동으로 선택**돼요. 후보가 여러 개면 목록에서 골라요.
@@ -105,7 +105,7 @@
 
 ### ③ STEP 02 — 입지 정보 분석
 
-<img src="docs/images/analysis.webp" alt="STEP 02 입지 정보 분석" width="100%">
+<img src="https://raw.githubusercontent.com/sigoreu-jabeujong/SpotON-FE/main/docs/images/analysis.webp" alt="STEP 02 입지 정보 분석" width="100%">
 
 왼쪽 메뉴로 세 부분을 오갈 수 있어요.
 
@@ -123,7 +123,7 @@
 
 | | |
 |:---:|:---:|
-| ![종합 진단 결과](docs/images/summary.webp) | ![AI 해석](docs/images/ai.webp) |
+| ![종합 진단 결과](https://raw.githubusercontent.com/sigoreu-jabeujong/SpotON-FE/main/docs/images/summary.webp) | ![AI 해석](https://raw.githubusercontent.com/sigoreu-jabeujong/SpotON-FE/main/docs/images/ai.webp) |
 | **종합 진단 결과** | **AI 해석** |
 
 1. **Spot:ON 참고지표**와 **서울시 공식 지표**를 영역을 나눠 보여줘요. 둘은 기간·공간 단위가 달라 직접 비교하지 않아요. 공식 지표는 해당 상권 자료가 있을 때만 파란 영역으로 나타나요.
@@ -135,7 +135,7 @@
 
 ### ⑤ STEP 04 — 결과 저장 · 상담 연결
 
-<img src="docs/images/share.webp" alt="STEP 04 결과 저장 및 상담" width="100%">
+<img src="https://raw.githubusercontent.com/sigoreu-jabeujong/SpotON-FE/main/docs/images/share.webp" alt="STEP 04 결과 저장 및 상담" width="100%">
 
 1. **PDF로 결과 저장** 카드에서 **PDF로 저장 (인쇄)**를 누르면 브라우저 인쇄 창이 열려요. 대상(프린터)에서 **PDF로 저장**을 고르면 진단 조건·이력·지표·참고자료가 담긴 진단서가 저장돼요. STEP 03에서 받은 AI 해석도 함께 담겨요.
 2. **공공 창업 상담센터**에서 관할 지역센터 전화번호를 누르면 바로 전화를 걸 수 있어요(휴대폰).
@@ -164,10 +164,10 @@
 
 | 구분 | 파일 | 역할 |
 |---|---|---|
-| FE 진입점 | [index.html](index.html) · [src/main.tsx](src/main.tsx) | 웹 앱 시작점 |
-| FE 의존성 | [package.json](package.json) · [package-lock.json](package-lock.json) | 실행·빌드 명령과 패키지 버전 고정 |
-| FE 환경 설정 | [.env.example](.env.example) · [.env.production.example](.env.production.example) | 환경변수 예시 (실제 `.env`는 커밋하지 않음) |
-| FE 배포 설정 | [vercel.json](vercel.json) · [scripts/build-vercel.mjs](scripts/build-vercel.mjs) | Vercel 빌드·새로고침 대응 |
+| FE 진입점 | [index.html](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/index.html) · [src/main.tsx](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/src/main.tsx) | 웹 앱 시작점 |
+| FE 의존성 | [package.json](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/package.json) · [package-lock.json](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/package-lock.json) | 실행·빌드 명령과 패키지 버전 고정 |
+| FE 환경 설정 | [.env.example](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/.env.example) · [.env.production.example](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/.env.production.example) | 환경변수 예시 (실제 `.env`는 커밋하지 않음) |
+| FE 배포 설정 | [vercel.json](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/vercel.json) · [scripts/build-vercel.mjs](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/scripts/build-vercel.mjs) | Vercel 빌드·새로고침 대응 |
 | BE 진입점·의존성 | [app/main.py](https://github.com/sigoreu-jabeujong/SpotON-BE/blob/develop/app/main.py) · [pyproject.toml](https://github.com/sigoreu-jabeujong/SpotON-BE/blob/develop/pyproject.toml) · [uv.lock](https://github.com/sigoreu-jabeujong/SpotON-BE/blob/develop/uv.lock) | API 서버 시작점과 패키지 고정 |
 | BE 환경·DB·배포 | [.env.example](https://github.com/sigoreu-jabeujong/SpotON-BE/blob/develop/.env.example) · [compose.yaml](https://github.com/sigoreu-jabeujong/SpotON-BE/blob/develop/compose.yaml) · [Dockerfile](https://github.com/sigoreu-jabeujong/SpotON-BE/blob/develop/Dockerfile) | 로컬 DB 컨테이너, 배포 이미지 |
 
@@ -175,7 +175,7 @@
 
 | 구분 | URL | 등록 위치 |
 |---|---|---|
-| 서비스 | https://spot-on-fe-two.vercel.app | 이 README, 저장소 About, [index.html](index.html) 공유 미리보기 |
+| 서비스 | https://spot-on-fe-two.vercel.app | 이 README, 저장소 About, [index.html](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/index.html) 공유 미리보기 |
 | 백엔드 API | https://spoton-be-free.onrender.com | 이 README, Vercel 환경변수 `VITE_API_BASE_URL` |
 | API 문서 | https://spoton-be-free.onrender.com/docs | 이 README |
 | FE · BE 저장소 | https://github.com/sigoreu-jabeujong/SpotON-FE · https://github.com/sigoreu-jabeujong/SpotON-BE | 이 README, 서비스 하단 푸터 |
@@ -217,7 +217,7 @@ npm run dev
 | `VITE_ANALYSIS_API_VERSION` | `v1` | `v2` | `v1` (v2 데이터 준비 시 `v2`) |
 | `VITE_KAKAO_JS_KEY` | 선택 (없으면 지도 자리에 안내) | 지도 확인 시 필요 | 지도 확인 시 필요 |
 
-- 목업은 [src/api/mocks/](src/api/mocks/)의 예시 응답이고 실제 공공데이터가 아니에요.
+- 목업은 [src/api/mocks/](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/src/api/mocks/)의 예시 응답이고 실제 공공데이터가 아니에요.
 - 운영 BE 연결은 BE의 `CORS_ORIGINS`에 로컬 주소가 허용돼 있어야 해요. 안 되면 목업(B)이나 로컬 BE(D)로 확인해요.
 - 카카오 지도는 [카카오 개발자 콘솔](https://developers.kakao.com)에 접속 주소(예: `http://localhost:5173`)를 등록해야 보여요.
 
@@ -258,7 +258,7 @@ npm run build                                # 타입 검사 + 빌드 → dist/
 npm run preview -- --port 5180               # http://localhost:5180 에서 결과 확인
 ```
 
-`main` 브랜치에 병합되면 Vercel이 자동으로 빌드·배포해요. 자세한 내용은 [배포 안내](docs/deploy.md)에 있어요.
+`main` 브랜치에 병합되면 Vercel이 자동으로 빌드·배포해요. 자세한 내용은 [배포 안내](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/docs/deploy.md)에 있어요.
 
 ### 명령어
 
@@ -310,8 +310,8 @@ flowchart LR
     BE --> P["공공데이터<br/>인허가·상권"]
 ```
 
-- 모든 API 응답은 `{ data, meta, error }` 형식이고, `meta`에 출처·기준일·공간 단위가 담겨요 → [API 계약](docs/api-contract.md)
-- **프론트에서는 지표를 계산하지 않아요.** 서버가 준 값을 형식만 바꿔 보여줘요 → [화면 표시 원칙](docs/display-rules.md)
+- 모든 API 응답은 `{ data, meta, error }` 형식이고, `meta`에 출처·기준일·공간 단위가 담겨요 → [API 계약](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/docs/api-contract.md)
+- **프론트에서는 지표를 계산하지 않아요.** 서버가 준 값을 형식만 바꿔 보여줘요 → [화면 표시 원칙](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/docs/display-rules.md)
 
 | 구분 | 사용 기술 |
 |---|---|
@@ -355,11 +355,11 @@ SpotON-FE/
 └── package.json
 ```
 
-더 자세한 문서는 [문서 모음](docs/README.md)에 있어요. ([API 계약](docs/api-contract.md) · [화면 요구사항](docs/screens.md) · [표시 원칙](docs/display-rules.md) · [결정 사항](docs/decisions.md) · [접근성](docs/accessibility.md) · [배포](docs/deploy.md) · [시연 대본](docs/demo.md))
+더 자세한 문서는 [문서 모음](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/docs/README.md)에 있어요. ([API 계약](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/docs/api-contract.md) · [화면 요구사항](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/docs/screens.md) · [표시 원칙](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/docs/display-rules.md) · [결정 사항](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/docs/decisions.md) · [접근성](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/docs/accessibility.md) · [배포](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/docs/deploy.md) · [시연 대본](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/docs/demo.md))
 
 ## 9. 사용한 공공데이터
 
-화면에 표시되는 출처 번호(R번호)와 같아요. 전체 표는 [화면 표시 원칙 7장](docs/display-rules.md#7-출처-번호-표)에 있어요.
+화면에 표시되는 출처 번호(R번호)와 같아요. 전체 표는 [화면 표시 원칙 7장](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/docs/display-rules.md#7-출처-번호-표)에 있어요.
 
 | 번호 | 데이터 | 제공 |
 |---|---|---|
@@ -388,7 +388,7 @@ SpotON-FE/
 | 작업 단위 | 기능 하나 = 브랜치 하나 = PR 하나, `main`·`develop` 직접 push 금지 |
 | 커밋 | `타입: 내용` — `feat` `fix` `refactor` `perf` `docs` `style` `chore` |
 | PR 전 확인 | `lint` · `format:check` · `build` · `test` 통과 |
-| 개발 규칙 | [CLAUDE.md](CLAUDE.md) |
+| 개발 규칙 | [CLAUDE.md](https://github.com/sigoreu-jabeujong/SpotON-FE/blob/main/CLAUDE.md) |
 
 ## 11. 유의사항
 
