@@ -33,7 +33,7 @@
 
 ### 🎬 시연 영상
 
-> 시연 영상(YouTube) 링크는 준비되는 대로 추가할 예정이에요.
+> https://youtu.be/E7PfZ9ZvT3s
 
 ---
 
