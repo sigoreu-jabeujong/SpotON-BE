@@ -13,6 +13,7 @@ from app.ai.client import (
 )
 from app.ai.factory import create_llm_client
 from app.ai.gemini import GeminiClient
+from app.ai.openai import OpenAIClient
 from app.core.config import Settings
 from app.core.errors import ERROR_SPECS
 from app.schemas.common import ErrorCode
@@ -60,7 +61,14 @@ def test_factory_selects_gemini_for_google() -> None:
     assert (client.provider, client.model) == ("google", settings.llm_model)
 
 
-@pytest.mark.parametrize("provider", ["openai", "Google", ""])
+def test_factory_selects_openai_for_openai() -> None:
+    settings = Settings(_env_file=None, llm_provider="openai", llm_api_key="k")
+    client = create_llm_client(settings)
+    assert isinstance(client, OpenAIClient)
+    assert (client.provider, client.model) == ("openai", settings.llm_model)
+
+
+@pytest.mark.parametrize("provider", ["OpenAI", "Google", ""])
 def test_factory_unsupported_provider_fails_without_calling(provider: str) -> None:
     calls: list[httpx.Request] = []
 

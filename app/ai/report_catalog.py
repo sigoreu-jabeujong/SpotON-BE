@@ -360,25 +360,30 @@ def build_report_catalog(
     )
     for source in grid.sources:
         if source.values:
-            grid_number = source.values.day_share_pct
-            add(
-                "grid_" + source.source,
-                "grid",
-                {"local": "내국인", "long": "장기 외국인", "short": "단기 외국인"}[source.source]
-                + " 공개 격자자료 주간 비중",
-                grid_number.value,
-                "%",
-                grid.observation_date.isoformat() if grid.observation_date else "관측일 미확인",
-                "반경의 선택 공개 격자 구성",
-                "250m 격자 공개 부분자료",
-                display=grid_number.display,
-                exact_zero=grid_number.exact_zero,
-                rounded=grid_number.rounded,
-                sources=["R4"],
-                status="partial",
-                reason=source.reason,
-                filters="점포·면적 조건 미적용",
-            )
+            for suffix, period_label, grid_number in (
+                ("", "주간", source.values.day_share_pct),
+                ("_night_share", "야간", source.values.night_share_pct),
+            ):
+                add(
+                    "grid_" + source.source + suffix,
+                    "grid",
+                    {"local": "내국인", "long": "장기 외국인", "short": "단기 외국인"}[
+                        source.source
+                    ]
+                    + f" 공개 격자자료 {period_label} 비중",
+                    grid_number.value,
+                    "%",
+                    grid.observation_date.isoformat() if grid.observation_date else "관측일 미확인",
+                    "반경의 선택 공개 격자 구성",
+                    "250m 격자 공개 부분자료",
+                    display=grid_number.display,
+                    exact_zero=grid_number.exact_zero,
+                    rounded=grid_number.rounded,
+                    sources=["R4"],
+                    status="partial",
+                    reason=source.reason,
+                    filters="점포·면적 조건 미적용",
+                )
     if not any(m.group == "grid" for m in metrics):
         add(
             "grid_missing",

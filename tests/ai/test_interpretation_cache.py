@@ -160,7 +160,8 @@ def test_single_flight_and_distinct_key_progress(monkeypatch, prepared):
             service.interpret_risk(resources, query(radius=300)),
         )
         assert len(results) == 6 and provider.calls == 2
-        assert resources.flights._active == {} and not resources.gate.locked()
+        assert resources.flights._active == {}
+        assert resources.gate.available == resources.database.settings.interpret_max_concurrent
 
     asyncio.run(run())
 
@@ -187,7 +188,8 @@ def test_failed_owner_not_shared_and_cancel_cleanup(monkeypatch, prepared):
         for cancelled in (waiter, task):
             with pytest.raises(asyncio.CancelledError):
                 await cancelled
-        assert resources.flights._active == {} and not resources.gate.locked()
+        assert resources.flights._active == {}
+        assert resources.gate.available == resources.database.settings.interpret_max_concurrent
 
     asyncio.run(run())
 
@@ -245,6 +247,7 @@ def test_single_flight_wait_is_inside_deadline(monkeypatch, prepared):
         with pytest.raises(AppError):
             await service.interpret_risk(resources, query())
         assert provider.calls == 0
-        assert resources.flights._active == {} and not resources.gate.locked()
+        assert resources.flights._active == {}
+        assert resources.gate.available == resources.database.settings.interpret_max_concurrent
 
     asyncio.run(run())
