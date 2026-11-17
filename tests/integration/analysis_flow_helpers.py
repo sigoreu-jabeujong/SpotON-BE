@@ -33,6 +33,7 @@ ENDPOINTS = {
     "/api/v2/location-reference",
     "/api/v2/population-reference",
     "/api/v2/risk/interpret",
+    "/api/v2/risk/interpret/sections",
     "/api/v2/stores/history",
     "/api/v2/stores/nearby",
     "/api/v2/stores/snapshot",
